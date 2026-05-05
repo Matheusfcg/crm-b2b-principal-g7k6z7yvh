@@ -9,7 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MoreHorizontal, Edit, Trash } from 'lucide-react'
-import { Lead } from '@/lib/mock-data'
+import { Lead } from '@/pages/Leads'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,7 +71,7 @@ export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {new Date(lead.dataCriacao).toLocaleDateString('pt-BR')}
+                {new Date(lead.created_at).toLocaleDateString('pt-BR')}
               </TableCell>
               <TableCell>
                 <DropdownMenu>

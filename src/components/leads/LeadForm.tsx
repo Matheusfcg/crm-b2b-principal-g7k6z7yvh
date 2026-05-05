@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Lead } from '@/lib/mock-data'
 import {
   Sheet,
   SheetContent,
@@ -18,11 +17,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+import { api } from '@/services/api'
 
 interface LeadFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (lead: Lead) => void
+  onSave: () => void
 }
 
 export function LeadForm({ open, onOpenChange, onSave }: LeadFormProps) {
@@ -30,30 +30,37 @@ export function LeadForm({ open, onOpenChange, onSave }: LeadFormProps) {
   const [segmento, setSegmento] = useState('')
   const [tamanho, setTamanho] = useState('')
   const [origem, setOrigem] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setLoading(true)
     const formData = new FormData(e.currentTarget)
 
-    const newLead: Lead = {
-      id: Math.random().toString(36).substring(7),
+    const newLead = {
       empresa: formData.get('empresa') as string,
       contato: formData.get('contato') as string,
       email: formData.get('email') as string,
       telefone: formData.get('telefone') as string,
       segmento: segmento || 'Outros',
+      tamanho: tamanho || '1-10',
+      origem: origem || 'Inbound',
       status: 'Novo',
-      dataCriacao: new Date().toISOString(),
     }
 
-    onSave(newLead)
-
-    toast({
-      title: 'Lead cadastrado com sucesso!',
-      description: `${newLead.empresa} foi adicionado aos seus leads.`,
-    })
-
-    onOpenChange(false)
+    try {
+      await api.createLead(newLead)
+      toast({
+        title: 'Lead cadastrado com sucesso!',
+        description: `${newLead.empresa} foi adicionado aos seus leads.`,
+      })
+      onSave()
+      onOpenChange(false)
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -138,8 +145,8 @@ export function LeadForm({ open, onOpenChange, onSave }: LeadFormProps) {
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" className="bg-primary hover:bg-primary/90">
-              Salvar Lead
+            <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={loading}>
+              {loading ? 'Salvando...' : 'Salvar Lead'}
             </Button>
           </div>
         </form>

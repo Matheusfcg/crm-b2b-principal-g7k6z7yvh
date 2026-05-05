@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,22 +10,56 @@ import {
 } from '@/components/ui/select'
 import { LeadsTable } from '@/components/leads/LeadsTable'
 import { LeadForm } from '@/components/leads/LeadForm'
-import { mockLeads, Lead } from '@/lib/mock-data'
 import { useSearch } from '@/contexts/search-context'
+import { api } from '@/services/api'
+import { useToast } from '@/hooks/use-toast'
+
+export interface Lead {
+  id: string
+  empresa: string
+  contato: string
+  email: string
+  telefone: string
+  segmento: string
+  tamanho: string
+  origem: string
+  status: string
+  created_at: string
+}
 
 export default function Leads() {
-  const [leads, setLeads] = useState<Lead[]>(mockLeads)
+  const [leads, setLeads] = useState<Lead[]>([])
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [segmentoFilter, setSegmentoFilter] = useState('Todos')
   const { searchQuery } = useSearch()
+  const { toast } = useToast()
 
-  const handleAddLead = (newLead: Lead) => {
-    setLeads([newLead, ...leads])
+  const fetchLeads = async () => {
+    try {
+      const data = await api.getLeads()
+      setLeads(data as Lead[])
+    } catch (err: any) {
+      toast({ title: 'Erro ao carregar leads', description: err.message, variant: 'destructive' })
+    }
   }
 
-  const handleDeleteLead = (id: string) => {
-    setLeads(leads.filter((l) => l.id !== id))
+  useEffect(() => {
+    fetchLeads()
+  }, [])
+
+  const handleAddLead = () => {
+    fetchLeads()
+  }
+
+  const handleDeleteLead = async (id: string) => {
+    try {
+      await api.deleteLead(id)
+      fetchLeads()
+      toast({ title: 'Lead removido' })
+    } catch (err: any) {
+      toast({ title: 'Erro ao remover', description: err.message, variant: 'destructive' })
+    }
   }
 
   const filteredLeads = useMemo(() => {
@@ -50,9 +84,6 @@ export default function Leads() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">
               Gerenciamento de Leads
             </h1>
-            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
-              Mock Data
-            </span>
           </div>
           <p className="text-gray-500 text-sm mt-1 font-medium">
             Acompanhe e gerencie todos os seus contatos comerciais.

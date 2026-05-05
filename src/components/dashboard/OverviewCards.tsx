@@ -1,6 +1,10 @@
 import { TrendingUp, Users, CheckCircle2 } from 'lucide-react'
 
-export function OverviewCards() {
+export function OverviewCards({
+  data,
+}: {
+  data: { wonValue: number; newClients: number; completedTasks: number }
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100/50 flex items-center gap-4 hover:shadow-md transition-shadow">
@@ -10,7 +14,7 @@ export function OverviewCards() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
-              $1,980,130
+              R$ {data.wonValue.toLocaleString('pt-BR')}
             </span>
             <span className="bg-yellow-100/80 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
               +11% sem
@@ -27,13 +31,15 @@ export function OverviewCards() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
-              +89
+              +{data.newClients}
             </span>
             <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
               +12 hoje
             </span>
           </div>
-          <p className="text-[13px] text-gray-500 font-medium mt-1.5 truncate">Novos Clientes</p>
+          <p className="text-[13px] text-gray-500 font-medium mt-1.5 truncate">
+            Novos Clientes (30d)
+          </p>
         </div>
       </div>
 
@@ -44,7 +50,7 @@ export function OverviewCards() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
-              +31
+              +{data.completedTasks}
             </span>
             <span className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
               +6 hoje

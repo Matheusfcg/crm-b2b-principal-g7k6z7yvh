@@ -1,11 +1,20 @@
-import { Bell, Search, Mail, CloudLightning } from 'lucide-react'
+import { Bell, Search, Mail, CloudLightning, LogOut } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSearch } from '@/contexts/search-context'
+import { useAuth } from '@/hooks/use-auth'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export function AppHeader() {
   const { searchQuery, setSearchQuery } = useSearch()
+  const { session, signOut } = useAuth()
+  const userName = session?.user?.user_metadata?.name || 'Usuário'
 
   return (
     <header className="flex h-16 w-full items-center justify-between rounded-full bg-white px-6 shadow-sm shrink-0 border border-gray-100">
@@ -67,19 +76,34 @@ export function AppHeader() {
           </Button>
         </div>
         <div className="h-8 w-px bg-gray-200 mx-1 hidden sm:block"></div>
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex flex-col items-end">
-            <span className="text-sm font-bold leading-none text-gray-900">Eva Robinson</span>
-            <span className="text-xs text-gray-500 mt-1">Admin</span>
-          </div>
-          <Avatar className="h-10 w-10 border-2 border-white shadow-sm cursor-pointer hover:scale-105 transition-transform">
-            <AvatarImage
-              src="https://img.usecurling.com/ppl/thumbnail?gender=female&seed=12"
-              alt="Eva Robinson"
-            />
-            <AvatarFallback>ER</AvatarFallback>
-          </Avatar>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="flex items-center gap-3 cursor-pointer">
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-sm font-bold leading-none text-gray-900">{userName}</span>
+                <span className="text-xs text-gray-500 mt-1 hover:text-red-500 transition-colors">
+                  Sair da conta
+                </span>
+              </div>
+              <Avatar className="h-10 w-10 border-2 border-white shadow-sm hover:scale-105 transition-transform">
+                <AvatarImage
+                  src={`https://img.usecurling.com/ppl/thumbnail?seed=${session?.user?.id}`}
+                  alt={userName}
+                />
+                <AvatarFallback>{userName.substring(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => signOut()}
+              className="text-red-600 focus:bg-red-50 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )
