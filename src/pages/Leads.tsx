@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { LeadsTable } from '@/components/leads/LeadsTable'
 import { LeadForm } from '@/components/leads/LeadForm'
+import { LeadInteractions } from '@/components/leads/LeadInteractions'
 import { useSearch } from '@/contexts/search-context'
 import { leadsService } from '@/services/leads'
 import { useToast } from '@/hooks/use-toast'
@@ -31,6 +32,7 @@ export default function Leads() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
+  const [viewingLead, setViewingLead] = useState<Lead | null>(null)
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [segmentoFilter, setSegmentoFilter] = useState('Todos')
   const { searchQuery } = useSearch()
@@ -60,6 +62,10 @@ export default function Leads() {
   const handleEditLead = (lead: Lead) => {
     setEditingLead(lead)
     setIsFormOpen(true)
+  }
+
+  const handleViewLead = (lead: Lead) => {
+    setViewingLead(lead)
   }
 
   const handleFormOpenChange = (open: boolean) => {
@@ -153,13 +159,24 @@ export default function Leads() {
         </div>
       </div>
 
-      <LeadsTable leads={filteredLeads} onDelete={handleDeleteLead} onEdit={handleEditLead} />
+      <LeadsTable
+        leads={filteredLeads}
+        onDelete={handleDeleteLead}
+        onEdit={handleEditLead}
+        onView={handleViewLead}
+      />
 
       <LeadForm
         open={isFormOpen}
         onOpenChange={handleFormOpenChange}
         onSave={handleSaveLead}
         initialData={editingLead}
+      />
+
+      <LeadInteractions
+        lead={viewingLead}
+        open={!!viewingLead}
+        onOpenChange={(open) => !open && setViewingLead(null)}
       />
     </div>
   )

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Edit, Trash } from 'lucide-react'
+import { Edit, Trash, Eye } from 'lucide-react'
 import { Lead } from '@/pages/Leads'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,7 @@ interface LeadsTableProps {
   leads: Lead[]
   onDelete: (id: string) => void
   onEdit: (lead: Lead) => void
+  onView?: (lead: Lead) => void
 }
 
 const statusColors: Record<string, string> = {
@@ -25,7 +26,7 @@ const statusColors: Record<string, string> = {
   Perdido: 'bg-red-100 text-red-800 hover:bg-red-200 border-transparent',
 }
 
-export function LeadsTable({ leads, onDelete, onEdit }: LeadsTableProps) {
+export function LeadsTable({ leads, onDelete, onEdit, onView }: LeadsTableProps) {
   if (leads.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center border rounded-md bg-white">
@@ -70,6 +71,23 @@ export function LeadsTable({ leads, onDelete, onEdit }: LeadsTableProps) {
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2 justify-end">
+                  {onView && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onView(lead)
+                      }}
+                      title="Ver Histórico de Interações"
+                      className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span className="sr-only">Ver Histórico</span>
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"

@@ -110,29 +110,41 @@ export type Database = {
       proposals: {
         Row: {
           created_at: string
+          descricao: string | null
           id: string
+          itens: Json | null
           lead_id: string
+          observacoes: string | null
           status: string
           titulo: string
           user_id: string
+          validade: string | null
           valor: number
         }
         Insert: {
           created_at?: string
+          descricao?: string | null
           id?: string
+          itens?: Json | null
           lead_id: string
+          observacoes?: string | null
           status?: string
           titulo: string
           user_id: string
+          validade?: string | null
           valor?: number
         }
         Update: {
           created_at?: string
+          descricao?: string | null
           id?: string
+          itens?: Json | null
           lead_id?: string
+          observacoes?: string | null
           status?: string
           titulo?: string
           user_id?: string
+          validade?: string | null
           valor?: number
         }
         Relationships: [
@@ -365,6 +377,10 @@ export const Constants = {
 //   valor: numeric (not null, default: 0)
 //   status: text (not null, default: 'Aberto'::text)
 //   created_at: timestamp with time zone (not null, default: now())
+//   descricao: text (nullable)
+//   itens: jsonb (nullable, default: '[]'::jsonb)
+//   observacoes: text (nullable)
+//   validade: timestamp with time zone (nullable)
 // Table: tasks
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
