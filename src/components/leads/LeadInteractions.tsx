@@ -184,7 +184,7 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
 
           <TabsContent
             value="interactions"
-            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex mt-0"
+            className="flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden mt-0"
           >
             <div className="p-6 bg-muted/30 border-b">
               <div className="space-y-4">
@@ -267,7 +267,7 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
 
           <TabsContent
             value="tasks"
-            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex mt-0"
+            className="flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden mt-0"
           >
             <div className="p-6 bg-muted/30 border-b">
               <div className="space-y-4">
