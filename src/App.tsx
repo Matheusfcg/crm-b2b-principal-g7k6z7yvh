@@ -9,6 +9,7 @@ import Layout from './components/Layout'
 import Index from './pages/Index'
 import Leads from './pages/Leads'
 import Pipeline from './pages/Pipeline'
+import Proposals from './pages/Proposals'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/leads" element={<Leads />} />
               <Route path="/pipeline" element={<Pipeline />} />
+              <Route path="/proposals" element={<Proposals />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

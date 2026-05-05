@@ -27,7 +27,7 @@ const navItems = [
   { title: 'Pipeline', path: '/pipeline', icon: Kanban },
   { title: 'Atividades', path: '#', icon: Calendar },
   { title: 'Tarefas', path: '#', icon: CheckSquare },
-  { title: 'Propostas', path: '#', icon: FileText },
+  { title: 'Propostas', path: '/proposals', icon: FileText },
   { title: 'Relatórios', path: '#', icon: BarChart },
 ]
 
