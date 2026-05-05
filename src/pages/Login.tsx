@@ -8,22 +8,36 @@ import { CloudLightning } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Login() {
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, signUp } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await signIn(email, password)
-    setLoading(false)
-    if (error) {
-      toast({ title: 'Erro ao entrar', description: error.message, variant: 'destructive' })
+
+    if (isSignUp) {
+      const { error } = await signUp(email, password, { data: { name } })
+      setLoading(false)
+      if (error) {
+        toast({ title: 'Erro ao criar conta', description: error.message, variant: 'destructive' })
+      } else {
+        toast({ title: 'Conta criada com sucesso!', description: 'Seja bem-vindo ao CRM B2B.' })
+        navigate('/')
+      }
     } else {
-      navigate('/')
+      const { error } = await signIn(email, password)
+      setLoading(false)
+      if (error) {
+        toast({ title: 'Erro ao entrar', description: error.message, variant: 'destructive' })
+      } else {
+        navigate('/')
+      }
     }
   }
 
@@ -35,9 +49,24 @@ export default function Login() {
             <CloudLightning className="h-8 w-8 fill-current" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">CRM B2B</h1>
-          <p className="text-sm text-gray-500 mt-1">Entre com sua conta para continuar</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isSignUp ? 'Crie sua conta para começar' : 'Entre com sua conta para continuar'}
+          </p>
         </div>
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleAuth} className="space-y-5">
+          {isSignUp && (
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome completo</Label>
+              <Input
+                id="name"
+                type="text"
+                required={isSignUp}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Seu nome"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">E-mail</Label>
             <Input
@@ -65,8 +94,18 @@ export default function Login() {
             className="w-full bg-blue-600 hover:bg-blue-700 h-11"
             disabled={loading}
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Aguarde...' : isSignUp ? 'Criar conta' : 'Entrar'}
           </Button>
+
+          <div className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              {isSignUp ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Crie agora'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
