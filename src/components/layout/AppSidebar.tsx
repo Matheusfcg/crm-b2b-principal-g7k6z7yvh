@@ -54,12 +54,7 @@ export function AppSidebar() {
                     isActive={isActive}
                     tooltip={item.title}
                     className="h-10"
-                  >
-                    <Link to={item.path} className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5 shrink-0" />
-                      <span className="font-medium">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
+                  ></SidebarMenuButton>
                 </SidebarMenuItem>
               )
             })}
