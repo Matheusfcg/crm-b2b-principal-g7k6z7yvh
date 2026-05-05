@@ -41,7 +41,7 @@ export function UserForm({ open, onOpenChange, userToEdit, onSuccess }: UserForm
     if (userToEdit && open) {
       setFormData({
         name: userToEdit.name || '',
-        email: '',
+        email: userToEdit.email || '',
         password: '',
         role: userToEdit.role || 'vendedor',
       })
@@ -109,33 +109,32 @@ export function UserForm({ open, onOpenChange, userToEdit, onSuccess }: UserForm
             />
           </div>
 
-          {!userToEdit && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="joao@empresa.com"
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">E-mail</Label>
+            <Input
+              id="email"
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="joao@empresa.com"
+              disabled={!!userToEdit}
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Mínimo 6 caracteres"
-                  minLength={6}
-                />
-              </div>
-            </>
+          {!userToEdit && (
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
+              />
+            </div>
           )}
 
           <div className="space-y-2">

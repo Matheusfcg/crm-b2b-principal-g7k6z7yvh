@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 export interface UserProfile {
   id: string
   name: string
+  email: string
   role: string
 }
 
@@ -57,12 +58,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (user) {
       supabase
-        .from('profiles')
+        .from('users' as any)
         .select('*')
         .eq('id', user.id)
         .single()
         .then(({ data }) => {
-          setProfile(data)
+          setProfile(data as UserProfile)
           setLoading(false)
         })
     }

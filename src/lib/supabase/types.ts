@@ -455,45 +455,47 @@ export const Constants = {
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: interactions
 //   Policy "interactions_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "interactions_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "interactions_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "interactions_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
-//     WITH CHECK: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 // Table: leads
 //   Policy "leads_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "leads_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (created_by = auth.uid())
 //   Policy "leads_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "leads_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 // Table: profiles
 //   Policy "profiles_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (id = auth.uid())
 //   Policy "profiles_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: true
 //   Policy "profiles_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: (id = auth.uid())
+//     USING: ((id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 // Table: proposals
+//   Policy "proposals_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "proposals_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "proposals_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//   Policy "proposals_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 // Table: tasks
 //   Policy "tasks_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "tasks_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "tasks_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 //   Policy "tasks_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
-//     WITH CHECK: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)
@@ -505,7 +507,6 @@ export const Constants = {
 //   DECLARE
 //     new_user_id UUID;
 //   BEGIN
-//     -- Security Check
 //     IF NOT EXISTS (
 //       SELECT 1 FROM public.profiles
 //       WHERE id = auth.uid() AND role = 'admin'
@@ -519,7 +520,6 @@ export const Constants = {
 //
 //     new_user_id := gen_random_uuid();
 //
-//     -- Insert into auth.users (requires SECURITY DEFINER to bypass GoTrue restrictions)
 //     INSERT INTO auth.users (
 //       id, instance_id, email, encrypted_password, email_confirmed_at,
 //       created_at, updated_at, raw_app_meta_data, raw_user_meta_data,
@@ -540,7 +540,6 @@ export const Constants = {
 //       NULL, '', '', ''
 //     );
 //
-//     -- Upsert into profiles (handles conflict with auto-trigger)
 //     INSERT INTO public.profiles (id, name, role)
 //     VALUES (new_user_id, new_name, new_role)
 //     ON CONFLICT (id) DO UPDATE
@@ -557,7 +556,6 @@ export const Constants = {
 //    SECURITY DEFINER
 //   AS $function$
 //   BEGIN
-//     -- Security Check
 //     IF NOT EXISTS (
 //       SELECT 1 FROM public.profiles
 //       WHERE id = auth.uid() AND role = 'admin'

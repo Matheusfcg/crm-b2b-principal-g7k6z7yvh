@@ -25,7 +25,10 @@ export default function Users() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase.from('profiles').select('*').order('name')
+      const { data, error } = await supabase
+        .from('users' as any)
+        .select('*')
+        .order('name')
       if (error) throw error
       setUsers(data || [])
     } catch (err: any) {
@@ -103,7 +106,10 @@ export default function Users() {
           <TableBody>
             {users.map((u) => (
               <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.name}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{u.name}</div>
+                  <div className="text-sm text-muted-foreground">{u.email}</div>
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant="outline"
