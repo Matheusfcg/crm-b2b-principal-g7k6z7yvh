@@ -43,11 +43,18 @@ export default function Leads() {
   }, [leads, statusFilter, segmentoFilter, searchQuery])
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100/50 min-h-full">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Gerenciamento de Leads</h1>
-          <p className="text-muted-foreground mt-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+              Gerenciamento de Leads
+            </h1>
+            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+              Mock Data
+            </span>
+          </div>
+          <p className="text-gray-500 text-sm mt-1 font-medium">
             Acompanhe e gerencie todos os seus contatos comerciais.
           </p>
         </div>
@@ -60,7 +67,7 @@ export default function Leads() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-md border shadow-sm">
+      <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
         <div className="w-full sm:w-[200px]">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>

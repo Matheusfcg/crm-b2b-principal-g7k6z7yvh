@@ -1,25 +1,26 @@
 import { OverviewCards } from '@/components/dashboard/OverviewCards'
-import { SalesCharts } from '@/components/dashboard/SalesCharts'
-import { RecentActivity } from '@/components/dashboard/RecentActivity'
+import { InteractionHistory } from '@/components/dashboard/InteractionHistory'
+import { ProfileSidebar } from '@/components/dashboard/ProfileSidebar'
+import { BottomWidgets } from '@/components/dashboard/BottomWidgets'
 
 export default function Index() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Visão geral do seu funil de vendas e atividades.
-        </p>
+    <div className="flex flex-col xl:flex-row gap-6 h-full min-h-0">
+      <div className="flex-1 flex flex-col gap-6 overflow-y-auto [&::-webkit-scrollbar]:hidden pb-6">
+        <div className="flex flex-col gap-1 mt-2 px-2">
+          <h1 className="text-[28px] font-bold tracking-tight text-gray-900">
+            Informações do Cliente
+          </h1>
+          <p className="text-sm text-gray-500 font-medium">Visão geral e métricas principais</p>
+        </div>
+
+        <OverviewCards />
+        <InteractionHistory />
+        <BottomWidgets />
       </div>
 
-      <OverviewCards />
-      <SalesCharts />
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <div className="lg:col-span-2">{/* Espaço para mais relatórios ou listas no futuro */}</div>
-        <div className="lg:col-span-3">
-          <RecentActivity />
-        </div>
+      <div className="w-full xl:w-[320px] shrink-0 pb-6">
+        <ProfileSidebar />
       </div>
     </div>
   )

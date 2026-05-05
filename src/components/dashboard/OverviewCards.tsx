@@ -1,50 +1,60 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Target, CircleDollarSign, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, Users, CheckCircle2 } from 'lucide-react'
 
 export function OverviewCards() {
-  const cards = [
-    {
-      title: 'Leads Totais',
-      value: '2.543',
-      subtitle: '+12% em relação ao mês passado',
-      icon: Users,
-    },
-    {
-      title: 'Oportunidades Abertas',
-      value: '342',
-      subtitle: '+5% em relação ao mês passado',
-      icon: Target,
-    },
-    {
-      title: 'Valor em Pipeline',
-      value: 'R$ 1.2M',
-      subtitle: '+18% em relação ao mês passado',
-      icon: CircleDollarSign,
-    },
-    {
-      title: 'Tarefas para Hoje',
-      value: '12',
-      subtitle: '4 atrasadas',
-      icon: CheckCircle2,
-    },
-  ]
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card, i) => (
-        <Card key={i} className="shadow-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {card.title}
-            </CardTitle>
-            <card.icon className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{card.value}</div>
-            <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid gap-4 md:grid-cols-3">
+      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100/50 flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center shrink-0 bg-gray-50/50">
+          <TrendingUp className="w-5 h-5 text-gray-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
+              $1,980,130
+            </span>
+            <span className="bg-yellow-100/80 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+              +11% sem
+            </span>
+          </div>
+          <p className="text-[13px] text-gray-500 font-medium mt-1.5 truncate">Valores Ganhos</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100/50 flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center shrink-0 bg-gray-50/50">
+          <Users className="w-5 h-5 text-gray-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
+              +89
+            </span>
+            <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+              +12 hoje
+            </span>
+          </div>
+          <p className="text-[13px] text-gray-500 font-medium mt-1.5 truncate">Novos Clientes</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-gray-100/50 flex items-center gap-4 hover:shadow-md transition-shadow">
+        <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center shrink-0 bg-gray-50/50">
+          <CheckCircle2 className="w-5 h-5 text-gray-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[22px] font-bold tracking-tight text-gray-900 leading-none">
+              +31
+            </span>
+            <span className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+              +6 hoje
+            </span>
+          </div>
+          <p className="text-[13px] text-gray-500 font-medium mt-1.5 truncate">
+            Tarefas Concluídas
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
