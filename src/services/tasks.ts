@@ -19,7 +19,14 @@ export const tasksService = {
     return data
   },
   async createTask(task: any) {
-    const { data, error } = await supabase.from('tasks').insert(task).select().maybeSingle()
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) throw new Error('Usuário não autenticado')
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({ ...task, user_id: task.user_id || userData.user.id })
+      .select()
+      .maybeSingle()
     if (error) throw error
     return data
   },

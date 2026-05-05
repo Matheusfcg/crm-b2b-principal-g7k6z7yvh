@@ -37,9 +37,12 @@ export const proposalsService = {
   },
 
   async createProposal(proposal: Omit<ProposalRow, 'id' | 'created_at' | 'lead'>) {
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) throw new Error('Usuário não autenticado')
+
     const { data, error } = await supabase
       .from('proposals')
-      .insert(proposal as any)
+      .insert({ ...proposal, user_id: (proposal as any).user_id || userData.user.id } as any)
       .select()
       .single()
     if (error) throw error
