@@ -5,7 +5,6 @@ import {
   Kanban,
   CheckSquare,
   FileText,
-  BarChart,
   Settings,
   UserCog,
   Moon,
@@ -28,7 +27,6 @@ const navItems = [
   { title: 'Pipeline', path: '/pipeline', icon: Kanban },
   { title: 'Tarefas', path: '/tasks', icon: CheckSquare },
   { title: 'Propostas', path: '/proposals', icon: FileText },
-  { title: 'Relatórios', path: '/reports', icon: BarChart },
 ]
 
 export function AppSidebar() {
@@ -68,7 +66,12 @@ export function AppSidebar() {
                         ? 'bg-slate-100 text-slate-900 font-semibold rounded-lg'
                         : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-lg'
                     }`}
-                  ></SidebarMenuButton>
+                  >
+                    <Link to={item.path} className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               )
             })}
