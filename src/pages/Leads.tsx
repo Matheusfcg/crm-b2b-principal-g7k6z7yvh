@@ -49,8 +49,12 @@ export default function Leads() {
     fetchLeads()
   }, [])
 
-  const handleAddLead = () => {
-    fetchLeads()
+  const handleSaveLead = (savedLead: Lead, isUpdate: boolean) => {
+    if (isUpdate) {
+      setLeads((prev) => prev.map((l) => (l.id === savedLead.id ? savedLead : l)))
+    } else {
+      setLeads((prev) => [savedLead, ...prev])
+    }
   }
 
   const handleEditLead = (lead: Lead) => {
@@ -154,7 +158,7 @@ export default function Leads() {
       <LeadForm
         open={isFormOpen}
         onOpenChange={handleFormOpenChange}
-        onSave={handleAddLead}
+        onSave={handleSaveLead}
         initialData={editingLead}
       />
     </div>

@@ -22,63 +22,76 @@ import { api } from '@/services/api'
 interface LeadFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: () => void
+  onSave: (lead: any, isUpdate: boolean) => void
   initialData?: any | null
 }
 
 export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormProps) {
   const { toast } = useToast()
-  const [segmento, setSegmento] = useState('')
-  const [tamanho, setTamanho] = useState('')
-  const [origem, setOrigem] = useState('')
-  const [status, setStatus] = useState('Novo')
+
+  const [formData, setFormData] = useState({
+    empresa: '',
+    contato: '',
+    email: '',
+    telefone: '',
+    segmento: 'Outros',
+    tamanho: '1-10',
+    origem: 'Inbound',
+    status: 'Novo',
+  })
+
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (initialData && open) {
-      setSegmento(initialData.segmento)
-      setTamanho(initialData.tamanho)
-      setOrigem(initialData.origem)
-      setStatus(initialData.status)
+      setFormData({
+        empresa: initialData.empresa || '',
+        contato: initialData.contato || '',
+        email: initialData.email || '',
+        telefone: initialData.telefone || '',
+        segmento: initialData.segmento || 'Outros',
+        tamanho: initialData.tamanho || '1-10',
+        origem: initialData.origem || 'Inbound',
+        status: initialData.status || 'Novo',
+      })
     } else if (!open) {
-      setSegmento('')
-      setTamanho('')
-      setOrigem('')
-      setStatus('Novo')
+      setFormData({
+        empresa: '',
+        contato: '',
+        email: '',
+        telefone: '',
+        segmento: 'Outros',
+        tamanho: '1-10',
+        origem: 'Inbound',
+        status: 'Novo',
+      })
     }
   }, [initialData, open])
+
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
-    const formData = new FormData(e.currentTarget)
-
-    const leadData = {
-      empresa: formData.get('empresa') as string,
-      contato: formData.get('contato') as string,
-      email: formData.get('email') as string,
-      telefone: formData.get('telefone') as string,
-      segmento: segmento || 'Outros',
-      tamanho: tamanho || '1-10',
-      origem: origem || 'Inbound',
-      status: status || 'Novo',
-    }
 
     try {
+      let savedData
       if (initialData) {
-        await api.updateLead(initialData.id, leadData)
+        savedData = await api.updateLead(initialData.id, formData)
         toast({
           title: 'Lead atualizado com sucesso!',
-          description: `Os dados de ${leadData.empresa} foram atualizados.`,
+          description: `Os dados de ${formData.empresa} foram atualizados.`,
         })
       } else {
-        await api.createLead(leadData)
+        savedData = await api.createLead(formData)
         toast({
           title: 'Lead cadastrado com sucesso!',
-          description: `${leadData.empresa} foi adicionado aos seus leads.`,
+          description: `${formData.empresa} foi adicionado aos seus leads.`,
         })
       }
-      onSave()
+      onSave(savedData, !!initialData)
       onOpenChange(false)
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' })
@@ -99,13 +112,14 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
           </SheetDescription>
         </SheetHeader>
 
-        <form key={initialData?.id || 'new'} onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="empresa">Nome da Empresa</Label>
             <Input
               id="empresa"
               name="empresa"
-              defaultValue={initialData?.empresa}
+              value={formData.empresa}
+              onChange={(e) => handleChange('empresa', e.target.value)}
               required
               placeholder="Ex: TechCorp Solutions"
             />
@@ -116,7 +130,8 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
             <Input
               id="contato"
               name="contato"
-              defaultValue={initialData?.contato}
+              value={formData.contato}
+              onChange={(e) => handleChange('contato', e.target.value)}
               required
               placeholder="Ex: Ana Silva"
             />
@@ -129,7 +144,8 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
                 id="email"
                 name="email"
                 type="email"
-                defaultValue={initialData?.email}
+                value={formData.email}
+                onChange={(e) => handleChange('email', e.target.value)}
                 required
                 placeholder="ana@empresa.com"
               />
@@ -139,7 +155,8 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
               <Input
                 id="telefone"
                 name="telefone"
-                defaultValue={initialData?.telefone}
+                value={formData.telefone}
+                onChange={(e) => handleChange('telefone', e.target.value)}
                 required
                 placeholder="(00) 00000-0000"
               />
@@ -149,7 +166,11 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
           {initialData && (
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select onValueChange={setStatus} value={status} required>
+              <Select
+                onValueChange={(val) => handleChange('status', val)}
+                value={formData.status}
+                required
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o status" />
                 </SelectTrigger>
@@ -165,7 +186,11 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
 
           <div className="space-y-2">
             <Label>Segmento</Label>
-            <Select onValueChange={setSegmento} value={segmento} required>
+            <Select
+              onValueChange={(val) => handleChange('segmento', val)}
+              value={formData.segmento}
+              required
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione um segmento" />
               </SelectTrigger>
@@ -181,7 +206,11 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
 
           <div className="space-y-2">
             <Label>Tamanho da Empresa</Label>
-            <Select onValueChange={setTamanho} value={tamanho} required>
+            <Select
+              onValueChange={(val) => handleChange('tamanho', val)}
+              value={formData.tamanho}
+              required
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Número de funcionários" />
               </SelectTrigger>
@@ -196,7 +225,11 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
 
           <div className="space-y-2">
             <Label>Origem do Lead</Label>
-            <Select onValueChange={setOrigem} value={origem} required>
+            <Select
+              onValueChange={(val) => handleChange('origem', val)}
+              value={formData.origem}
+              required
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Como nos conheceu?" />
               </SelectTrigger>
