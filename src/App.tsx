@@ -10,6 +10,7 @@ import Index from './pages/Index'
 import Leads from './pages/Leads'
 import Pipeline from './pages/Pipeline'
 import Proposals from './pages/Proposals'
+import Tasks from './pages/Tasks'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/leads" element={<Leads />} />
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/proposals" element={<Proposals />} />
+              <Route path="/tasks" element={<Tasks />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
