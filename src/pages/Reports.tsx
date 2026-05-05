@@ -104,79 +104,6 @@ export default function Reports() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Relatórios</h1>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-semibold text-slate-500 mb-2">Total de Leads</p>
-                <h3 className="text-3xl font-bold text-slate-900">
-                  {stats.leads.toLocaleString()}
-                </h3>
-                <p className="text-[13px] text-slate-500 mt-2 flex items-center gap-1">
-                  <span className="text-emerald-500 font-medium">+20.1%</span>
-                </p>
-              </div>
-              <div className="text-slate-400">
-                <Users className="h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-semibold text-slate-500 mb-2">Conversão</p>
-                <h3 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-                  15.2% <TrendingUp className="h-5 w-5 text-slate-900" />
-                </h3>
-                <p className="text-[13px] text-slate-500 mt-2 flex items-center gap-1">
-                  <span className="text-emerald-500 font-medium">+2.4%</span>
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-semibold text-slate-500 mb-2">Receita Estimada</p>
-                <h3 className="text-3xl font-bold text-slate-900">
-                  R$ {(stats.receita / 1000).toFixed(1)}k
-                </h3>
-                <p className="text-[13px] text-slate-500 mt-2 flex items-center gap-1">
-                  <span className="text-emerald-500 font-medium">+12%</span>
-                </p>
-              </div>
-              <div className="text-slate-400">
-                <DollarSign className="h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-semibold text-slate-500 mb-2">Atividades Ativas</p>
-                <h3 className="text-3xl font-bold text-slate-900">{stats.tarefas}</h3>
-                <p className="text-[13px] text-slate-500 mt-2">
-                  <span className="text-slate-600 font-medium">4 urgentes hoje</span>
-                </p>
-              </div>
-              <div className="text-slate-400">
-                <Clock className="h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px] lg:col-span-1">
           <CardHeader className="pb-2 pt-6 px-6">
@@ -254,42 +181,6 @@ export default function Reports() {
                       fill="url(#colorTickets2)"
                     />
                   </AreaChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[20px] lg:col-span-1">
-          <CardHeader className="pb-2 pt-6 px-6">
-            <CardTitle className="text-[1.1rem]">Distribuição de Pipeline</CardTitle>
-            <CardDescription className="text-[13px] text-slate-500 mt-1">
-              Status atual das oportunidades.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-6 pb-6">
-            <div className="h-[280px] w-full flex items-center justify-center mt-4">
-              <ChartContainer config={{}}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="80%"
-                      startAngle={180}
-                      endAngle={0}
-                      innerRadius={80}
-                      outerRadius={120}
-                      paddingAngle={2}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                  </PieChart>
                 </ResponsiveContainer>
               </ChartContainer>
             </div>
