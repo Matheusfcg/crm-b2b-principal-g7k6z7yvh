@@ -24,8 +24,30 @@ export default function Login() {
     if (isSignUp) {
       const { data, error } = await signUp(email, password, { data: { name } })
       setLoading(false)
+
       if (error) {
-        toast({ title: 'Erro ao criar conta', description: error.message, variant: 'destructive' })
+        if (
+          error.message.toLowerCase().includes('already registered') ||
+          error.message.toLowerCase().includes('já cadastrado')
+        ) {
+          toast({
+            title: 'Conta já existe',
+            description: 'Realizando login automático...',
+            variant: 'default',
+          })
+          const { error: signInError } = await signIn(email, password)
+          if (!signInError) {
+            navigate('/')
+          } else {
+            setIsSignUp(false)
+          }
+        } else {
+          toast({
+            title: 'Erro ao criar conta',
+            description: error.message,
+            variant: 'destructive',
+          })
+        }
       } else {
         if (data?.session) {
           toast({ title: 'Conta criada com sucesso!', description: 'Seja bem-vindo ao CRM B2B.' })
@@ -93,9 +115,10 @@ export default function Login() {
               id="password"
               type="password"
               required
+              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="•••••••• (mín. 6 caracteres)"
             />
           </div>
           <Button

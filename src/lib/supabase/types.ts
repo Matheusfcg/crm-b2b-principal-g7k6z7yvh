@@ -425,3 +425,22 @@ export const Constants = {
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "tasks_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+
+// --- DATABASE FUNCTIONS ---
+// FUNCTION handle_new_user()
+//   CREATE OR REPLACE FUNCTION public.handle_new_user()
+//    RETURNS trigger
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//   AS $function$
+//   BEGIN
+//     INSERT INTO public.profiles (id, name, role)
+//     VALUES (
+//       NEW.id,
+//       COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+//       'vendedor'
+//     );
+//     RETURN NEW;
+//   END;
+//   $function$
+//
