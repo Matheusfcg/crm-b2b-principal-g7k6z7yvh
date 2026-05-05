@@ -25,7 +25,7 @@ const statusColors: Record<string, string> = {
   Perdido: 'bg-red-100 text-red-800 hover:bg-red-200 border-transparent',
 }
 
-export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
+export function LeadsTable({ leads, onDelete, onEdit }: LeadsTableProps) {
   if (leads.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center border rounded-md bg-white">
