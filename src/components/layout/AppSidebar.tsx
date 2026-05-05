@@ -24,7 +24,7 @@ import {
 const navItems = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
   { title: 'Leads', path: '/leads', icon: Users },
-  { title: 'Pipeline', path: '#', icon: Kanban },
+  { title: 'Pipeline', path: '/pipeline', icon: Kanban },
   { title: 'Atividades', path: '#', icon: Calendar },
   { title: 'Tarefas', path: '#', icon: CheckSquare },
   { title: 'Propostas', path: '#', icon: FileText },
