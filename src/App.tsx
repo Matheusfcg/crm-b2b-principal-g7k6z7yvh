@@ -4,6 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SearchProvider } from '@/contexts/search-context'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
+import { ThemeProvider } from '@/components/theme-provider'
 
 import Layout from './components/Layout'
 import Index from './pages/Index'
@@ -24,35 +25,37 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 }
 
 const App = () => (
-  <AuthProvider>
-    <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
-      <SearchProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/" element={<Index />} />
-              <Route path="/leads" element={<Leads />} />
-              <Route path="/pipeline" element={<Pipeline />} />
-              <Route path="/proposals" element={<Proposals />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/profile" element={<Profile />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TooltipProvider>
-      </SearchProvider>
-    </BrowserRouter>
-  </AuthProvider>
+  <ThemeProvider defaultTheme="light" storageKey="crm-theme" attribute="class">
+    <AuthProvider>
+      <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
+        <SearchProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Index />} />
+                <Route path="/leads" element={<Leads />} />
+                <Route path="/pipeline" element={<Pipeline />} />
+                <Route path="/proposals" element={<Proposals />} />
+                <Route path="/tasks" element={<Tasks />} />
+                <Route path="/users" element={<Users />} />
+                <Route path="/profile" element={<Profile />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TooltipProvider>
+        </SearchProvider>
+      </BrowserRouter>
+    </AuthProvider>
+  </ThemeProvider>
 )
 
 export default App
