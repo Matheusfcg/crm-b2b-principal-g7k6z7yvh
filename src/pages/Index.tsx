@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Calendar, TrendingUp, Users, DollarSign, Clock, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, Users, DollarSign, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase/client'
@@ -31,19 +31,6 @@ const pieData = [
   { name: 'Contato Feito', value: 300, color: '#10b981' },
   { name: 'Proposta', value: 300, color: '#0f766e' },
   { name: 'Negociação', value: 200, color: '#f59e0b' },
-]
-
-const steps = [
-  { title: 'Alocação de Caso', step: 'Etapa 1 de 5', avatars: ['1'], status: 'done' },
-  {
-    title: 'Identificação do Problema',
-    step: 'Etapa 2 de 5',
-    avatars: ['2', '3'],
-    status: 'current',
-  },
-  { title: 'Resolução Técnica', step: 'Etapa 3 de 5', avatars: [], status: 'pending' },
-  { title: 'Processamento', step: 'Etapa 4 de 5', avatars: [], status: 'pending' },
-  { title: 'Notificação', step: 'Etapa 5 de 5', avatars: [], status: 'pending' },
 ]
 
 export default function Index() {
@@ -90,75 +77,10 @@ export default function Index() {
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 bg-[#f8fafc] min-h-[calc(100vh-4rem)]">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           Fluxo de Vendas e Jornada do Cliente
         </h1>
-        <Button
-          variant="outline"
-          className="bg-white hover:bg-slate-50 text-slate-700 rounded-lg shadow-sm border-slate-200"
-        >
-          <Calendar className="mr-2 h-4 w-4 text-slate-500" />
-          Ver Agenda
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-4 overflow-x-auto pb-4 hide-scrollbar">
-        {steps.map((step, i) => (
-          <div key={i} className="flex items-center gap-4 shrink-0">
-            <Card className="w-[240px] border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] bg-white rounded-[20px]">
-              <CardContent className="p-5 flex flex-col h-[140px] justify-between gap-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex -space-x-2">
-                    {step.avatars.length > 0 ? (
-                      step.avatars.map((a, j) => (
-                        <div
-                          key={j}
-                          className="h-8 w-8 rounded-full border-2 border-white bg-slate-100 overflow-hidden relative z-10"
-                        >
-                          <img
-                            src={`https://img.usecurling.com/ppl/thumbnail?seed=${a}`}
-                            alt="Avatar"
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                      ))
-                    ) : (
-                      <div className="h-8 w-8 rounded-full border-2 border-white bg-slate-50 flex items-center justify-center relative z-10">
-                        <Users className="h-4 w-4 text-slate-300" />
-                      </div>
-                    )}
-                  </div>
-                  {step.status === 'done' && <CheckCircle2 className="h-6 w-6 text-emerald-500" />}
-                  {step.status === 'current' && <Clock className="h-6 w-6 text-blue-500" />}
-                  {step.status === 'pending' && (
-                    <div className="h-6 w-6 rounded-full border-2 border-slate-200" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base leading-tight">{step.title}</h3>
-                  <p className="text-xs text-slate-400 mt-1.5 font-medium">{step.step}</p>
-                </div>
-              </CardContent>
-            </Card>
-            {i < steps.length - 1 && (
-              <div className="text-slate-300 shrink-0">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </div>
-            )}
-          </div>
-        ))}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
