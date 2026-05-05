@@ -184,9 +184,9 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
 
           <TabsContent
             value="interactions"
-            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex m-0"
+            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex mt-0"
           >
-            <div className="p-6 bg-muted/30 border-y my-2">
+            <div className="p-6 bg-muted/30 border-b">
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -232,7 +232,7 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
               </div>
             </div>
 
-            <ScrollArea className="flex-1 p-6 pt-2">
+            <ScrollArea className="flex-1 p-6">
               <div className="space-y-6">
                 {interactions.map((int) => (
                   <div key={int.id} className="flex gap-4">
@@ -267,9 +267,9 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
 
           <TabsContent
             value="tasks"
-            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex m-0"
+            className="flex-1 flex flex-col overflow-hidden data-[state=active]:flex mt-0"
           >
-            <div className="p-6 bg-muted/30 border-y my-2">
+            <div className="p-6 bg-muted/30 border-b">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Título</Label>
@@ -319,7 +319,7 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
               </div>
             </div>
 
-            <ScrollArea className="flex-1 p-6 pt-2">
+            <ScrollArea className="flex-1 p-6">
               <div className="space-y-3">
                 {tasks.map((task) => {
                   const isOverdue =

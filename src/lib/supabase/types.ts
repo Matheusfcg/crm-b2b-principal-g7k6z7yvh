@@ -442,10 +442,15 @@ export const Constants = {
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: interactions
+//   Policy "interactions_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 //   Policy "interactions_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "interactions_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//   Policy "interactions_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     WITH CHECK: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 // Table: leads
 //   Policy "leads_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
@@ -468,10 +473,15 @@ export const Constants = {
 //   Policy "proposals_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 // Table: tasks
+//   Policy "tasks_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 //   Policy "tasks_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "tasks_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//   Policy "tasks_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
+//     WITH CHECK: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION handle_new_user()
