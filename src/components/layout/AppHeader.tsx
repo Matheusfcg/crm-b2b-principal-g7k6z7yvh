@@ -1,4 +1,4 @@
-import { Bell, Search, Menu, LogOut, User } from 'lucide-react'
+import { Bell, Search, Menu, LogOut, User, Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -18,58 +18,61 @@ export function AppHeader() {
   const { session, profile, signOut } = useAuth()
   const { toggleSidebar } = useSidebar()
   const userName = profile?.name || session?.user?.user_metadata?.name || 'Usuário'
-  const userRole = profile?.role || 'vendedor'
 
   return (
-    <header className="flex h-16 w-full items-center justify-between bg-card px-4 border-b border-border shrink-0 shadow-sm">
+    <header className="flex h-16 w-full items-center justify-between bg-white px-4 border-b border-slate-100 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)] z-10 relative">
       <div className="flex items-center gap-4 flex-1">
         <Button
           variant="ghost"
           size="icon"
           onClick={toggleSidebar}
-          className="md:hidden text-muted-foreground"
+          className="md:hidden text-slate-500"
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="relative w-full max-w-md hidden sm:flex items-center">
-          <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
+        <div className="relative w-full max-w-xl hidden sm:flex items-center">
+          <Search className="absolute left-4 h-4 w-4 text-slate-400" />
           <Input
             type="search"
-            placeholder="Buscar registros, contatos ou leads..."
-            className="w-full bg-muted/50 pl-9 border-border focus-visible:ring-1 focus-visible:ring-primary focus-visible:bg-background"
+            placeholder="Buscar empresas, contatos, leads..."
+            className="w-full bg-slate-50 pl-10 border-transparent focus-visible:ring-1 focus-visible:ring-slate-200 focus-visible:bg-white rounded-full text-slate-600 shadow-none h-[42px]"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="relative text-slate-500 hover:bg-slate-50 rounded-full h-10 w-10"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-card"></span>
+          <span className="absolute top-2.5 right-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white"></span>
         </Button>
-        <div className="h-6 w-px bg-border mx-1"></div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-slate-500 hover:bg-slate-50 rounded-full h-10 w-10 hidden sm:flex"
+        >
+          <Mail className="h-5 w-5" />
+        </Button>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-muted h-10">
-              <Avatar className="h-7 w-7 rounded-md">
+            <Button
+              variant="ghost"
+              className="flex items-center gap-2 px-2 hover:bg-slate-50 h-10 rounded-full"
+            >
+              <Avatar className="h-8 w-8 rounded-full border border-slate-200">
                 <AvatarImage
                   src={`https://img.usecurling.com/ppl/thumbnail?seed=${session?.user?.id}`}
                 />
-                <AvatarFallback className="rounded-md bg-primary/10 text-primary text-xs">
+                <AvatarFallback className="rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
                   {userName.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="hidden md:flex flex-col items-start text-sm">
-                <span className="font-medium leading-none text-foreground">{userName}</span>
-                <span className="text-[11px] text-muted-foreground mt-1 capitalize">
-                  {userRole}
-                </span>
-              </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
