@@ -4,7 +4,7 @@ export const interactionsService = {
   async getInteractionsByLead(leadId: string) {
     const { data, error } = await supabase
       .from('interactions')
-      .select('*, profiles:user_id(name)')
+      .select('*, profiles(name)')
       .eq('lead_id', leadId)
       .order('data', { ascending: false })
     if (error) throw error
