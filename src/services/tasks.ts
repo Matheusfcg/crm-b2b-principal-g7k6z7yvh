@@ -4,7 +4,7 @@ export const tasksService = {
   async getTasks() {
     const { data, error } = await supabase
       .from('tasks')
-      .select('*, leads(empresa, contato, id)')
+      .select('*, leads:lead_id(empresa, contato, id)')
       .order('prazo', { ascending: true })
     if (error) throw error
     return data
@@ -19,7 +19,7 @@ export const tasksService = {
     return data
   },
   async createTask(task: any) {
-    const { data, error } = await supabase.from('tasks').insert(task).select().single()
+    const { data, error } = await supabase.from('tasks').insert(task).select().maybeSingle()
     if (error) throw error
     return data
   },
@@ -29,8 +29,9 @@ export const tasksService = {
       .update(updates)
       .eq('id', id)
       .select()
-      .single()
+      .maybeSingle()
     if (error) throw error
+    if (!data) throw new Error('Não foi possível atualizar a tarefa. Verifique as permissões.')
     return data
   },
 }

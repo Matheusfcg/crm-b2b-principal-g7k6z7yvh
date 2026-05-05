@@ -41,8 +41,9 @@ export default function Tasks() {
   const uniqueLeads = useMemo(() => {
     const leadsMap = new Map()
     tasks.forEach((t) => {
-      if (t.leads && t.leads.id) {
-        leadsMap.set(t.leads.id, t.leads)
+      const leadData = Array.isArray(t.leads) ? t.leads[0] : t.leads
+      if (leadData && leadData.id) {
+        leadsMap.set(leadData.id, leadData)
       }
     })
     return Array.from(leadsMap.values())
@@ -59,7 +60,8 @@ export default function Tasks() {
         matchPrazo = !!task.prazo && isToday(parseISO(task.prazo))
       }
 
-      const matchLead = leadFilter === 'Todos' || (task.leads && task.leads.id === leadFilter)
+      const leadData = Array.isArray(task.leads) ? task.leads[0] : task.leads
+      const matchLead = leadFilter === 'Todos' || (leadData && leadData.id === leadFilter)
 
       const matchSearch =
         !searchQuery || task.titulo.toLowerCase().includes(searchQuery.toLowerCase())
@@ -183,9 +185,9 @@ export default function Tasks() {
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-muted-foreground">
-                      {task.leads && (
+                      {(Array.isArray(task.leads) ? task.leads[0] : task.leads) && (
                         <span className="font-medium bg-secondary/50 px-2 py-1 rounded-md text-secondary-foreground truncate max-w-[200px]">
-                          {task.leads.empresa}
+                          {(Array.isArray(task.leads) ? task.leads[0] : task.leads).empresa}
                         </span>
                       )}
                       {task.prazo && (
