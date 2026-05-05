@@ -37,14 +37,15 @@ export function AppSidebar() {
   const location = useLocation()
   const { profile } = useAuth()
 
-  const isAdmin = profile?.role === 'admin'
+  // Evitar problemas de case-sensitivity se alterado no banco manualmente
+  const isAdmin = profile?.role?.toLowerCase() === 'admin'
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="h-16 flex items-center justify-center border-b border-sidebar-border">
-        <div className="flex items-center gap-3 font-bold text-lg px-4 w-full">
-          <Briefcase className="h-6 w-6 text-sidebar-primary shrink-0" />
-          <span className="group-data-[collapsible=icon]:hidden truncate">CRM Enterprise</span>
+        <div className="flex items-center gap-3 font-bold text-lg px-4 w-full text-sidebar-foreground">
+          <Briefcase className="h-6 w-6 text-primary shrink-0" />
+          <span className="group-data-[collapsible=icon]:hidden truncate">CRM Empresarial</span>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-4">
@@ -58,7 +59,7 @@ export function AppSidebar() {
                     asChild
                     isActive={isActive}
                     tooltip={item.title}
-                    className="h-10"
+                    className="h-10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   >
                     <Link to={item.path} className="flex items-center gap-3">
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -74,12 +75,12 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={location.pathname === '/users'}
-                  tooltip="Gestão de Usuários"
-                  className="h-10"
+                  tooltip="Usuários"
+                  className="h-10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground mt-2"
                 >
                   <Link to="/users" className="flex items-center gap-3">
-                    <UserCog className="h-5 w-5 shrink-0" />
-                    <span className="font-medium">Gestão de Usuários</span>
+                    <UserCog className="h-5 w-5 shrink-0 text-primary" />
+                    <span className="font-medium">Usuários</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -95,7 +96,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 tooltip="Configurações"
-                className="h-10 text-sidebar-foreground hover:bg-sidebar-accent"
+                className="h-10 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
                 <Link to="#" className="flex items-center gap-3">
                   <Settings className="h-5 w-5 shrink-0" />
