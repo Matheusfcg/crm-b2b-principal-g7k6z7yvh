@@ -42,14 +42,20 @@ export function AppSidebar() {
           <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold shrink-0">
             <span className="text-lg leading-none">A</span>
           </div>
-          <span className="group-data-[collapsible=icon]:hidden truncate text-[1.1rem] tracking-tight border-[#ffffff] text-[#ffffff] font-medium">
+          <span
+            translate="no"
+            className="group-data-[collapsible=icon]:hidden truncate text-[1.1rem] tracking-tight border-[#ffffff] text-[#ffffff] font-medium"
+          >
             CRMVexaView
           </span>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-4">
         <SidebarGroup>
-          <div className="px-4 text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider">
+          <div
+            translate="no"
+            className="px-4 text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider"
+          >
             Menu Principal
           </div>
           <SidebarMenu>
@@ -69,7 +75,7 @@ export function AppSidebar() {
                   >
                     <Link to={item.path} className="flex items-center gap-3">
                       <item.icon className="h-5 w-5 shrink-0" />
-                      <span>{item.title}</span>
+                      <span translate="no">{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -86,7 +92,7 @@ export function AppSidebar() {
                 >
                   <Link to="/users" className="flex items-center gap-3">
                     <UserCog className="h-5 w-5 shrink-0" />
-                    <span>Usuários</span>
+                    <span translate="no">Usuários</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -105,7 +111,9 @@ export function AppSidebar() {
             >
               <button className="flex items-center gap-3 w-full">
                 <Moon className="h-5 w-5 shrink-0" />
-                <span className="font-medium">Modo Escuro</span>
+                <span translate="no" className="font-medium">
+                  Modo Escuro
+                </span>
               </button>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -117,7 +125,9 @@ export function AppSidebar() {
             >
               <Link to="#" className="flex items-center gap-3">
                 <Settings className="h-5 w-5 shrink-0" />
-                <span className="font-medium">Configurações</span>
+                <span translate="no" className="font-medium">
+                  Configurações
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

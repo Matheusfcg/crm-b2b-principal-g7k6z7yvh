@@ -50,7 +50,10 @@ export default function Login() {
         }
       } else {
         if (data?.session) {
-          toast({ title: 'Conta criada com sucesso!', description: 'Seja bem-vindo ao CRM B2B.' })
+          toast({
+            title: 'Conta criada com sucesso!',
+            description: 'Seja bem-vindo ao CRMVexaView.',
+          })
           navigate('/')
         } else {
           toast({
@@ -79,7 +82,9 @@ export default function Login() {
           <div className="bg-black text-white p-3 rounded-full mb-4">
             <CloudLightning className="h-8 w-8 fill-current" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">CRM B2B</h1>
+          <h1 translate="no" className="text-2xl font-bold text-gray-900">
+            CRMVexaView
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
             {isSignUp ? 'Crie sua conta para começar' : 'Entre com sua conta para continuar'}
           </p>
@@ -135,7 +140,9 @@ export default function Login() {
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-sm text-blue-600 hover:underline"
             >
-              {isSignUp ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Crie agora'}
+              <span translate="no">
+                {isSignUp ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Crie agora'}
+              </span>
             </button>
           </div>
         </form>
