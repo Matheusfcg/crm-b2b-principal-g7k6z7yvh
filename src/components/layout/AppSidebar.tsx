@@ -44,7 +44,7 @@ export function AppSidebar() {
           <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold shrink-0">
             <span className="text-lg leading-none">A</span>
           </div>
-          <span className="group-data-[collapsible=icon]:hidden truncate text-[1.1rem] font-bold tracking-tight">
+          <span className="group-data-[collapsible=icon]:hidden truncate text-[1.1rem] tracking-tight border-[#ffffff] text-[#ffffff] font-medium">
             CRMVexaView
           </span>
         </div>
@@ -57,21 +57,7 @@ export function AppSidebar() {
           <SidebarMenu>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path
-              return (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive}
-                    tooltip={item.title}
-                    className={`h-10 transition-colors mb-1 ${isActive ? 'bg-slate-100 text-slate-900 font-semibold rounded-lg' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-lg'}`}
-                  >
-                    <Link to={item.path} className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5 shrink-0" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
+              return <SidebarMenuItem key={item.title}></SidebarMenuItem>
             })}
 
             {isAdmin && (
