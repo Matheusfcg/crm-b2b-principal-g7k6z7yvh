@@ -75,11 +75,9 @@ export default function Users() {
     <div className="flex flex-col gap-6 bg-card text-card-foreground rounded-lg p-6 sm:p-8 shadow-sm border min-h-full">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            Gerenciamento de Usuários
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gestão de Usuários</h1>
           <p className="text-gray-500 text-sm mt-1 font-medium">
-            Cadastre novos usuários e defina seus níveis de acesso (Admin, Gerente, Vendedor).
+            Gerencie o acesso e permissões da equipe.
           </p>
         </div>
         <Button
@@ -87,7 +85,7 @@ export default function Users() {
             setEditingUser(null)
             setIsFormOpen(true)
           }}
-          className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
+          className="bg-primary hover:bg-primary/90 w-full sm:w-auto rounded-full"
         >
           <Plus className="mr-2 h-4 w-4" />
           Novo Usuário
@@ -95,11 +93,16 @@ export default function Users() {
       </div>
 
       <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Equipe</h2>
+          <p className="text-sm text-muted-foreground">Lista de usuários ativos no sistema.</p>
+        </div>
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="font-semibold">Nome</TableHead>
-              <TableHead className="font-semibold">Nível de Acesso (Role)</TableHead>
+              <TableHead className="font-semibold">Email</TableHead>
+              <TableHead className="font-semibold">Função</TableHead>
               <TableHead className="w-[100px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -107,7 +110,14 @@ export default function Users() {
             {users.map((u) => (
               <TableRow key={u.id}>
                 <TableCell>
-                  <div className="font-medium">{u.name}</div>
+                  <div className="font-medium">
+                    {u.name}{' '}
+                    {u.email === profile?.email && (
+                      <span className="text-muted-foreground font-normal ml-1">(Você)</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
                   <div className="text-sm text-muted-foreground">{u.email}</div>
                 </TableCell>
                 <TableCell>
@@ -115,10 +125,10 @@ export default function Users() {
                     variant="outline"
                     className={
                       u.role === 'admin'
-                        ? 'bg-red-50 text-red-700 border-red-200 uppercase'
+                        ? 'bg-red-50 text-red-700 border-red-200 capitalize'
                         : u.role === 'gerente'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200 uppercase'
-                          : 'bg-green-50 text-green-700 border-green-200 uppercase'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 capitalize'
+                          : 'bg-green-50 text-green-700 border-green-200 capitalize'
                     }
                   >
                     {u.role}

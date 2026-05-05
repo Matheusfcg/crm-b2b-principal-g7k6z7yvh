@@ -24,9 +24,9 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 
 const navItems = [
-  { title: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { title: 'Leads', path: '/leads', icon: Users },
-  { title: 'Pipeline', path: '/pipeline', icon: Kanban },
+  { title: 'Painel', path: '/', icon: LayoutDashboard },
+  { title: 'Pistas', path: '/leads', icon: Users },
+  { title: 'Gasoduto', path: '/pipeline', icon: Kanban },
   { title: 'Atividades', path: '#', icon: Calendar },
   { title: 'Tarefas', path: '/tasks', icon: CheckSquare },
   { title: 'Propostas', path: '/proposals', icon: FileText },
@@ -74,12 +74,12 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={location.pathname === '/users'}
-                  tooltip="Usuários"
+                  tooltip="Gestão de Usuários"
                   className="h-10"
                 >
                   <Link to="/users" className="flex items-center gap-3">
                     <UserCog className="h-5 w-5 shrink-0" />
-                    <span className="font-medium">Usuários</span>
+                    <span className="font-medium">Gestão de Usuários</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

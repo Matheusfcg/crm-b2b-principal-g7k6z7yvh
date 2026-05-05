@@ -46,7 +46,7 @@ export type Database = {
             foreignKeyName: 'interactions_user_id_fkey'
             columns: ['user_id']
             isOneToOne: false
-            referencedRelation: 'profiles'
+            referencedRelation: 'users'
             referencedColumns: ['id']
           },
         ]
@@ -96,31 +96,10 @@ export type Database = {
             foreignKeyName: 'leads_created_by_fkey'
             columns: ['created_by']
             isOneToOne: false
-            referencedRelation: 'profiles'
+            referencedRelation: 'users'
             referencedColumns: ['id']
           },
         ]
-      }
-      profiles: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          role: string
-        }
-        Insert: {
-          created_at?: string
-          id: string
-          name: string
-          role?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          role?: string
-        }
-        Relationships: []
       }
       proposals: {
         Row: {
@@ -174,7 +153,7 @@ export type Database = {
             foreignKeyName: 'proposals_user_id_fkey'
             columns: ['user_id']
             isOneToOne: false
-            referencedRelation: 'profiles'
+            referencedRelation: 'users'
             referencedColumns: ['id']
           },
         ]
@@ -222,10 +201,34 @@ export type Database = {
             foreignKeyName: 'tasks_user_id_fkey'
             columns: ['user_id']
             isOneToOne: false
-            referencedRelation: 'profiles'
+            referencedRelation: 'users'
             referencedColumns: ['id']
           },
         ]
+      }
+      users: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+          name: string
+          role?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          role?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -405,11 +408,6 @@ export const Constants = {
 //   status: text (not null, default: 'Novo'::text)
 //   created_by: uuid (not null)
 //   created_at: timestamp with time zone (not null, default: now())
-// Table: profiles
-//   id: uuid (not null)
-//   name: text (not null)
-//   role: character varying (not null, default: 'vendedor'::character varying)
-//   created_at: timestamp with time zone (not null, default: now())
 // Table: proposals
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -431,71 +429,77 @@ export const Constants = {
 //   prazo: timestamp with time zone (nullable)
 //   status: text (not null, default: 'Pendente'::text)
 //   created_at: timestamp with time zone (not null, default: now())
+// Table: users
+//   id: uuid (not null)
+//   email: text (not null)
+//   name: text (not null)
+//   role: text (not null, default: 'vendedor'::text)
+//   created_at: timestamp with time zone (not null, default: now())
 
 // --- CONSTRAINTS ---
 // Table: interactions
 //   FOREIGN KEY interactions_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY interactions_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY interactions_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+//   FOREIGN KEY interactions_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 // Table: leads
-//   FOREIGN KEY leads_created_by_fkey: FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE CASCADE
+//   FOREIGN KEY leads_created_by_fkey: FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 //   PRIMARY KEY leads_pkey: PRIMARY KEY (id)
-// Table: profiles
-//   FOREIGN KEY profiles_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
-//   PRIMARY KEY profiles_pkey: PRIMARY KEY (id)
 // Table: proposals
 //   FOREIGN KEY proposals_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY proposals_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY proposals_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+//   FOREIGN KEY proposals_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 // Table: tasks
 //   FOREIGN KEY tasks_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY tasks_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY tasks_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+//   FOREIGN KEY tasks_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+// Table: users
+//   FOREIGN KEY users_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
+//   PRIMARY KEY users_pkey: PRIMARY KEY (id)
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: interactions
 //   Policy "interactions_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "interactions_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "interactions_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "interactions_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 // Table: leads
 //   Policy "leads_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "leads_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (created_by = auth.uid())
 //   Policy "leads_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "leads_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
-// Table: profiles
-//   Policy "profiles_insert" (INSERT, PERMISSIVE) roles={authenticated}
-//     WITH CHECK: (id = auth.uid())
-//   Policy "profiles_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: true
-//   Policy "profiles_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 // Table: proposals
 //   Policy "proposals_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "proposals_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "proposals_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "proposals_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 // Table: tasks
 //   Policy "tasks_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "tasks_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "tasks_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "tasks_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles p   WHERE ((p.id = auth.uid()) AND ((p.role)::text = ANY ((ARRAY['admin'::character varying, 'gerente'::character varying])::text[]))))))
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
+// Table: users
+//   Policy "users_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (id = auth.uid())
+//   Policy "users_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "users_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)
@@ -508,7 +512,7 @@ export const Constants = {
 //     new_user_id UUID;
 //   BEGIN
 //     IF NOT EXISTS (
-//       SELECT 1 FROM public.profiles
+//       SELECT 1 FROM public.users
 //       WHERE id = auth.uid() AND role = 'admin'
 //     ) THEN
 //       RAISE EXCEPTION 'Acesso negado: apenas administradores podem criar usuários.';
@@ -540,10 +544,10 @@ export const Constants = {
 //       NULL, '', '', ''
 //     );
 //
-//     INSERT INTO public.profiles (id, name, role)
-//     VALUES (new_user_id, new_name, new_role)
+//     INSERT INTO public.users (id, name, email, role)
+//     VALUES (new_user_id, new_name, new_email, new_role)
 //     ON CONFLICT (id) DO UPDATE
-//     SET name = EXCLUDED.name, role = EXCLUDED.role;
+//     SET name = EXCLUDED.name, email = EXCLUDED.email, role = EXCLUDED.role;
 //
 //     RETURN new_user_id;
 //   END;
@@ -557,13 +561,13 @@ export const Constants = {
 //   AS $function$
 //   BEGIN
 //     IF NOT EXISTS (
-//       SELECT 1 FROM public.profiles
+//       SELECT 1 FROM public.users
 //       WHERE id = auth.uid() AND role = 'admin'
 //     ) THEN
 //       RAISE EXCEPTION 'Acesso negado: apenas administradores podem editar usuários.';
 //     END IF;
 //
-//     UPDATE public.profiles
+//     UPDATE public.users
 //     SET name = new_name, role = new_role
 //     WHERE id = target_user_id;
 //
@@ -580,14 +584,15 @@ export const Constants = {
 //    SECURITY DEFINER
 //   AS $function$
 //   BEGIN
-//     INSERT INTO public.profiles (id, name, role)
+//     INSERT INTO public.users (id, name, email, role)
 //     VALUES (
 //       NEW.id,
 //       COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+//       NEW.email,
 //       'vendedor'
 //     )
 //     ON CONFLICT (id) DO UPDATE
-//     SET name = EXCLUDED.name;
+//     SET name = EXCLUDED.name, email = EXCLUDED.email;
 //
 //     RETURN NEW;
 //   END;
