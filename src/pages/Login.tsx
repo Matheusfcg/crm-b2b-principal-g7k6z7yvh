@@ -22,13 +22,22 @@ export default function Login() {
     setLoading(true)
 
     if (isSignUp) {
-      const { error } = await signUp(email, password, { data: { name } })
+      const { data, error } = await signUp(email, password, { data: { name } })
       setLoading(false)
       if (error) {
         toast({ title: 'Erro ao criar conta', description: error.message, variant: 'destructive' })
       } else {
-        toast({ title: 'Conta criada com sucesso!', description: 'Seja bem-vindo ao CRM B2B.' })
-        navigate('/')
+        if (data?.session) {
+          toast({ title: 'Conta criada com sucesso!', description: 'Seja bem-vindo ao CRM B2B.' })
+          navigate('/')
+        } else {
+          toast({
+            title: 'Cadastro realizado!',
+            description: 'Verifique seu e-mail para confirmar a conta antes de entrar.',
+          })
+          setIsSignUp(false)
+          setPassword('')
+        }
       }
     } else {
       const { error } = await signIn(email, password)
