@@ -121,9 +121,9 @@ export function AppSidebar() {
             <SidebarMenuButton
               asChild
               tooltip="Configurações"
-              className="h-10 transition-colors text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-lg"
+              className={`h-10 transition-colors rounded-lg ${location.pathname === '/profile' ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
             >
-              <Link to="#" className="flex items-center gap-3">
+              <Link to="/profile" className="flex items-center gap-3">
                 <Settings className="h-5 w-5 shrink-0" />
                 <span translate="no" className="font-medium">
                   Configurações

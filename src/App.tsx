@@ -13,6 +13,7 @@ import Proposals from './pages/Proposals'
 import Tasks from './pages/Tasks'
 import Users from './pages/Users'
 import Login from './pages/Login'
+import Profile from './pages/Profile'
 import NotFound from './pages/NotFound'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -44,6 +45,7 @@ const App = () => (
               <Route path="/proposals" element={<Proposals />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

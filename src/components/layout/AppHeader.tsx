@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSearch } from '@/contexts/search-context'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { useSidebar } from '@/components/ui/sidebar'
 import {
@@ -76,8 +77,10 @@ export function AppHeader() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="cursor-pointer">
-              <User className="mr-2 h-4 w-4" /> Perfil
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link to="/profile" className="flex items-center w-full">
+                <User className="mr-2 h-4 w-4" /> Perfil
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
