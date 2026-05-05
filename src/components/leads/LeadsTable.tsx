@@ -8,19 +8,14 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MoreHorizontal, Edit, Trash } from 'lucide-react'
+import { Edit, Trash } from 'lucide-react'
 import { Lead } from '@/pages/Leads'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 interface LeadsTableProps {
   leads: Lead[]
   onDelete: (id: string) => void
+  onEdit: (lead: Lead) => void
 }
 
 const statusColors: Record<string, string> = {
@@ -74,27 +69,28 @@ export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
                 {new Date(lead.created_at).toLocaleDateString('pt-BR')}
               </TableCell>
               <TableCell>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <span className="sr-only">Abrir menu</span>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <Edit className="mr-2 h-4 w-4" />
-                      <span>Editar</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => onDelete(lead.id)}
-                      className="text-destructive focus:bg-destructive/10"
-                    >
-                      <Trash className="mr-2 h-4 w-4" />
-                      <span>Excluir</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center gap-2 justify-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEdit(lead)}
+                    title="Editar"
+                    className="h-8 w-8"
+                  >
+                    <Edit className="h-4 w-4" />
+                    <span className="sr-only">Editar</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(lead.id)}
+                    title="Excluir"
+                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash className="h-4 w-4" />
+                    <span className="sr-only">Excluir</span>
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}

@@ -26,6 +26,11 @@ export const api = {
     if (error) throw error
     return data
   },
+  async updateLead(id: string, lead: any) {
+    const { data, error } = await supabase.from('leads').update(lead).eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
   async deleteLead(id: string) {
     const { error } = await supabase.from('leads').delete().eq('id', id)
     if (error) throw error

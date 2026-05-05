@@ -30,6 +30,7 @@ export interface Lead {
 export default function Leads() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [segmentoFilter, setSegmentoFilter] = useState('Todos')
   const { searchQuery } = useSearch()
@@ -50,6 +51,18 @@ export default function Leads() {
 
   const handleAddLead = () => {
     fetchLeads()
+  }
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead)
+    setIsFormOpen(true)
+  }
+
+  const handleFormOpenChange = (open: boolean) => {
+    setIsFormOpen(open)
+    if (!open) {
+      setTimeout(() => setEditingLead(null), 300)
+    }
   }
 
   const handleDeleteLead = async (id: string) => {
@@ -90,7 +103,10 @@ export default function Leads() {
           </p>
         </div>
         <Button
-          onClick={() => setIsFormOpen(true)}
+          onClick={() => {
+            setEditingLead(null)
+            setIsFormOpen(true)
+          }}
           className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
         >
           <Plus className="mr-2 h-4 w-4" />
@@ -133,9 +149,14 @@ export default function Leads() {
         </div>
       </div>
 
-      <LeadsTable leads={filteredLeads} onDelete={handleDeleteLead} />
+      <LeadsTable leads={filteredLeads} onDelete={handleDeleteLead} onEdit={handleEditLead} />
 
-      <LeadForm open={isFormOpen} onOpenChange={setIsFormOpen} onSave={handleAddLead} />
+      <LeadForm
+        open={isFormOpen}
+        onOpenChange={handleFormOpenChange}
+        onSave={handleAddLead}
+        initialData={editingLead}
+      />
     </div>
   )
 }
