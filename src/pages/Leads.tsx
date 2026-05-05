@@ -11,7 +11,7 @@ import {
 import { LeadsTable } from '@/components/leads/LeadsTable'
 import { LeadForm } from '@/components/leads/LeadForm'
 import { useSearch } from '@/contexts/search-context'
-import { api } from '@/services/api'
+import { leadsService } from '@/services/leads'
 import { useToast } from '@/hooks/use-toast'
 
 export interface Lead {
@@ -38,7 +38,7 @@ export default function Leads() {
 
   const fetchLeads = async () => {
     try {
-      const data = await api.getLeads()
+      const data = await leadsService.getLeads()
       setLeads(data as Lead[])
     } catch (err: any) {
       toast({ title: 'Erro ao carregar leads', description: err.message, variant: 'destructive' })
@@ -71,7 +71,7 @@ export default function Leads() {
 
   const handleDeleteLead = async (id: string) => {
     try {
-      await api.deleteLead(id)
+      await leadsService.deleteLead(id)
       fetchLeads()
       toast({ title: 'Lead removido' })
     } catch (err: any) {

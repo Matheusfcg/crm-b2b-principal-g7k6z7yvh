@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { api } from '@/services/api'
+import { leadsService } from '@/services/leads'
 
 interface LeadFormProps {
   open: boolean
@@ -79,13 +79,13 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
     try {
       let savedData
       if (initialData) {
-        savedData = await api.updateLead(initialData.id, formData)
+        savedData = await leadsService.updateLead(initialData.id, formData)
         toast({
           title: 'Lead atualizado com sucesso!',
           description: `Os dados de ${formData.empresa} foram atualizados.`,
         })
       } else {
-        savedData = await api.createLead(formData)
+        savedData = await leadsService.createLead(formData)
         toast({
           title: 'Lead cadastrado com sucesso!',
           description: `${formData.empresa} foi adicionado aos seus leads.`,
