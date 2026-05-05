@@ -57,7 +57,25 @@ export function AppSidebar() {
           <SidebarMenu>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path
-              return <SidebarMenuItem key={item.title}></SidebarMenuItem>
+              return (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.title}
+                    className={`h-10 transition-colors mb-1 ${
+                      isActive
+                        ? 'bg-slate-100 text-slate-900 font-semibold rounded-lg'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-lg'
+                    }`}
+                  >
+                    <Link to={item.path} className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
             })}
 
             {isAdmin && (
