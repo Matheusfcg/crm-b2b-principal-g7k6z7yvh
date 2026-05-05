@@ -11,6 +11,7 @@ import Leads from './pages/Leads'
 import Pipeline from './pages/Pipeline'
 import Proposals from './pages/Proposals'
 import Tasks from './pages/Tasks'
+import Users from './pages/Users'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/proposals" element={<Proposals />} />
               <Route path="/tasks" element={<Tasks />} />
+              <Route path="/users" element={<Users />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

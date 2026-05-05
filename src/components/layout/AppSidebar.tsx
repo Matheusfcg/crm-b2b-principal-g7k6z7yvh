@@ -9,6 +9,7 @@ import {
   BarChart,
   Settings,
   Briefcase,
+  UserCog,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -20,6 +21,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from '@/components/ui/sidebar'
+import { useAuth } from '@/hooks/use-auth'
 
 const navItems = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -33,6 +35,9 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation()
+  const { profile } = useAuth()
+
+  const isAdmin = profile?.role === 'admin'
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -54,29 +59,53 @@ export function AppSidebar() {
                     isActive={isActive}
                     tooltip={item.title}
                     className="h-10"
-                  ></SidebarMenuButton>
+                  >
+                    <Link to={item.path} className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span className="font-medium">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               )
             })}
+
+            {isAdmin && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === '/users'}
+                  tooltip="Usuários"
+                  className="h-10"
+                >
+                  <Link to="/users" className="flex items-center gap-3">
+                    <UserCog className="h-5 w-5 shrink-0" />
+                    <span className="font-medium">Usuários</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border p-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Configurações"
-              className="h-10 text-sidebar-foreground hover:bg-sidebar-accent"
-            >
-              <Link to="#" className="flex items-center gap-3">
-                <Settings className="h-5 w-5 shrink-0" />
-                <span className="font-medium">Configurações</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+
+      {isAdmin && (
+        <SidebarFooter className="border-t border-sidebar-border p-4">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Configurações"
+                className="h-10 text-sidebar-foreground hover:bg-sidebar-accent"
+              >
+                <Link to="#" className="flex items-center gap-3">
+                  <Settings className="h-5 w-5 shrink-0" />
+                  <span className="font-medium">Configurações</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   )
 }

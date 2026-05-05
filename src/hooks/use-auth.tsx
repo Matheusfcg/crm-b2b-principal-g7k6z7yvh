@@ -2,8 +2,15 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 
+export interface UserProfile {
+  id: string
+  name: string
+  role: string
+}
+
 interface AuthContextType {
   user: User | null
+  profile: UserProfile | null
   session: Session | null
   signUp: (email: string, password: string, options?: any) => Promise<{ data?: any; error: any }>
   signIn: (email: string, password: string) => Promise<{ error: any }>
@@ -21,6 +28,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -30,15 +38,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      setLoading(false)
+      if (!session?.user) {
+        setProfile(null)
+        setLoading(false)
+      }
     })
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
-      setLoading(false)
+      if (!session?.user) {
+        setProfile(null)
+        setLoading(false)
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          setProfile(data)
+          setLoading(false)
+        })
+    }
+  }, [user])
 
   const signUp = async (email: string, password: string, options?: any) => {
     const { data, error } = await supabase.auth.signUp({

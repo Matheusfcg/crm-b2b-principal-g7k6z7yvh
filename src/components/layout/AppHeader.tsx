@@ -15,9 +15,10 @@ import {
 
 export function AppHeader() {
   const { searchQuery, setSearchQuery } = useSearch()
-  const { session, signOut } = useAuth()
+  const { session, profile, signOut } = useAuth()
   const { toggleSidebar } = useSidebar()
-  const userName = session?.user?.user_metadata?.name || 'Usuário'
+  const userName = profile?.name || session?.user?.user_metadata?.name || 'Usuário'
+  const userRole = profile?.role || 'vendedor'
 
   return (
     <header className="flex h-16 w-full items-center justify-between bg-card px-4 border-b border-border shrink-0 shadow-sm">
@@ -65,7 +66,9 @@ export function AppHeader() {
               </Avatar>
               <div className="hidden md:flex flex-col items-start text-sm">
                 <span className="font-medium leading-none text-foreground">{userName}</span>
-                <span className="text-[11px] text-muted-foreground mt-1">Vendedor</span>
+                <span className="text-[11px] text-muted-foreground mt-1 capitalize">
+                  {userRole}
+                </span>
               </div>
             </Button>
           </DropdownMenuTrigger>
