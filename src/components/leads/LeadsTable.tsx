@@ -8,7 +8,15 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Edit, Trash, Eye } from 'lucide-react'
+import { Edit, Trash, Eye, MoreHorizontal } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Lead } from '@/pages/Leads'
 import { cn } from '@/lib/utils'
 
@@ -118,6 +126,57 @@ export function LeadsTable({ leads, onDelete, onEdit, onView }: LeadsTableProps)
                     <Trash className="h-4 w-4" />
                     <span className="sr-only">Excluir</span>
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="sr-only">Abrir menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigator.clipboard.writeText(lead.id)
+                        }}
+                      >
+                        Copiar ID
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      {onView && (
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onView(lead)
+                          }}
+                        >
+                          Ver Histórico
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEdit(lead)
+                        }}
+                      >
+                        Editar Lead
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onDelete(lead.id)
+                        }}
+                      >
+                        Excluir Lead
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </TableCell>
             </TableRow>
