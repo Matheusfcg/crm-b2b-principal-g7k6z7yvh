@@ -28,7 +28,7 @@ const navItems = [
   { title: 'Pipeline', path: '/pipeline', icon: Kanban },
   { title: 'Tarefas', path: '/tasks', icon: CheckSquare },
   { title: 'Propostas', path: '/proposals', icon: FileText },
-  { title: 'Relatórios', path: '#', icon: BarChart },
+  { title: 'Relatórios', path: '/reports', icon: BarChart },
 ]
 
 export function AppSidebar() {
