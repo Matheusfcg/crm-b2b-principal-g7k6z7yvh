@@ -42,6 +42,13 @@ export type Database = {
             referencedRelation: 'leads'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'interactions_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
         ]
       }
       leads: {
@@ -84,7 +91,15 @@ export type Database = {
           tamanho?: string
           telefone?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'leads_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -155,6 +170,13 @@ export type Database = {
             referencedRelation: 'leads'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'proposals_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
         ]
       }
       tasks: {
@@ -194,6 +216,13 @@ export type Database = {
             columns: ['lead_id']
             isOneToOne: false
             referencedRelation: 'leads'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tasks_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -395,9 +424,9 @@ export const Constants = {
 // Table: interactions
 //   FOREIGN KEY interactions_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY interactions_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY interactions_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+//   FOREIGN KEY interactions_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: leads
-//   FOREIGN KEY leads_created_by_fkey: FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE
+//   FOREIGN KEY leads_created_by_fkey: FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY leads_pkey: PRIMARY KEY (id)
 // Table: profiles
 //   FOREIGN KEY profiles_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -405,11 +434,11 @@ export const Constants = {
 // Table: proposals
 //   FOREIGN KEY proposals_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY proposals_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY proposals_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+//   FOREIGN KEY proposals_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: tasks
 //   FOREIGN KEY tasks_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY tasks_pkey: PRIMARY KEY (id)
-//   FOREIGN KEY tasks_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+//   FOREIGN KEY tasks_user_id_fkey: FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: interactions

@@ -59,6 +59,7 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
     titulo: '',
     descricao: '',
     prazo: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    status: 'Pendente',
   })
 
   useEffect(() => {
@@ -115,9 +116,14 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
         titulo: newTask.titulo,
         descricao: newTask.descricao,
         prazo: newTask.prazo ? new Date(newTask.prazo).toISOString() : null,
+        status: newTask.status,
+      })
+      setNewTask({
+        titulo: '',
+        descricao: '',
+        prazo: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         status: 'Pendente',
       })
-      setNewTask({ titulo: '', descricao: '', prazo: format(new Date(), "yyyy-MM-dd'T'HH:mm") })
       loadData()
       toast({ title: 'Tarefa criada' })
       setActiveTab('tasks')
@@ -273,13 +279,30 @@ export function LeadInteractions({ lead, open, onOpenChange }: any) {
                     onChange={(e) => setNewTask((p) => ({ ...p, titulo: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Prazo</Label>
-                  <Input
-                    type="datetime-local"
-                    value={newTask.prazo}
-                    onChange={(e) => setNewTask((p) => ({ ...p, prazo: e.target.value }))}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Prazo</Label>
+                    <Input
+                      type="datetime-local"
+                      value={newTask.prazo}
+                      onChange={(e) => setNewTask((p) => ({ ...p, prazo: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={newTask.status}
+                      onValueChange={(v) => setNewTask((p) => ({ ...p, status: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pendente">Pendente</SelectItem>
+                        <SelectItem value="Concluída">Concluída</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Descrição (Opcional)</Label>
