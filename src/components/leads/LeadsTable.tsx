@@ -43,9 +43,9 @@ export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-md border bg-card shadow-sm overflow-hidden">
       <Table>
-        <TableHeader className="bg-gray-50/80">
+        <TableHeader className="bg-muted/50">
           <TableRow>
             <TableHead className="font-semibold">Empresa</TableHead>
             <TableHead className="font-semibold">Contato Principal</TableHead>

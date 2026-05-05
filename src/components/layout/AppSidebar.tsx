@@ -8,6 +8,7 @@ import {
   FileText,
   BarChart,
   Settings,
+  Briefcase,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -16,8 +17,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
 } from '@/components/ui/sidebar'
-import { cn } from '@/lib/utils'
 
 const navItems = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -33,45 +35,53 @@ export function AppSidebar() {
   const location = useLocation()
 
   return (
-    <Sidebar className="border-none !bg-transparent z-10 w-24" collapsible="none">
-      <div className="h-[calc(100vh-2rem)] bg-zinc-950 rounded-[2rem] m-4 flex flex-col items-center py-8 w-20 shadow-xl overflow-hidden shrink-0 transition-all">
-        <SidebarContent className="w-full flex-1 flex mt-2 overflow-visible bg-transparent no-scrollbar">
-          <SidebarGroup className="w-full flex flex-col gap-4 items-center border-none p-0">
-            <SidebarMenu className="w-full flex flex-col gap-4 items-center">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path
-                return (
-                  <SidebarMenuItem key={item.title} className="w-full flex justify-center">
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.title}
-                      className={cn(
-                        'w-12 h-12 flex items-center justify-center rounded-2xl p-0 transition-all duration-300',
-                        isActive ? 'bg-zinc-800' : 'hover:bg-zinc-800/50',
-                      )}
-                    >
-                      <Link
-                        to={item.path}
-                        className={cn(
-                          'flex items-center justify-center w-full h-full text-zinc-400 hover:text-white',
-                          isActive && 'text-white',
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
-        </SidebarContent>
-        <div className="mt-auto pt-4 w-full flex justify-center border-t border-white/5">
-          <button className="w-12 h-12 flex items-center justify-center rounded-2xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-            <Settings className="h-5 w-5" />
-          </button>
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="h-16 flex items-center justify-center border-b border-sidebar-border">
+        <div className="flex items-center gap-3 font-bold text-lg px-4 w-full">
+          <Briefcase className="h-6 w-6 text-sidebar-primary shrink-0" />
+          <span className="group-data-[collapsible=icon]:hidden truncate">CRM Enterprise</span>
         </div>
-      </div>
+      </SidebarHeader>
+      <SidebarContent className="py-4">
+        <SidebarGroup>
+          <SidebarMenu>
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path
+              return (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.title}
+                    className="h-10"
+                  >
+                    <Link to={item.path} className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span className="font-medium">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border p-4">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Configurações"
+              className="h-10 text-sidebar-foreground hover:bg-sidebar-accent"
+            >
+              <Link to="#" className="flex items-center gap-3">
+                <Settings className="h-5 w-5 shrink-0" />
+                <span className="font-medium">Configurações</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   )
 }

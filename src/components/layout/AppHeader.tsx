@@ -1,106 +1,84 @@
-import { Bell, Search, Mail, CloudLightning, LogOut } from 'lucide-react'
+import { Bell, Search, Menu, LogOut, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSearch } from '@/contexts/search-context'
 import { useAuth } from '@/hooks/use-auth'
+import { useSidebar } from '@/components/ui/sidebar'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 
 export function AppHeader() {
   const { searchQuery, setSearchQuery } = useSearch()
   const { session, signOut } = useAuth()
+  const { toggleSidebar } = useSidebar()
   const userName = session?.user?.user_metadata?.name || 'Usuário'
 
   return (
-    <header className="flex h-16 w-full items-center justify-between rounded-full bg-white px-6 shadow-sm shrink-0 border border-gray-100">
-      <div className="flex items-center gap-8 flex-1">
-        <div className="flex items-center gap-2 font-bold text-lg text-black cursor-pointer">
-          <div className="bg-black text-white p-1.5 rounded-full">
-            <CloudLightning className="h-5 w-5 fill-current" />
-          </div>
-          <span className="hidden sm:inline-block">Salesforce</span>
-        </div>
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-gray-500">
-          <a href="#" className="text-blue-600 font-semibold border-b-2 border-blue-600 py-5">
-            Resumo
-          </a>
-          <a href="#" className="hover:text-gray-900 transition-colors py-5">
-            Fundadores
-          </a>
-          <a href="#" className="hover:text-gray-900 transition-colors py-5">
-            Finanças
-          </a>
-          <a href="#" className="hover:text-gray-900 transition-colors py-5">
-            Contatos
-          </a>
-          <a href="#" className="hover:text-gray-900 transition-colors py-5">
-            Crescimento
-          </a>
-          <a href="#" className="hover:text-gray-900 transition-colors py-5">
-            Projetos
-          </a>
-        </nav>
-      </div>
-
-      <div className="flex items-center gap-2 sm:gap-4">
-        <div className="relative w-full max-w-[160px] xl:max-w-xs hidden md:flex items-center">
-          <Search className="absolute left-3 h-4 w-4 text-gray-400" />
+    <header className="flex h-16 w-full items-center justify-between bg-card px-4 border-b border-border shrink-0 shadow-sm">
+      <div className="flex items-center gap-4 flex-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleSidebar}
+          className="md:hidden text-muted-foreground"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <div className="relative w-full max-w-md hidden sm:flex items-center">
+          <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar..."
-            className="w-full bg-gray-50 pl-9 border-none rounded-full h-10 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:bg-white"
+            placeholder="Buscar registros, contatos ou leads..."
+            className="w-full bg-muted/50 pl-9 border-border focus-visible:ring-1 focus-visible:ring-primary focus-visible:bg-background"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 rounded-full hover:bg-gray-50 hover:text-gray-900"
-          >
-            <Mail className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-500 rounded-full hover:bg-gray-50 hover:text-gray-900 relative"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border-2 border-white"></span>
-          </Button>
-        </div>
-        <div className="h-8 w-px bg-gray-200 mx-1 hidden sm:block"></div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <Bell className="h-5 w-5" />
+          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-card"></span>
+        </Button>
+        <div className="h-6 w-px bg-border mx-1"></div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="flex items-center gap-3 cursor-pointer">
-              <div className="hidden sm:flex flex-col items-end">
-                <span className="text-sm font-bold leading-none text-gray-900">{userName}</span>
-                <span className="text-xs text-gray-500 mt-1 hover:text-red-500 transition-colors">
-                  Sair da conta
-                </span>
-              </div>
-              <Avatar className="h-10 w-10 border-2 border-white shadow-sm hover:scale-105 transition-transform">
+            <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-muted h-10">
+              <Avatar className="h-7 w-7 rounded-md">
                 <AvatarImage
                   src={`https://img.usecurling.com/ppl/thumbnail?seed=${session?.user?.id}`}
-                  alt={userName}
                 />
-                <AvatarFallback>{userName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="rounded-md bg-primary/10 text-primary text-xs">
+                  {userName.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
-            </div>
+              <div className="hidden md:flex flex-col items-start text-sm">
+                <span className="font-medium leading-none text-foreground">{userName}</span>
+                <span className="text-[11px] text-muted-foreground mt-1">Vendedor</span>
+              </div>
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem className="cursor-pointer">
+              <User className="mr-2 h-4 w-4" /> Perfil
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => signOut()}
               className="text-red-600 focus:bg-red-50 cursor-pointer"
             >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
+              <LogOut className="mr-2 h-4 w-4" /> Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

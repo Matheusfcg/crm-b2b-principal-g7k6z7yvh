@@ -77,7 +77,7 @@ export default function Leads() {
   }, [leads, statusFilter, segmentoFilter, searchQuery])
 
   return (
-    <div className="flex flex-col gap-6 bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100/50 min-h-full">
+    <div className="flex flex-col gap-6 bg-card text-card-foreground rounded-lg p-6 sm:p-8 shadow-sm border min-h-full">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -98,7 +98,7 @@ export default function Leads() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+      <div className="flex flex-col sm:flex-row items-center gap-4 bg-muted/50 p-4 rounded-md border">
         <div className="w-full sm:w-[200px]">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>

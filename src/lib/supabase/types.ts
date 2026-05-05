@@ -411,6 +411,8 @@ export const Constants = {
 //   Policy "leads_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND ((profiles.role)::text = ANY ((ARRAY['gerente'::character varying, 'admin'::character varying])::text[]))))))
 // Table: profiles
+//   Policy "profiles_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (id = auth.uid())
 //   Policy "profiles_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: true
 //   Policy "profiles_update" (UPDATE, PERMISSIVE) roles={authenticated}
@@ -439,7 +441,10 @@ export const Constants = {
 //       NEW.id,
 //       COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
 //       'vendedor'
-//     );
+//     )
+//     ON CONFLICT (id) DO UPDATE
+//     SET name = EXCLUDED.name;
+//
 //     RETURN NEW;
 //   END;
 //   $function$
