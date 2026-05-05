@@ -99,7 +99,7 @@ export function LeadForm({ open, onOpenChange, onSave, initialData }: LeadFormPr
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form key={initialData?.id || 'new'} onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="empresa">Nome da Empresa</Label>
             <Input

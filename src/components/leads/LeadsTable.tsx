@@ -71,9 +71,14 @@ export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
               <TableCell>
                 <div className="flex items-center gap-2 justify-end">
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => onEdit(lead)}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onEdit(lead)
+                    }}
                     title="Editar"
                     className="h-8 w-8"
                   >
@@ -81,9 +86,14 @@ export function LeadsTable({ leads, onDelete }: LeadsTableProps) {
                     <span className="sr-only">Editar</span>
                   </Button>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => onDelete(lead.id)}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onDelete(lead.id)
+                    }}
                     title="Excluir"
                     className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
