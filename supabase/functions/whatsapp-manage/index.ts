@@ -36,7 +36,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const evolutionUrl = rawEvolutionUrl.replace(/\/$/, '')
-    const instanceName = user.id
+    const instanceName = `user_${user.id}`
 
     if (action === 'create') {
       let evoRes = await fetch(`${evolutionUrl}/instance/create`, {
@@ -71,7 +71,14 @@ Deno.serve(async (req: Request) => {
         if (connectRes.ok) {
           evoData = await connectRes.json()
         } else {
-          throw new Error('Falha ao criar ou conectar à instância')
+          const stateRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
+            headers: { apikey: evolutionKey },
+          })
+          if (stateRes.ok) {
+            evoData = await stateRes.json()
+          } else {
+            throw new Error('Falha ao criar ou conectar à instância na Evolution API')
+          }
         }
       } else {
         await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
@@ -100,7 +107,7 @@ Deno.serve(async (req: Request) => {
         qrcode = `data:image/png;base64,${qrcode}`
       }
 
-      const status = evoData?.instance?.state || 'connecting'
+      const status = evoData?.instance?.state || evoData?.state || 'connecting'
 
       const { data: instance, error } = await supabase
         .from('whatsapp_instances')

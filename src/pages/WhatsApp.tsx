@@ -60,6 +60,18 @@ export default function WhatsApp() {
     }
   }, [user])
 
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>
+    if (instance?.status === 'connecting') {
+      interval = setInterval(() => {
+        fetchInstance()
+      }, 5000)
+    }
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [instance?.status, user])
+
   const handleConnect = async () => {
     setActionLoading(true)
     try {

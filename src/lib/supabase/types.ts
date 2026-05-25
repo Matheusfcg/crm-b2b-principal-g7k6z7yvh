@@ -9,6 +9,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      contacts: {
+        Row: {
+          id: string
+          instance_id: string
+          profile_picture: string | null
+          push_name: string | null
+          remote_jid: string
+        }
+        Insert: {
+          id?: string
+          instance_id: string
+          profile_picture?: string | null
+          push_name?: string | null
+          remote_jid: string
+        }
+        Update: {
+          id?: string
+          instance_id?: string
+          profile_picture?: string | null
+          push_name?: string | null
+          remote_jid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'contacts_instance_id_fkey'
+            columns: ['instance_id']
+            isOneToOne: false
+            referencedRelation: 'whatsapp_instances'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          contact_id: string
+          id: string
+          instance_id: string
+          last_message: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          contact_id: string
+          id?: string
+          instance_id: string
+          last_message?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          contact_id?: string
+          id?: string
+          instance_id?: string
+          last_message?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'conversations_contact_id_fkey'
+            columns: ['contact_id']
+            isOneToOne: false
+            referencedRelation: 'contacts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'conversations_instance_id_fkey'
+            columns: ['instance_id']
+            isOneToOne: false
+            referencedRelation: 'whatsapp_instances'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       interactions: {
         Row: {
           data: string
@@ -100,6 +171,44 @@ export type Database = {
             columns: ['created_by']
             isOneToOne: false
             referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          from_me: boolean | null
+          id: string
+          message_id: string
+          timestamp: string | null
+          type: string | null
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          from_me?: boolean | null
+          id?: string
+          message_id: string
+          timestamp?: string | null
+          type?: string | null
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          from_me?: boolean | null
+          id?: string
+          message_id?: string
+          timestamp?: string | null
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'messages_conversation_id_fkey'
+            columns: ['conversation_id']
+            isOneToOne: false
+            referencedRelation: 'conversations'
             referencedColumns: ['id']
           },
         ]
@@ -232,6 +341,44 @@ export type Database = {
           role?: string
         }
         Relationships: []
+      }
+      whatsapp_instances: {
+        Row: {
+          created_at: string | null
+          id: string
+          instance_name: string
+          last_connection: string | null
+          qrcode: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          last_connection?: string | null
+          qrcode?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          last_connection?: string | null
+          qrcode?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'whatsapp_instances_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
       }
     }
     Views: {
@@ -392,6 +539,18 @@ export const Constants = {
 // --- COLUMN TYPES (actual PostgreSQL types) ---
 // Use this to know the real database type when writing migrations.
 // "string" in TypeScript types above may be uuid, text, varchar, timestamptz, etc.
+// Table: contacts
+//   id: uuid (not null, default: gen_random_uuid())
+//   instance_id: uuid (not null)
+//   remote_jid: text (not null)
+//   push_name: text (nullable)
+//   profile_picture: text (nullable)
+// Table: conversations
+//   id: uuid (not null, default: gen_random_uuid())
+//   instance_id: uuid (not null)
+//   contact_id: uuid (not null)
+//   last_message: text (nullable)
+//   updated_at: timestamp with time zone (nullable, default: now())
 // Table: interactions
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -412,6 +571,14 @@ export const Constants = {
 //   created_by: uuid (not null)
 //   created_at: timestamp with time zone (not null, default: now())
 //   whatsapp_external_id: text (nullable)
+// Table: messages
+//   id: uuid (not null, default: gen_random_uuid())
+//   conversation_id: uuid (not null)
+//   message_id: text (not null)
+//   from_me: boolean (nullable, default: false)
+//   content: text (nullable)
+//   type: text (nullable)
+//   timestamp: timestamp with time zone (nullable, default: now())
 // Table: proposals
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -439,8 +606,25 @@ export const Constants = {
 //   name: text (not null)
 //   role: text (not null, default: 'vendedor'::text)
 //   created_at: timestamp with time zone (not null, default: now())
+// Table: whatsapp_instances
+//   id: uuid (not null, default: gen_random_uuid())
+//   user_id: uuid (not null)
+//   instance_name: text (not null)
+//   status: text (nullable, default: 'disconnected'::text)
+//   qrcode: text (nullable)
+//   created_at: timestamp with time zone (nullable, default: now())
+//   last_connection: timestamp with time zone (nullable)
 
 // --- CONSTRAINTS ---
+// Table: contacts
+//   FOREIGN KEY contacts_instance_id_fkey: FOREIGN KEY (instance_id) REFERENCES whatsapp_instances(id) ON DELETE CASCADE
+//   UNIQUE contacts_instance_id_remote_jid_key: UNIQUE (instance_id, remote_jid)
+//   PRIMARY KEY contacts_pkey: PRIMARY KEY (id)
+// Table: conversations
+//   FOREIGN KEY conversations_contact_id_fkey: FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+//   UNIQUE conversations_instance_id_contact_id_key: UNIQUE (instance_id, contact_id)
+//   FOREIGN KEY conversations_instance_id_fkey: FOREIGN KEY (instance_id) REFERENCES whatsapp_instances(id) ON DELETE CASCADE
+//   PRIMARY KEY conversations_pkey: PRIMARY KEY (id)
 // Table: interactions
 //   FOREIGN KEY interactions_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY interactions_pkey: PRIMARY KEY (id)
@@ -448,6 +632,9 @@ export const Constants = {
 // Table: leads
 //   FOREIGN KEY leads_created_by_fkey: FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 //   PRIMARY KEY leads_pkey: PRIMARY KEY (id)
+// Table: messages
+//   FOREIGN KEY messages_conversation_id_fkey: FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+//   PRIMARY KEY messages_pkey: PRIMARY KEY (id)
 // Table: proposals
 //   FOREIGN KEY proposals_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 //   PRIMARY KEY proposals_pkey: PRIMARY KEY (id)
@@ -459,8 +646,30 @@ export const Constants = {
 // Table: users
 //   FOREIGN KEY users_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
 //   PRIMARY KEY users_pkey: PRIMARY KEY (id)
+// Table: whatsapp_instances
+//   UNIQUE whatsapp_instances_instance_name_key: UNIQUE (instance_name)
+//   PRIMARY KEY whatsapp_instances_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY whatsapp_instances_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
+// Table: contacts
+//   Policy "Contacts_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Contacts_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Contacts_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//   Policy "Contacts_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
+// Table: conversations
+//   Policy "Conversations_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Conversations_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Conversations_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//   Policy "Conversations_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
 // Table: interactions
 //   Policy "interactions_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
@@ -479,6 +688,15 @@ export const Constants = {
 //     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 //   Policy "leads_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: ((created_by = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
+// Table: messages
+//   Policy "Messages_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Messages_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
+//   Policy "Messages_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//   Policy "Messages_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
 // Table: proposals
 //   Policy "proposals_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
@@ -504,6 +722,15 @@ export const Constants = {
 //     USING: true
 //   Policy "users_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: ((id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
+// Table: whatsapp_instances
+//   Policy "Instances_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
+//   Policy "Instances_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (user_id = auth.uid())
+//   Policy "Instances_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
+//   Policy "Instances_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)
@@ -604,5 +831,11 @@ export const Constants = {
 //
 
 // --- INDEXES ---
+// Table: contacts
+//   CREATE UNIQUE INDEX contacts_instance_id_remote_jid_key ON public.contacts USING btree (instance_id, remote_jid)
+// Table: conversations
+//   CREATE UNIQUE INDEX conversations_instance_id_contact_id_key ON public.conversations USING btree (instance_id, contact_id)
 // Table: leads
 //   CREATE INDEX leads_whatsapp_external_id_idx ON public.leads USING btree (whatsapp_external_id)
+// Table: whatsapp_instances
+//   CREATE UNIQUE INDEX whatsapp_instances_instance_name_key ON public.whatsapp_instances USING btree (instance_name)
