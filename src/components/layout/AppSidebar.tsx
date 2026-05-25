@@ -8,6 +8,7 @@ import {
   Settings,
   UserCog,
   Moon,
+  MessageCircle,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -27,6 +28,7 @@ const navItems = [
   { title: 'Pipeline', path: '/pipeline', icon: Kanban },
   { title: 'Tarefas', path: '/tasks', icon: CheckSquare },
   { title: 'Propostas', path: '/proposals', icon: FileText },
+  { title: 'WhatsApp', path: '/whatsapp', icon: MessageCircle },
 ]
 
 export function AppSidebar() {

@@ -13,6 +13,7 @@ import Pipeline from './pages/Pipeline'
 import Proposals from './pages/Proposals'
 import Tasks from './pages/Tasks'
 import Users from './pages/Users'
+import WhatsApp from './pages/WhatsApp'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
 import NotFound from './pages/NotFound'
@@ -47,6 +48,7 @@ const App = () => (
                 <Route path="/proposals" element={<Proposals />} />
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="/users" element={<Users />} />
+                <Route path="/whatsapp" element={<WhatsApp />} />
                 <Route path="/profile" element={<Profile />} />
               </Route>
               <Route path="*" element={<NotFound />} />
