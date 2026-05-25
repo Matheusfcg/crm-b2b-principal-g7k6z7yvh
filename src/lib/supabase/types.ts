@@ -64,6 +64,7 @@ export type Database = {
           status: string
           tamanho: string
           telefone: string
+          whatsapp_external_id: string | null
         }
         Insert: {
           contato: string
@@ -77,6 +78,7 @@ export type Database = {
           status?: string
           tamanho: string
           telefone: string
+          whatsapp_external_id?: string | null
         }
         Update: {
           contato?: string
@@ -90,6 +92,7 @@ export type Database = {
           status?: string
           tamanho?: string
           telefone?: string
+          whatsapp_external_id?: string | null
         }
         Relationships: [
           {
@@ -408,6 +411,7 @@ export const Constants = {
 //   status: text (not null, default: 'Novo'::text)
 //   created_by: uuid (not null)
 //   created_at: timestamp with time zone (not null, default: now())
+//   whatsapp_external_id: text (nullable)
 // Table: proposals
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -598,3 +602,7 @@ export const Constants = {
 //   END;
 //   $function$
 //
+
+// --- INDEXES ---
+// Table: leads
+//   CREATE INDEX leads_whatsapp_external_id_idx ON public.leads USING btree (whatsapp_external_id)

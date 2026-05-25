@@ -1,5 +1,6 @@
 {
   "_versions": {
-    "whatsapp-webhook": 1
+    "whatsapp-webhook": 2,
+    "whatsapp-manage": 1
   }
 }

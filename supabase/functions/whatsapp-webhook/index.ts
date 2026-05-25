@@ -1,152 +1,203 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Basic validation to ensure requests are authorized if a secret is configured in Supabase Secrets
-    const expectedKey = Deno.env.get('WHATSAPP_WEBHOOK_SECRET')
-    if (expectedKey) {
-      const authHeader = req.headers.get('authorization')
-      const apiKeyHeader = req.headers.get('x-api-key')
-      if (authHeader !== `Bearer ${expectedKey}` && apiKeyHeader !== expectedKey) {
-        return new Response('Unauthorized', { status: 401, headers: corsHeaders })
-      }
-    }
-
-    const url = new URL(req.url)
-    const userId = url.searchParams.get('userId')
-
-    // Parse the payload depending on the external provider (e.g., Evolution API, Baileys, etc.)
-    const payload = await req.json()
-
-    // Adapt extraction to handle common WhatsApp webhook formats
-    const remoteJid =
-      payload?.data?.key?.remoteJid ||
-      payload?.data?.remoteJid ||
-      payload?.remoteJid ||
-      payload?.from
-    const messageText =
-      payload?.data?.message?.conversation ||
-      payload?.data?.message ||
-      payload?.message ||
-      payload?.text?.body
-    const pushName =
-      payload?.data?.pushName || payload?.pushName || payload?.senderName || 'Contato WhatsApp'
-
-    // Ignore status messages or missing data silently to not block the external API queue
-    if (!remoteJid || !messageText || typeof messageText !== 'string') {
-      return new Response(JSON.stringify({ status: 'ignored' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Initialize Supabase client with Service Role Key to bypass RLS during webhook processing
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    // 1. Find or Create Lead mapping via whatsapp_external_id
-    let { data: lead } = await supabase
-      .from('leads')
+    const payload = await req.json()
+    const event = payload?.event
+    const instanceName = payload?.instance
+
+    if (!instanceName) {
+      return new Response('No instance', { status: 400 })
+    }
+
+    const { data: instance } = await supabase
+      .from('whatsapp_instances')
       .select('*')
-      .eq('whatsapp_external_id', remoteJid)
+      .eq('instance_name', instanceName)
       .single()
 
-    let activeUserId = userId
+    if (!instance) {
+      return new Response('Instance not found in DB', { status: 200 })
+    }
 
-    if (!lead) {
-      // Fallback: If no userId was provided in the webhook URL, assign to the first admin
-      if (!activeUserId) {
-        const { data: admin } = await supabase
-          .from('users')
-          .select('id')
-          .eq('role', 'admin')
-          .limit(1)
+    if (event === 'connection.update') {
+      const state = payload?.data?.state
+      if (state) {
+        await supabase
+          .from('whatsapp_instances')
+          .update({
+            status: state,
+            last_connection: state === 'open' ? new Date().toISOString() : instance.last_connection,
+          })
+          .eq('id', instance.id)
+      }
+    } else if (event === 'qrcode.updated') {
+      const qrcode = payload?.data?.qrcode?.base64 || payload?.data?.qrcode
+      if (qrcode) {
+        await supabase
+          .from('whatsapp_instances')
+          .update({
+            qrcode:
+              typeof qrcode === 'string' && !qrcode.startsWith('data:image')
+                ? `data:image/png;base64,${qrcode}`
+                : qrcode,
+            status: 'connecting',
+          })
+          .eq('id', instance.id)
+      }
+    } else if (event === 'messages.upsert') {
+      const msgs = payload?.data?.messages || [payload?.data]
+
+      for (const msg of msgs) {
+        const remoteJid = msg?.key?.remoteJid || msg?.remoteJid
+        const fromMe = msg?.key?.fromMe || msg?.fromMe || false
+
+        const messageText =
+          msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text?.body
+        const pushName = msg?.pushName || 'Contato WhatsApp'
+
+        if (!remoteJid || !messageText) continue
+
+        if (remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') continue
+
+        let { data: contact } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('instance_id', instance.id)
+          .eq('remote_jid', remoteJid)
           .single()
-        activeUserId = admin?.id
+        if (!contact) {
+          const { data: newContact } = await supabase
+            .from('contacts')
+            .insert({
+              instance_id: instance.id,
+              remote_jid: remoteJid,
+              push_name: pushName,
+            })
+            .select()
+            .single()
+          contact = newContact
+        }
+
+        let { data: conversation } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('instance_id', instance.id)
+          .eq('contact_id', contact?.id)
+          .single()
+        if (!conversation && contact) {
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({
+              instance_id: instance.id,
+              contact_id: contact.id,
+              last_message: messageText,
+            })
+            .select()
+            .single()
+          conversation = newConv
+        } else if (conversation) {
+          await supabase
+            .from('conversations')
+            .update({
+              last_message: messageText,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', conversation.id)
+        }
+
+        if (conversation) {
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            message_id: msg?.key?.id || msg?.messageId || crypto.randomUUID(),
+            from_me: fromMe,
+            content: messageText,
+            type: 'text',
+          })
+        }
+
+        if (fromMe) continue
+
+        let { data: lead } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('whatsapp_external_id', remoteJid)
+          .single()
+
+        const activeUserId = instance.user_id
+
+        if (!lead) {
+          const telefone = remoteJid.replace(/[^0-9]/g, '')
+          const emailMock = `${telefone}@whatsapp.local`
+
+          const { data: newLead, error: leadError } = await supabase
+            .from('leads')
+            .insert({
+              whatsapp_external_id: remoteJid,
+              contato: pushName,
+              empresa: 'Contato via WhatsApp',
+              email: emailMock,
+              telefone: telefone,
+              segmento: 'Não Informado',
+              tamanho: 'Não Informado',
+              origem: 'WhatsApp',
+              status: 'Novo',
+              created_by: activeUserId,
+            })
+            .select()
+            .single()
+
+          if (!leadError) {
+            lead = newLead
+          }
+        }
+
+        if (lead) {
+          await supabase.from('interactions').insert({
+            lead_id: lead.id,
+            user_id: activeUserId,
+            tipo: 'WhatsApp',
+            descricao: messageText,
+          })
+
+          const keywords = [
+            'proposta',
+            'fechar negócio',
+            'orçamento',
+            'comprar',
+            'preço',
+            'valor',
+            'cotação',
+          ]
+          const textLower = messageText.toLowerCase()
+          const wantsProposal = keywords.some((kw) => textLower.includes(kw))
+
+          if (wantsProposal) {
+            await supabase.from('proposals').insert({
+              lead_id: lead.id,
+              user_id: activeUserId,
+              titulo: `Proposta via WhatsApp - ${pushName}`,
+              valor: 0,
+              status: 'Aberto',
+              descricao: `Gerado automaticamente a partir da mensagem: "${messageText}"`,
+            })
+          }
+        }
       }
-
-      if (!activeUserId) {
-        return new Response('Error: No active user to assign the lead', {
-          status: 400,
-          headers: corsHeaders,
-        })
-      }
-
-      const telefone = remoteJid.replace(/[^0-9]/g, '')
-      const emailMock = `${telefone}@whatsapp.local`
-
-      const { data: newLead, error: createError } = await supabase
-        .from('leads')
-        .insert({
-          whatsapp_external_id: remoteJid,
-          contato: pushName,
-          empresa: 'Contato via WhatsApp',
-          email: emailMock,
-          telefone: telefone,
-          segmento: 'Não Informado',
-          tamanho: 'Não Informado',
-          origem: 'WhatsApp',
-          status: 'Novo',
-          created_by: activeUserId,
-        })
-        .select()
-        .single()
-
-      if (createError) throw createError
-      lead = newLead
-    } else {
-      activeUserId = activeUserId || lead.created_by
     }
 
-    // 2. Log interaction
-    const { error: intError } = await supabase.from('interactions').insert({
-      lead_id: lead.id,
-      user_id: activeUserId,
-      tipo: 'WhatsApp',
-      descricao: messageText,
-    })
-
-    if (intError) throw intError
-
-    // 3. Automated Proposal Creation based on message intent/keywords
-    const keywords = [
-      'proposta',
-      'fechar negócio',
-      'orçamento',
-      'comprar',
-      'preço',
-      'valor',
-      'cotação',
-    ]
-    const textLower = messageText.toLowerCase()
-    const wantsProposal = keywords.some((kw) => textLower.includes(kw))
-
-    if (wantsProposal) {
-      await supabase.from('proposals').insert({
-        lead_id: lead.id,
-        user_id: activeUserId,
-        titulo: `Proposta via WhatsApp - ${pushName}`,
-        valor: 0,
-        status: 'Aberto',
-        descricao: `Gerado automaticamente a partir da mensagem: "${messageText}"`,
-      })
-    }
-
-    return new Response(JSON.stringify({ success: true, leadId: lead.id }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
