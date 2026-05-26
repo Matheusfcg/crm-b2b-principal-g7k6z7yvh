@@ -78,8 +78,12 @@ export default function WhatsApp() {
       const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
         body: { action: 'create' },
       })
-      if (error) throw error
-      if (data.error) throw new Error(data.error)
+      if (error) {
+        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      }
+      if (data?.error) {
+        throw new Error(data.error)
+      }
 
       toast.success('Instância solicitada. Aguarde o QR Code.')
       await fetchInstance()
@@ -96,8 +100,12 @@ export default function WhatsApp() {
       const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
         body: { action: 'disconnect' },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error) {
+        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      }
+      if (data?.error) {
+        throw new Error(data.error)
+      }
 
       toast.success('WhatsApp desconectado.')
       await fetchInstance()

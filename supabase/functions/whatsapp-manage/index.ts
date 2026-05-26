@@ -9,7 +9,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Unauthorized')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -21,7 +26,12 @@ Deno.serve(async (req: Request) => {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
-    if (userError || !user) throw new Error('Unauthorized')
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    }
 
     const body = await req.json()
     const action = body.action
@@ -30,8 +40,14 @@ Deno.serve(async (req: Request) => {
     const evolutionKey = Deno.env.get('EVOLUTION_API_KEY')
 
     if (!rawEvolutionUrl || !evolutionKey) {
-      throw new Error(
-        'EVOLUTION_API_URL and EVOLUTION_API_KEY env vars missing in Supabase Edge Functions',
+      return new Response(
+        JSON.stringify({
+          error: 'Configuração da Evolution API ausente no backend (variáveis de ambiente).',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        },
       )
     }
 
@@ -77,7 +93,9 @@ Deno.serve(async (req: Request) => {
           if (stateRes.ok) {
             evoData = await stateRes.json()
           } else {
-            throw new Error('Falha ao criar ou conectar à instância na Evolution API')
+            throw new Error(
+              'Falha ao criar ou conectar à instância na Evolution API. Verifique a URL e a API Key.',
+            )
           }
         }
       } else {
@@ -99,7 +117,7 @@ Deno.serve(async (req: Request) => {
               'SEND_MESSAGE',
             ],
           }),
-        })
+        }).catch((err) => console.error('Webhook set error:', err))
       }
 
       let qrcode = evoData?.qrcode?.base64 || evoData?.qrcode || evoData?.base64 || null
@@ -132,12 +150,12 @@ Deno.serve(async (req: Request) => {
       await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
         method: 'DELETE',
         headers: { apikey: evolutionKey },
-      })
+      }).catch(() => null)
 
       await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
         method: 'DELETE',
         headers: { apikey: evolutionKey },
-      })
+      }).catch(() => null)
 
       const { error } = await supabase
         .from('whatsapp_instances')
@@ -153,11 +171,14 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    throw new Error('Invalid action')
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: 'Invalid action' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
+    })
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message || 'Ocorreu um erro interno' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
     })
   }
 })
