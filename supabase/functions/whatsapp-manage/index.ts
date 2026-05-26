@@ -73,7 +73,47 @@ Deno.serve(async (req: Request) => {
       Authorization: `Bearer ${evolutionKey}`,
     }
 
-    if (action === 'create') {
+    if (action === 'send') {
+      const { number, text } = body
+      if (!number || !text) {
+        return new Response(JSON.stringify({ error: 'Número e texto são obrigatórios' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        })
+      }
+      try {
+        const sendRes = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+          method: 'POST',
+          headers: evoHeaders,
+          body: JSON.stringify({ number, text, delay: 1000 }),
+        })
+        const sendData = await sendRes.text()
+        if (!sendRes.ok) {
+          return new Response(
+            JSON.stringify({
+              error: `Erro ao enviar mensagem: ${sendRes.status}`,
+              details: sendData,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            },
+          )
+        }
+        let parsed = {}
+        try {
+          parsed = JSON.parse(sendData)
+        } catch (e) {}
+        return new Response(JSON.stringify({ success: true, data: parsed }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (evoErr: any) {
+        return new Response(JSON.stringify({ error: `Falha de rede: ${evoErr.message}` }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 502,
+        })
+      }
+    } else if (action === 'create') {
       let evoData: any = {}
 
       const createPayload = {
@@ -117,8 +157,6 @@ Deno.serve(async (req: Request) => {
 
           if (!evoRes.ok) {
             console.error(`Evolution API Error [${evoRes.status}] on create:`, resText)
-            console.error(`Payload sent:`, JSON.stringify(createPayload))
-
             return new Response(
               JSON.stringify({
                 error: `Falha ao criar instância. A Evolution API retornou o status ${evoRes.status}.`,

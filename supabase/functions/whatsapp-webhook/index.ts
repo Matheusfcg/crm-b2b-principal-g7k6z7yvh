@@ -68,7 +68,6 @@ Deno.serve(async (req: Request) => {
         const pushName = msg?.pushName || 'Contato WhatsApp'
 
         if (!remoteJid || !messageText) continue
-
         if (remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') continue
 
         let { data: contact } = await supabase
@@ -118,13 +117,17 @@ Deno.serve(async (req: Request) => {
         }
 
         if (conversation) {
-          await supabase.from('messages').insert({
-            conversation_id: conversation.id,
-            message_id: msg?.key?.id || msg?.messageId || crypto.randomUUID(),
-            from_me: fromMe,
-            content: messageText,
-            type: 'text',
-          })
+          const messageId = msg?.key?.id || msg?.messageId || crypto.randomUUID()
+          await supabase.from('messages').upsert(
+            {
+              conversation_id: conversation.id,
+              message_id: messageId,
+              from_me: fromMe,
+              content: messageText,
+              type: 'text',
+            },
+            { onConflict: 'message_id', ignoreDuplicates: true },
+          )
         }
 
         if (fromMe) continue
@@ -134,7 +137,6 @@ Deno.serve(async (req: Request) => {
           .select('*')
           .eq('whatsapp_external_id', remoteJid)
           .single()
-
         const activeUserId = instance.user_id
 
         if (!lead) {
