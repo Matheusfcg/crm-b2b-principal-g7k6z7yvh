@@ -31,7 +31,32 @@ Deno.serve(async (req: Request) => {
       return new Response('Instance not found in DB', { status: 200 })
     }
 
-    if (event === 'connection.update') {
+    if (event === 'chats.upsert' || event === 'chats.set') {
+      const chats = payload?.data || []
+      for (const chat of Array.isArray(chats) ? chats : [chats]) {
+        const remoteJid = chat.id || chat.remoteJid
+        const pushName = chat.name || chat.pushName
+        const unreadCount = chat.unreadCount || 0
+        if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') continue
+
+        let { data: contact } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('instance_id', instance.id)
+          .eq('remote_jid', remoteJid)
+          .single()
+        if (contact && pushName) {
+          await supabase.from('contacts').update({ push_name: pushName }).eq('id', contact.id)
+        }
+        if (contact) {
+          await supabase
+            .from('conversations')
+            .update({ unread_count: unreadCount })
+            .eq('contact_id', contact.id)
+            .eq('instance_id', instance.id)
+        }
+      }
+    } else if (event === 'connection.update') {
       const state = payload?.data?.state
       if (state) {
         await supabase
@@ -63,11 +88,32 @@ Deno.serve(async (req: Request) => {
         const remoteJid = msg?.key?.remoteJid || msg?.remoteJid
         const fromMe = msg?.key?.fromMe || msg?.fromMe || false
 
-        const messageText =
-          msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text?.body
+        let messageText =
+          msg?.message?.conversation ||
+          msg?.message?.extendedTextMessage?.text ||
+          msg?.text?.body ||
+          ''
         const pushName = msg?.pushName || 'Contato WhatsApp'
 
-        if (!remoteJid || !messageText) continue
+        let msgType = 'text'
+        if (msg?.message?.imageMessage) {
+          msgType = 'image'
+          messageText = msg.message.imageMessage.caption || '📷 Imagem'
+        } else if (msg?.message?.audioMessage) {
+          msgType = 'audio'
+          messageText = '🎵 Áudio'
+        } else if (msg?.message?.documentMessage) {
+          msgType = 'document'
+          messageText = msg.message.documentMessage.fileName || '📄 Documento'
+        } else if (msg?.message?.videoMessage) {
+          msgType = 'video'
+          messageText = msg.message.videoMessage.caption || '🎥 Vídeo'
+        } else if (msg?.message?.stickerMessage) {
+          msgType = 'sticker'
+          messageText = '🖼️ Sticker'
+        }
+
+        if (!remoteJid || (!messageText && msgType === 'text')) continue
         if (remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') continue
 
         let { data: contact } = await supabase
@@ -111,6 +157,7 @@ Deno.serve(async (req: Request) => {
             .from('conversations')
             .update({
               last_message: messageText,
+              unread_count: fromMe ? 0 : (conversation.unread_count || 0) + 1,
               updated_at: new Date().toISOString(),
             })
             .eq('id', conversation.id)
@@ -124,7 +171,8 @@ Deno.serve(async (req: Request) => {
               message_id: messageId,
               from_me: fromMe,
               content: messageText,
-              type: 'text',
+              type: msgType,
+              status: fromMe ? 'sent' : 'received',
             },
             { onConflict: 'message_id', ignoreDuplicates: true },
           )

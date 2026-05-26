@@ -65,6 +65,16 @@ export default function WhatsApp() {
     }
   }, [instance?.status, user])
 
+  useEffect(() => {
+    if (instance?.status === 'open' && !instance?.synced) {
+      supabase.functions
+        .invoke('whatsapp-manage', {
+          body: { action: 'sync' },
+        })
+        .catch(console.error)
+    }
+  }, [instance?.status])
+
   const handleConnect = async () => {
     setActionLoading(true)
     try {

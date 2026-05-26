@@ -73,7 +73,89 @@ Deno.serve(async (req: Request) => {
       Authorization: `Bearer ${evolutionKey}`,
     }
 
-    if (action === 'send') {
+    if (action === 'sync') {
+      try {
+        const chatsRes = await fetch(`${evolutionUrl}/chat/findChats/${instanceName}`, {
+          headers: evoHeaders,
+        })
+        if (chatsRes.ok) {
+          const chats = await chatsRes.json()
+
+          const { data: instance } = await supabase
+            .from('whatsapp_instances')
+            .select('id')
+            .eq('instance_name', instanceName)
+            .single()
+
+          if (instance && Array.isArray(chats)) {
+            // Process max 50 chats to avoid timeout in edge function
+            for (const chat of chats.slice(0, 50)) {
+              const remoteJid = chat.id || chat.remoteJid
+              const pushName = chat.name || chat.pushName || 'Contato'
+              const profilePic = chat.profilePictureUrl || chat.profilePicUrl || ''
+              const unreadCount = chat.unreadCount || 0
+
+              if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast')
+                continue
+
+              let { data: contact } = await supabase
+                .from('contacts')
+                .select('id')
+                .eq('instance_id', instance.id)
+                .eq('remote_jid', remoteJid)
+                .single()
+
+              if (!contact) {
+                const { data: newContact } = await supabase
+                  .from('contacts')
+                  .insert({
+                    instance_id: instance.id,
+                    remote_jid: remoteJid,
+                    push_name: pushName,
+                    profile_picture: profilePic,
+                  })
+                  .select('id')
+                  .single()
+                contact = newContact
+              } else if (profilePic) {
+                await supabase
+                  .from('contacts')
+                  .update({ profile_picture: profilePic, push_name: pushName })
+                  .eq('id', contact.id)
+              }
+
+              if (contact) {
+                let { data: conversation } = await supabase
+                  .from('conversations')
+                  .select('id')
+                  .eq('instance_id', instance.id)
+                  .eq('contact_id', contact.id)
+                  .single()
+                if (!conversation) {
+                  await supabase.from('conversations').insert({
+                    instance_id: instance.id,
+                    contact_id: contact.id,
+                    unread_count: unreadCount,
+                    updated_at: new Date(
+                      chat.timestamp ? chat.timestamp * 1000 : Date.now(),
+                    ).toISOString(),
+                    last_message: chat.lastMessage?.message?.conversation || '',
+                  })
+                }
+              }
+            }
+          }
+        }
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        })
+      }
+    } else if (action === 'send') {
       const { number, text } = body
       if (!number || !text) {
         return new Response(JSON.stringify({ error: 'Número e texto são obrigatórios' }), {
@@ -190,6 +272,8 @@ Deno.serve(async (req: Request) => {
                 'CONNECTION_UPDATE',
                 'MESSAGES_UPDATE',
                 'SEND_MESSAGE',
+                'CHATS_UPSERT',
+                'CHATS_SET',
               ],
             }),
           })

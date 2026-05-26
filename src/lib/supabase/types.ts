@@ -634,6 +634,7 @@ export const Constants = {
 //   PRIMARY KEY leads_pkey: PRIMARY KEY (id)
 // Table: messages
 //   FOREIGN KEY messages_conversation_id_fkey: FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+//   UNIQUE messages_message_id_key: UNIQUE (message_id)
 //   PRIMARY KEY messages_pkey: PRIMARY KEY (id)
 // Table: proposals
 //   FOREIGN KEY proposals_lead_id_fkey: FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
@@ -837,5 +838,7 @@ export const Constants = {
 //   CREATE UNIQUE INDEX conversations_instance_id_contact_id_key ON public.conversations USING btree (instance_id, contact_id)
 // Table: leads
 //   CREATE INDEX leads_whatsapp_external_id_idx ON public.leads USING btree (whatsapp_external_id)
+// Table: messages
+//   CREATE UNIQUE INDEX messages_message_id_key ON public.messages USING btree (message_id)
 // Table: whatsapp_instances
 //   CREATE UNIQUE INDEX whatsapp_instances_instance_name_key ON public.whatsapp_instances USING btree (instance_name)
