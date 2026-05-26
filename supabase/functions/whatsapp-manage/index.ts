@@ -76,87 +76,87 @@ Deno.serve(async (req: Request) => {
     if (action === 'create') {
       let evoData: any = {}
 
+      const createPayload = {
+        instanceName: instanceName,
+        token: instanceName,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+      }
+
       try {
-        const evoRes = await fetch(`${evolutionUrl}/instance/create`, {
-          method: 'POST',
+        const stateRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
           headers: evoHeaders,
-          body: JSON.stringify({
-            instanceName: instanceName,
-            qrcode: true,
-            integration: 'WHATSAPP-BAILEYS',
-            webhook: webhookUrl,
-            webhook_by_events: false,
-            events: [
-              'APPLICATION_STARTUP',
-              'QRCODE_UPDATED',
-              'MESSAGES_UPSERT',
-              'CONNECTION_UPDATE',
-              'MESSAGES_UPDATE',
-              'SEND_MESSAGE',
-            ],
-          }),
         })
 
-        const resText = await evoRes.text()
-        try {
-          evoData = resText ? JSON.parse(resText) : {}
-        } catch (e) {}
-
-        if (!evoRes.ok) {
-          const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
-            headers: evoHeaders,
-          })
-          const connectText = await connectRes.text()
-          if (connectRes.ok) {
-            try {
-              evoData = JSON.parse(connectText)
-            } catch (e) {}
-          } else {
-            const stateRes = await fetch(
-              `${evolutionUrl}/instance/connectionState/${instanceName}`,
-              {
+        if (stateRes.ok) {
+          const stateText = await stateRes.text()
+          try {
+            const stateData = JSON.parse(stateText)
+            if (stateData?.instance?.state !== 'open' && stateData?.state !== 'open') {
+              const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
                 headers: evoHeaders,
+              })
+              if (connectRes.ok) {
+                const connectText = await connectRes.text()
+                evoData = JSON.parse(connectText)
+              } else {
+                evoData = stateData
+              }
+            } else {
+              evoData = stateData
+            }
+          } catch (e) {}
+        } else {
+          const evoRes = await fetch(`${evolutionUrl}/instance/create`, {
+            method: 'POST',
+            headers: evoHeaders,
+            body: JSON.stringify(createPayload),
+          })
+
+          const resText = await evoRes.text()
+
+          if (!evoRes.ok) {
+            console.error(`Evolution API Error [${evoRes.status}] on create:`, resText)
+            console.error(`Payload sent:`, JSON.stringify(createPayload))
+
+            return new Response(
+              JSON.stringify({
+                error: `Falha ao criar instância. A Evolution API retornou o status ${evoRes.status}.`,
+                details: resText.substring(0, 500),
+                payload: createPayload,
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
               },
             )
-            const stateText = await stateRes.text()
-            if (stateRes.ok) {
-              try {
-                evoData = JSON.parse(stateText)
-              } catch (e) {}
-            } else {
-              return new Response(
-                JSON.stringify({
-                  error: `Falha ao criar instância. A Evolution API retornou o status ${evoRes.status}.`,
-                  details: resText.substring(0, 200),
-                }),
-                {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                  status: 400,
-                },
-              )
-            }
           }
-        } else {
+
           try {
-            await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
-              method: 'POST',
-              headers: evoHeaders,
-              body: JSON.stringify({
-                url: webhookUrl,
-                webhook_by_events: false,
-                events: [
-                  'APPLICATION_STARTUP',
-                  'QRCODE_UPDATED',
-                  'MESSAGES_UPSERT',
-                  'CONNECTION_UPDATE',
-                  'MESSAGES_UPDATE',
-                  'SEND_MESSAGE',
-                ],
-              }),
-            })
-          } catch (webhookErr) {
-            console.error('Webhook set error:', webhookErr)
-          }
+            evoData = resText ? JSON.parse(resText) : {}
+          } catch (e) {}
+        }
+
+        try {
+          await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
+            method: 'POST',
+            headers: evoHeaders,
+            body: JSON.stringify({
+              url: webhookUrl,
+              webhook_by_events: false,
+              webhook_base64: false,
+              events: [
+                'APPLICATION_STARTUP',
+                'QRCODE_UPDATED',
+                'MESSAGES_UPSERT',
+                'CONNECTION_UPDATE',
+                'MESSAGES_UPDATE',
+                'SEND_MESSAGE',
+              ],
+            }),
+          })
+        } catch (webhookErr) {
+          console.error('Webhook set error:', webhookErr)
         }
       } catch (evoErr: any) {
         return new Response(

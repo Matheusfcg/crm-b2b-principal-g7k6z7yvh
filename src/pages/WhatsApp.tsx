@@ -82,7 +82,7 @@ export default function WhatsApp() {
         throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       }
       if (data?.error) {
-        throw new Error(data.error)
+        throw new Error(data.details ? `${data.error} - Detalhes: ${data.details}` : data.error)
       }
 
       toast.success('Instância solicitada. Aguarde o QR Code.')
