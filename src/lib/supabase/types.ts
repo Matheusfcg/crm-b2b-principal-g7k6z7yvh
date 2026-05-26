@@ -723,14 +723,14 @@ export const Constants = {
 //   Policy "users_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: ((id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = ANY (ARRAY['admin'::text, 'gerente'::text]))))))
 // Table: whatsapp_instances
-//   Policy "Instances_delete" (DELETE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
-//   Policy "Instances_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//   Policy "whatsapp_instances_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (user_id = auth.uid())
+//   Policy "whatsapp_instances_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (user_id = auth.uid())
-//   Policy "Instances_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
-//   Policy "Instances_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
+//   Policy "whatsapp_instances_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: (user_id = auth.uid())
+//   Policy "whatsapp_instances_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (user_id = auth.uid())
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)

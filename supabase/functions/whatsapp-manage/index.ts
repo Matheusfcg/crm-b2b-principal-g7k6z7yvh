@@ -33,7 +33,17 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const body = await req.json()
+    const bodyText = await req.text()
+    let body: any = {}
+    try {
+      body = bodyText ? JSON.parse(bodyText) : {}
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
+
     const action = body.action
 
     const rawEvolutionUrl = Deno.env.get('EVOLUTION_API_URL')
@@ -51,62 +61,30 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const evolutionUrl = rawEvolutionUrl.replace(/\/$/, '')
-    const instanceName = `user_${user.id}`
+    const evolutionUrl = rawEvolutionUrl.trim().replace(/\/$/, '')
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').trim().replace(/\/$/, '')
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
+
+    const instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
+
+    const evoHeaders = {
+      'Content-Type': 'application/json',
+      apikey: evolutionKey,
+      Authorization: `Bearer ${evolutionKey}`,
+    }
 
     if (action === 'create') {
-      let evoRes = await fetch(`${evolutionUrl}/instance/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          instanceName: instanceName,
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-          webhook: `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-webhook`,
-          webhook_by_events: false,
-          events: [
-            'APPLICATION_STARTUP',
-            'QRCODE_UPDATED',
-            'MESSAGES_UPSERT',
-            'CONNECTION_UPDATE',
-            'MESSAGES_UPDATE',
-            'SEND_MESSAGE',
-          ],
-        }),
-      })
+      let evoData: any = {}
 
-      let evoData = await evoRes.json().catch(() => ({}))
-
-      if (!evoRes.ok) {
-        const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
-          headers: { apikey: evolutionKey },
-        })
-        if (connectRes.ok) {
-          evoData = await connectRes.json()
-        } else {
-          const stateRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
-            headers: { apikey: evolutionKey },
-          })
-          if (stateRes.ok) {
-            evoData = await stateRes.json()
-          } else {
-            throw new Error(
-              'Falha ao criar ou conectar à instância na Evolution API. Verifique a URL e a API Key.',
-            )
-          }
-        }
-      } else {
-        await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
+      try {
+        const evoRes = await fetch(`${evolutionUrl}/instance/create`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: evolutionKey,
-          },
+          headers: evoHeaders,
           body: JSON.stringify({
-            url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-webhook`,
+            instanceName: instanceName,
+            qrcode: true,
+            integration: 'WHATSAPP-BAILEYS',
+            webhook: webhookUrl,
             webhook_by_events: false,
             events: [
               'APPLICATION_STARTUP',
@@ -117,45 +95,180 @@ Deno.serve(async (req: Request) => {
               'SEND_MESSAGE',
             ],
           }),
-        }).catch((err) => console.error('Webhook set error:', err))
+        })
+
+        const resText = await evoRes.text()
+        try {
+          evoData = resText ? JSON.parse(resText) : {}
+        } catch (e) {}
+
+        if (!evoRes.ok) {
+          const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
+            headers: evoHeaders,
+          })
+          const connectText = await connectRes.text()
+          if (connectRes.ok) {
+            try {
+              evoData = JSON.parse(connectText)
+            } catch (e) {}
+          } else {
+            const stateRes = await fetch(
+              `${evolutionUrl}/instance/connectionState/${instanceName}`,
+              {
+                headers: evoHeaders,
+              },
+            )
+            const stateText = await stateRes.text()
+            if (stateRes.ok) {
+              try {
+                evoData = JSON.parse(stateText)
+              } catch (e) {}
+            } else {
+              return new Response(
+                JSON.stringify({
+                  error: `Falha ao criar instância. A Evolution API retornou o status ${evoRes.status}.`,
+                  details: resText.substring(0, 200),
+                }),
+                {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  status: 400,
+                },
+              )
+            }
+          }
+        } else {
+          try {
+            await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
+              method: 'POST',
+              headers: evoHeaders,
+              body: JSON.stringify({
+                url: webhookUrl,
+                webhook_by_events: false,
+                events: [
+                  'APPLICATION_STARTUP',
+                  'QRCODE_UPDATED',
+                  'MESSAGES_UPSERT',
+                  'CONNECTION_UPDATE',
+                  'MESSAGES_UPDATE',
+                  'SEND_MESSAGE',
+                ],
+              }),
+            })
+          } catch (webhookErr) {
+            console.error('Webhook set error:', webhookErr)
+          }
+        }
+      } catch (evoErr: any) {
+        return new Response(
+          JSON.stringify({
+            error: `Falha de rede ao conectar com Evolution API: ${evoErr.message}`,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 502,
+          },
+        )
       }
 
-      let qrcode = evoData?.qrcode?.base64 || evoData?.qrcode || evoData?.base64 || null
+      let qrcode =
+        evoData?.qrcode?.base64 || evoData?.qrcode || evoData?.base64 || evoData?.code || null
       if (qrcode && typeof qrcode === 'string' && !qrcode.startsWith('data:image')) {
         qrcode = `data:image/png;base64,${qrcode}`
       }
 
-      const status = evoData?.instance?.state || evoData?.state || 'connecting'
+      const status =
+        evoData?.instance?.state || evoData?.state || evoData?.instance?.status || 'connecting'
 
-      const { data: instance, error } = await supabase
+      const { data: existingInstance } = await supabase
         .from('whatsapp_instances')
-        .upsert(
-          {
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      let resultInstance
+      if (existingInstance) {
+        const { data: updated, error } = await supabase
+          .from('whatsapp_instances')
+          .update({
+            instance_name: instanceName,
+            status: status,
+            qrcode: qrcode,
+            last_connection: status === 'open' ? new Date().toISOString() : undefined,
+          })
+          .eq('id', existingInstance.id)
+          .select()
+          .single()
+
+        if (error) {
+          return new Response(
+            JSON.stringify({ error: `Erro ao atualizar banco: ${error.message}` }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 500,
+            },
+          )
+        }
+        resultInstance = updated
+      } else {
+        const { data: inserted, error } = await supabase
+          .from('whatsapp_instances')
+          .insert({
             user_id: user.id,
             instance_name: instanceName,
             status: status,
             qrcode: qrcode,
-          },
-          { onConflict: 'instance_name' },
-        )
-        .select()
-        .single()
+            last_connection: status === 'open' ? new Date().toISOString() : null,
+          })
+          .select()
+          .single()
 
-      if (error) throw error
+        if (error) {
+          const { data: fallback, error: fallbackError } = await supabase
+            .from('whatsapp_instances')
+            .upsert(
+              {
+                user_id: user.id,
+                instance_name: instanceName,
+                status: status,
+                qrcode: qrcode,
+              },
+              { onConflict: 'instance_name' },
+            )
+            .select()
+            .single()
 
-      return new Response(JSON.stringify({ success: true, instance }), {
+          if (fallbackError) {
+            return new Response(
+              JSON.stringify({ error: `Erro ao inserir no banco: ${fallbackError.message}` }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 500,
+              },
+            )
+          }
+          resultInstance = fallback
+        } else {
+          resultInstance = inserted
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, instance: resultInstance }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     } else if (action === 'disconnect') {
-      await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
-        method: 'DELETE',
-        headers: { apikey: evolutionKey },
-      }).catch(() => null)
+      try {
+        await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
+          method: 'DELETE',
+          headers: evoHeaders,
+        })
 
-      await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
-        method: 'DELETE',
-        headers: { apikey: evolutionKey },
-      }).catch(() => null)
+        await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
+          method: 'DELETE',
+          headers: evoHeaders,
+        })
+      } catch (err: any) {
+        console.error('Erro ao deletar instancia:', err)
+      }
 
       const { error } = await supabase
         .from('whatsapp_instances')
