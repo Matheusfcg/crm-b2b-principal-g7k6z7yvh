@@ -49,11 +49,19 @@ export function ConnectionStatus({
               <p className="text-sm text-slate-500">
                 Sua conta está ativa e sincronizando mensagens automaticamente.
               </p>
-              <div className="mt-4 px-4 py-2 bg-slate-50 rounded-lg border border-slate-100 w-full flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700">Instância</span>
-                <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
-                  {instance?.instance_name}
-                </span>
+              <div className="mt-4 px-4 py-2 bg-slate-50 rounded-lg border border-slate-100 w-full flex flex-col gap-2">
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-sm font-medium text-slate-700">Número</span>
+                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
+                    {instance?.phone || 'Desconhecido'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2">
+                  <span className="text-sm font-medium text-slate-700">Instância</span>
+                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
+                    {instance?.instance_name}
+                  </span>
+                </div>
               </div>
             </div>
           ) : isConnecting ? (

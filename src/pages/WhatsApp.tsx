@@ -53,12 +53,28 @@ export default function WhatsApp() {
     }
   }, [user])
 
+  const checkStatus = async () => {
+    if (!instance || instance.status !== 'open') return
+    try {
+      await supabase.functions.invoke('whatsapp-manage', {
+        body: { action: 'get-status' },
+      })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
     if (instance?.status === 'connecting') {
       interval = setInterval(() => {
         fetchInstance()
       }, 5000)
+    } else if (instance?.status === 'open') {
+      checkStatus()
+      interval = setInterval(() => {
+        checkStatus()
+      }, 30000)
     }
     return () => {
       if (interval) clearInterval(interval)
@@ -79,7 +95,7 @@ export default function WhatsApp() {
     setActionLoading(true)
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'create' },
+        body: { action: 'create-session' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error)
@@ -97,7 +113,7 @@ export default function WhatsApp() {
     setActionLoading(true)
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'disconnect' },
+        body: { action: 'logout' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) throw new Error(data.error)

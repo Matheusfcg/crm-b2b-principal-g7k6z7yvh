@@ -47,6 +47,7 @@ export type Database = {
           id: string
           instance_id: string
           last_message: string | null
+          unread_count: number
           updated_at: string | null
         }
         Insert: {
@@ -54,6 +55,7 @@ export type Database = {
           id?: string
           instance_id: string
           last_message?: string | null
+          unread_count?: number
           updated_at?: string | null
         }
         Update: {
@@ -61,6 +63,7 @@ export type Database = {
           id?: string
           instance_id?: string
           last_message?: string | null
+          unread_count?: number
           updated_at?: string | null
         }
         Relationships: [
@@ -182,6 +185,7 @@ export type Database = {
           from_me: boolean | null
           id: string
           message_id: string
+          status: string
           timestamp: string | null
           type: string | null
         }
@@ -191,6 +195,7 @@ export type Database = {
           from_me?: boolean | null
           id?: string
           message_id: string
+          status?: string
           timestamp?: string | null
           type?: string | null
         }
@@ -200,6 +205,7 @@ export type Database = {
           from_me?: boolean | null
           id?: string
           message_id?: string
+          status?: string
           timestamp?: string | null
           type?: string | null
         }
@@ -551,6 +557,7 @@ export const Constants = {
 //   contact_id: uuid (not null)
 //   last_message: text (nullable)
 //   updated_at: timestamp with time zone (nullable, default: now())
+//   unread_count: integer (not null, default: 0)
 // Table: interactions
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -579,6 +586,7 @@ export const Constants = {
 //   content: text (nullable)
 //   type: text (nullable)
 //   timestamp: timestamp with time zone (nullable, default: now())
+//   status: text (not null, default: 'sent'::text)
 // Table: proposals
 //   id: uuid (not null, default: gen_random_uuid())
 //   lead_id: uuid (not null)
@@ -836,9 +844,11 @@ export const Constants = {
 //   CREATE UNIQUE INDEX contacts_instance_id_remote_jid_key ON public.contacts USING btree (instance_id, remote_jid)
 // Table: conversations
 //   CREATE UNIQUE INDEX conversations_instance_id_contact_id_key ON public.conversations USING btree (instance_id, contact_id)
+//   CREATE INDEX conversations_updated_at_idx ON public.conversations USING btree (updated_at DESC)
 // Table: leads
 //   CREATE INDEX leads_whatsapp_external_id_idx ON public.leads USING btree (whatsapp_external_id)
 // Table: messages
 //   CREATE UNIQUE INDEX messages_message_id_key ON public.messages USING btree (message_id)
+//   CREATE INDEX messages_timestamp_idx ON public.messages USING btree ("timestamp" DESC)
 // Table: whatsapp_instances
 //   CREATE UNIQUE INDEX whatsapp_instances_instance_name_key ON public.whatsapp_instances USING btree (instance_name)

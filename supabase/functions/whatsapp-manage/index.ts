@@ -46,37 +46,26 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const rawEvolutionUrl = Deno.env.get('EVOLUTION_API_URL')
-    const evolutionKey = Deno.env.get('EVOLUTION_API_KEY')
+    const rawUazapiUrl = Deno.env.get('UAZAPI_SERVER_URL') || 'https://free.uazapi.com'
+    const uazapiKey =
+      Deno.env.get('UAZAPI_ADMIN_TOKEN') || 'ZaW1qwTEkuq7Ub1cBUuyMiK5bNSu3nnMQ9lh7klElc2clSRV8t'
 
-    if (!rawEvolutionUrl || !evolutionKey) {
-      return new Response(
-        JSON.stringify({
-          error: 'Configuração da Evolution API ausente no backend (variáveis de ambiente).',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        },
-      )
-    }
-
-    const evolutionUrl = rawEvolutionUrl.trim().replace(/\/$/, '')
+    const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
     const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').trim().replace(/\/$/, '')
     const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`
 
     const instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
 
-    const evoHeaders = {
+    const apiHeaders = {
       'Content-Type': 'application/json',
-      apikey: evolutionKey,
-      Authorization: `Bearer ${evolutionKey}`,
+      apikey: uazapiKey,
+      Authorization: `Bearer ${uazapiKey}`,
     }
 
     if (action === 'sync') {
       try {
-        const chatsRes = await fetch(`${evolutionUrl}/chat/findChats/${instanceName}`, {
-          headers: evoHeaders,
+        const chatsRes = await fetch(`${uazapiUrl}/chat/findChats/${instanceName}`, {
+          headers: apiHeaders,
         })
         if (chatsRes.ok) {
           const chats = await chatsRes.json()
@@ -88,7 +77,6 @@ Deno.serve(async (req: Request) => {
             .single()
 
           if (instance && Array.isArray(chats)) {
-            // Process max 50 chats to avoid timeout in edge function
             for (const chat of chats.slice(0, 50)) {
               const remoteJid = chat.id || chat.remoteJid
               const pushName = chat.name || chat.pushName || 'Contato'
@@ -164,9 +152,9 @@ Deno.serve(async (req: Request) => {
         })
       }
       try {
-        const sendRes = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+        const sendRes = await fetch(`${uazapiUrl}/message/sendText/${instanceName}`, {
           method: 'POST',
-          headers: evoHeaders,
+          headers: apiHeaders,
           body: JSON.stringify({ number, text, delay: 1000 }),
         })
         const sendData = await sendRes.text()
@@ -189,14 +177,14 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: true, data: parsed }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
-      } catch (evoErr: any) {
-        return new Response(JSON.stringify({ error: `Falha de rede: ${evoErr.message}` }), {
+      } catch (apiErr: any) {
+        return new Response(JSON.stringify({ error: `Falha de rede: ${apiErr.message}` }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 502,
         })
       }
-    } else if (action === 'create') {
-      let evoData: any = {}
+    } else if (action === 'create-session' || action === 'create') {
+      let apiData: any = {}
 
       const createPayload = {
         instanceName: instanceName,
@@ -206,8 +194,8 @@ Deno.serve(async (req: Request) => {
       }
 
       try {
-        const stateRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
-          headers: evoHeaders,
+        const stateRes = await fetch(`${uazapiUrl}/instance/connectionState/${instanceName}`, {
+          headers: apiHeaders,
         })
 
         if (stateRes.ok) {
@@ -215,33 +203,32 @@ Deno.serve(async (req: Request) => {
           try {
             const stateData = JSON.parse(stateText)
             if (stateData?.instance?.state !== 'open' && stateData?.state !== 'open') {
-              const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
-                headers: evoHeaders,
+              const connectRes = await fetch(`${uazapiUrl}/instance/connect/${instanceName}`, {
+                headers: apiHeaders,
               })
               if (connectRes.ok) {
                 const connectText = await connectRes.text()
-                evoData = JSON.parse(connectText)
+                apiData = JSON.parse(connectText)
               } else {
-                evoData = stateData
+                apiData = stateData
               }
             } else {
-              evoData = stateData
+              apiData = stateData
             }
           } catch (e) {}
         } else {
-          const evoRes = await fetch(`${evolutionUrl}/instance/create`, {
+          const apiRes = await fetch(`${uazapiUrl}/instance/create`, {
             method: 'POST',
-            headers: evoHeaders,
+            headers: apiHeaders,
             body: JSON.stringify(createPayload),
           })
 
-          const resText = await evoRes.text()
+          const resText = await apiRes.text()
 
-          if (!evoRes.ok) {
-            console.error(`Evolution API Error [${evoRes.status}] on create:`, resText)
+          if (!apiRes.ok) {
             return new Response(
               JSON.stringify({
-                error: `Falha ao criar instância. A Evolution API retornou o status ${evoRes.status}.`,
+                error: `Falha ao criar instância. A Uazapi retornou o status ${apiRes.status}.`,
                 details: resText.substring(0, 500),
                 payload: createPayload,
               }),
@@ -253,14 +240,14 @@ Deno.serve(async (req: Request) => {
           }
 
           try {
-            evoData = resText ? JSON.parse(resText) : {}
+            apiData = resText ? JSON.parse(resText) : {}
           } catch (e) {}
         }
 
         try {
-          await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
+          await fetch(`${uazapiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
-            headers: evoHeaders,
+            headers: apiHeaders,
             body: JSON.stringify({
               url: webhookUrl,
               webhook_by_events: false,
@@ -280,11 +267,9 @@ Deno.serve(async (req: Request) => {
         } catch (webhookErr) {
           console.error('Webhook set error:', webhookErr)
         }
-      } catch (evoErr: any) {
+      } catch (apiErr: any) {
         return new Response(
-          JSON.stringify({
-            error: `Falha de rede ao conectar com Evolution API: ${evoErr.message}`,
-          }),
+          JSON.stringify({ error: `Falha de rede ao conectar com Uazapi: ${apiErr.message}` }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 502,
@@ -293,13 +278,14 @@ Deno.serve(async (req: Request) => {
       }
 
       let qrcode =
-        evoData?.qrcode?.base64 || evoData?.qrcode || evoData?.base64 || evoData?.code || null
+        apiData?.qrcode?.base64 || apiData?.qrcode || apiData?.base64 || apiData?.code || null
       if (qrcode && typeof qrcode === 'string' && !qrcode.startsWith('data:image')) {
         qrcode = `data:image/png;base64,${qrcode}`
       }
 
       const status =
-        evoData?.instance?.state || evoData?.state || evoData?.instance?.status || 'connecting'
+        apiData?.instance?.state || apiData?.state || apiData?.instance?.status || 'connecting'
+      const phone = apiData?.instance?.owner || apiData?.owner || apiData?.number
 
       const { data: existingInstance } = await supabase
         .from('whatsapp_instances')
@@ -309,65 +295,47 @@ Deno.serve(async (req: Request) => {
 
       let resultInstance
       if (existingInstance) {
+        const updateData: any = {
+          instance_name: instanceName,
+          status: status,
+          qrcode: qrcode,
+          last_connection: status === 'open' ? new Date().toISOString() : undefined,
+        }
+        if (phone) updateData.phone = phone
+
         const { data: updated, error } = await supabase
           .from('whatsapp_instances')
-          .update({
-            instance_name: instanceName,
-            status: status,
-            qrcode: qrcode,
-            last_connection: status === 'open' ? new Date().toISOString() : undefined,
-          })
+          .update(updateData)
           .eq('id', existingInstance.id)
           .select()
           .single()
 
-        if (error) {
-          return new Response(
-            JSON.stringify({ error: `Erro ao atualizar banco: ${error.message}` }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 500,
-            },
-          )
-        }
+        if (error) throw error
         resultInstance = updated
       } else {
+        const insertData: any = {
+          user_id: user.id,
+          instance_name: instanceName,
+          status: status,
+          qrcode: qrcode,
+          last_connection: status === 'open' ? new Date().toISOString() : null,
+        }
+        if (phone) insertData.phone = phone
+
         const { data: inserted, error } = await supabase
           .from('whatsapp_instances')
-          .insert({
-            user_id: user.id,
-            instance_name: instanceName,
-            status: status,
-            qrcode: qrcode,
-            last_connection: status === 'open' ? new Date().toISOString() : null,
-          })
+          .insert(insertData)
           .select()
           .single()
 
         if (error) {
           const { data: fallback, error: fallbackError } = await supabase
             .from('whatsapp_instances')
-            .upsert(
-              {
-                user_id: user.id,
-                instance_name: instanceName,
-                status: status,
-                qrcode: qrcode,
-              },
-              { onConflict: 'instance_name' },
-            )
+            .upsert(insertData, { onConflict: 'instance_name' })
             .select()
             .single()
 
-          if (fallbackError) {
-            return new Response(
-              JSON.stringify({ error: `Erro ao inserir no banco: ${fallbackError.message}` }),
-              {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 500,
-              },
-            )
-          }
+          if (fallbackError) throw fallbackError
           resultInstance = fallback
         } else {
           resultInstance = inserted
@@ -377,16 +345,49 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, instance: resultInstance }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
-    } else if (action === 'disconnect') {
+    } else if (action === 'get-status') {
       try {
-        await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
+        const stateRes = await fetch(`${uazapiUrl}/instance/connectionState/${instanceName}`, {
+          headers: apiHeaders,
+        })
+        if (stateRes.ok) {
+          const stateData = await stateRes.json()
+          const state = stateData?.instance?.state || stateData?.state
+          const phone = stateData?.instance?.owner || stateData?.owner || stateData?.number
+
+          const updateData: any = {
+            status: state,
+            last_connection: state === 'open' ? new Date().toISOString() : undefined,
+          }
+          if (phone) updateData.phone = phone
+
+          const { data: updated } = await supabase
+            .from('whatsapp_instances')
+            .update(updateData)
+            .eq('user_id', user.id)
+            .select()
+            .single()
+
+          return new Response(JSON.stringify({ success: true, instance: updated, phone: phone }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        })
+      }
+    } else if (action === 'logout' || action === 'disconnect') {
+      try {
+        await fetch(`${uazapiUrl}/instance/logout/${instanceName}`, {
           method: 'DELETE',
-          headers: evoHeaders,
+          headers: apiHeaders,
         })
 
-        await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
+        await fetch(`${uazapiUrl}/instance/delete/${instanceName}`, {
           method: 'DELETE',
-          headers: evoHeaders,
+          headers: apiHeaders,
         })
       } catch (err: any) {
         console.error('Erro ao deletar instancia:', err)
