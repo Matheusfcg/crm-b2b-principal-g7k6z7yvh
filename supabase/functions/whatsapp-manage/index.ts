@@ -1,12 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -80,11 +74,11 @@ Deno.serve(async (req: Request) => {
       }
 
       console.log(`\n=== UAZAPI REQUEST ===`)
-      console.log(`Method: ${method}`)
-      console.log(`URL: ${url}`)
+      console.log(`URL called: ${url}`)
+      console.log(`HTTP Method: ${method}`)
       console.log(`Headers: ${JSON.stringify(safeHeaders)}`)
       if (options.body) {
-        console.log(`Body: ${options.body}`)
+        console.log(`Payload sent: ${options.body}`)
       }
       console.log(`======================\n`)
 
@@ -99,9 +93,9 @@ Deno.serve(async (req: Request) => {
       } catch (e) {}
 
       console.log(`\n=== UAZAPI RESPONSE ===`)
-      console.log(`Status: ${status}`)
+      console.log(`HTTP Status returned: ${status}`)
       console.log(
-        `Body: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
+        `Response Body: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
       )
       console.log(`=======================\n`)
 
@@ -109,13 +103,11 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action !== 'diagnostic') {
-      const validationRes = await fetchUazapi(`${uazapiUrl}/instance/fetchInstances`, {
-        method: 'GET',
-      })
+      const validationRes = await fetchUazapi(`${uazapiUrl}/instance/list`, { method: 'GET' })
       if (!validationRes.ok) {
         return new Response(
           JSON.stringify({
-            error: `Pre-flight authentication validation failed. Provider returned status ${validationRes.status}.`,
+            error: `Pre-flight authentication validation failed on /instance/list. Provider returned status ${validationRes.status}.`,
             details: validationRes.parsedBody,
           }),
           {
@@ -160,7 +152,7 @@ Deno.serve(async (req: Request) => {
 
       for (const config of headerConfigurations) {
         try {
-          const fetchUrl = `${uazapiUrl}/instance/fetchInstances`
+          const fetchUrl = `${uazapiUrl}/instance/list`
           const res = await fetch(fetchUrl, { headers: config.headers })
           const text = await res.text()
           let jsonBody: any = text
@@ -177,7 +169,7 @@ Deno.serve(async (req: Request) => {
         } catch (err: any) {
           logDiagnostic(
             `Fetch Instances (${config.name}) - ERROR`,
-            `${uazapiUrl}/instance/fetchInstances`,
+            `${uazapiUrl}/instance/list`,
             config.headers,
             500,
             err.message,
@@ -367,47 +359,78 @@ Deno.serve(async (req: Request) => {
       let apiData: any = {}
 
       try {
-        const stateRes = await fetchUazapi(
-          `${uazapiUrl}/instance/connectionState/${instanceName}`,
-          { method: 'GET' },
-        )
+        const listRes = await fetchUazapi(`${uazapiUrl}/instance/list`, { method: 'GET' })
 
-        if (stateRes.ok) {
-          const stateData = stateRes.parsedBody
-          if (stateData?.instance?.state !== 'open' && stateData?.state !== 'open') {
-            const connectRes = await fetchUazapi(`${uazapiUrl}/instance/connect/${instanceName}`, {
-              method: 'GET',
-            })
-            if (connectRes.ok) {
-              apiData = connectRes.parsedBody
-            } else {
-              apiData = stateData
-            }
-          } else {
-            apiData = stateData
+        if (!listRes.ok) {
+          return new Response(
+            JSON.stringify({
+              error: `Erro ao buscar lista de instâncias. Status: ${listRes.status}`,
+              details: listRes.parsedBody,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: listRes.status === 401 ? 401 : 400,
+            },
+          )
+        }
+
+        const instances = Array.isArray(listRes.parsedBody)
+          ? listRes.parsedBody
+          : listRes.parsedBody?.data || listRes.parsedBody?.instances || []
+        let instanceFound = false
+
+        if (Array.isArray(instances)) {
+          instanceFound = instances.some(
+            (inst: any) =>
+              inst?.instance?.instanceName === instanceName ||
+              inst?.instanceName === instanceName ||
+              inst?.name === instanceName,
+          )
+        }
+
+        if (!instanceFound) {
+          const stateRes = await fetchUazapi(
+            `${uazapiUrl}/instance/connectionState/${instanceName}`,
+            { method: 'GET' },
+          )
+          if (stateRes.status === 404 || !stateRes.ok) {
+            return new Response(
+              JSON.stringify({
+                error: `Instância '${instanceName}' não encontrada no provedor. A criação automática não é permitida. Crie a instância manualmente.`,
+                details: listRes.parsedBody,
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 404,
+              },
+            )
           }
-        } else if (stateRes.status === 404) {
-          return new Response(
-            JSON.stringify({
-              error: `Instância não encontrada no provedor. A criação automática não é permitida. Crie a instância manualmente.`,
-              details: stateRes.parsedBody,
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 404,
-            },
-          )
+        }
+
+        const connectRes = await fetchUazapi(`${uazapiUrl}/instance/connect/${instanceName}`, {
+          method: 'GET',
+        })
+        if (connectRes.ok) {
+          apiData = connectRes.parsedBody
         } else {
-          return new Response(
-            JSON.stringify({
-              error: `Falha ao obter estado da instância. O provedor retornou status ${stateRes.status}.`,
-              details: stateRes.parsedBody,
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: stateRes.status === 401 ? 401 : 400,
-            },
+          const stateRes = await fetchUazapi(
+            `${uazapiUrl}/instance/connectionState/${instanceName}`,
+            { method: 'GET' },
           )
+          if (stateRes.ok) {
+            apiData = stateRes.parsedBody
+          } else {
+            return new Response(
+              JSON.stringify({
+                error: `Falha ao conectar na instância. Status: ${connectRes.status}`,
+                details: connectRes.parsedBody,
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: connectRes.status === 401 ? 401 : 400,
+              },
+            )
+          }
         }
 
         try {
