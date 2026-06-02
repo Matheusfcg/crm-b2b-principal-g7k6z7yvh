@@ -98,8 +98,11 @@ export default function WhatsApp() {
         body: { action: 'create-session' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
-      if (data?.error)
-        throw new Error(data.details ? `${data.error} - Detalhes: ${data.details}` : data.error)
+      if (data?.error) {
+        const detailsStr =
+          typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
+        throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
+      }
       toast.success('Instância solicitada. Aguarde o QR Code.')
       await fetchInstance()
     } catch (error: any) {

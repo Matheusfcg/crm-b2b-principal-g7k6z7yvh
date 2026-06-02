@@ -66,6 +66,8 @@ Deno.serve(async (req: Request) => {
       'Content-Type': 'application/json',
       apikey: uazapiKey,
       Authorization: `Bearer ${uazapiKey}`,
+      'admin-token': uazapiKey,
+      GlobalApiKey: uazapiKey,
     }
 
     if (action === 'sync') {
@@ -139,6 +141,8 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
+        } else {
+          console.error('Sync Error:', await chatsRes.text())
         }
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -165,10 +169,14 @@ Deno.serve(async (req: Request) => {
         })
         const sendData = await sendRes.text()
         if (!sendRes.ok) {
+          let details = sendData
+          try {
+            details = JSON.parse(sendData)
+          } catch (e) {}
           return new Response(
             JSON.stringify({
               error: `Erro ao enviar mensagem: ${sendRes.status}`,
-              details: sendData,
+              details: details,
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -196,6 +204,7 @@ Deno.serve(async (req: Request) => {
         instanceName: instanceName,
         token: instanceName,
         qrcode: true,
+        b64: true,
         integration: 'WHATSAPP-BAILEYS',
       }
 
@@ -216,13 +225,19 @@ Deno.serve(async (req: Request) => {
                 const connectText = await connectRes.text()
                 apiData = JSON.parse(connectText)
               } else {
+                console.error('Connect error:', await connectRes.text())
                 apiData = stateData
               }
             } else {
               apiData = stateData
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error('Failed to parse state:', e)
+          }
         } else {
+          const stateErrText = await stateRes.text()
+          console.warn(`Connection state not ok (${stateRes.status}):`, stateErrText)
+
           const apiRes = await fetch(`${uazapiUrl}/instance/create`, {
             method: 'POST',
             headers: apiHeaders,
@@ -232,15 +247,21 @@ Deno.serve(async (req: Request) => {
           const resText = await apiRes.text()
 
           if (!apiRes.ok) {
+            console.error('Create Instance Error:', apiRes.status, resText)
+            let details = resText
+            try {
+              details = JSON.parse(resText)
+            } catch (e) {}
+
             return new Response(
               JSON.stringify({
                 error: `Falha ao criar instância. A Uazapi retornou o status ${apiRes.status}.`,
-                details: resText.substring(0, 500),
+                details: details,
                 payload: createPayload,
               }),
               {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
+                status: apiRes.status === 401 ? 401 : 400,
               },
             )
           }
@@ -251,7 +272,7 @@ Deno.serve(async (req: Request) => {
         }
 
         try {
-          await fetch(`${uazapiUrl}/webhook/set/${instanceName}`, {
+          const webhookRes = await fetch(`${uazapiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
             headers: apiHeaders,
             body: JSON.stringify({
@@ -270,6 +291,9 @@ Deno.serve(async (req: Request) => {
               ],
             }),
           })
+          if (!webhookRes.ok) {
+            console.error('Webhook set error status:', webhookRes.status, await webhookRes.text())
+          }
         } catch (webhookErr) {
           console.error('Webhook set error:', webhookErr)
         }
@@ -377,6 +401,8 @@ Deno.serve(async (req: Request) => {
           return new Response(JSON.stringify({ success: true, instance: updated, phone: phone }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
+        } else {
+          console.error('Get status error:', stateRes.status, await stateRes.text())
         }
       } catch (err: any) {
         return new Response(JSON.stringify({ error: err.message }), {
@@ -418,6 +444,7 @@ Deno.serve(async (req: Request) => {
       status: 400,
     })
   } catch (err: any) {
+    console.error('Internal Function Error:', err)
     return new Response(JSON.stringify({ error: err.message || 'Ocorreu um erro interno' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

@@ -354,6 +354,7 @@ export type Database = {
           id: string
           instance_name: string
           last_connection: string | null
+          phone: string | null
           qrcode: string | null
           status: string | null
           user_id: string
@@ -363,6 +364,7 @@ export type Database = {
           id?: string
           instance_name: string
           last_connection?: string | null
+          phone?: string | null
           qrcode?: string | null
           status?: string | null
           user_id: string
@@ -372,6 +374,7 @@ export type Database = {
           id?: string
           instance_name?: string
           last_connection?: string | null
+          phone?: string | null
           qrcode?: string | null
           status?: string | null
           user_id?: string
@@ -622,6 +625,7 @@ export const Constants = {
 //   qrcode: text (nullable)
 //   created_at: timestamp with time zone (nullable, default: now())
 //   last_connection: timestamp with time zone (nullable)
+//   phone: text (nullable)
 
 // --- CONSTRAINTS ---
 // Table: contacts
