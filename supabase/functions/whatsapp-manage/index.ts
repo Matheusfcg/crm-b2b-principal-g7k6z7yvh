@@ -52,9 +52,8 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const rawUazapiUrl = Deno.env.get('UAZAPI_URL') || 'https://free.uazapi.com'
-    const uazapiKey =
-      Deno.env.get('UAZAPI_TOKEN') || 'ZaW1qwTEkuq7Ub1cBUuyMiK5bNSu3nnMQ9lh7klElc2clSRV8t'
+    const rawUazapiUrl = Deno.env.get('UAZAPI_SERVER_URL') || 'https://free.uazapi.com'
+    const uazapiKey = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
 
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
     const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').trim().replace(/\/$/, '')
@@ -64,15 +63,67 @@ Deno.serve(async (req: Request) => {
 
     const apiHeaders = {
       'Content-Type': 'application/json',
-      apikey: uazapiKey,
-      'admin-token': uazapiKey,
-      GlobalApiKey: uazapiKey,
+      admintoken: uazapiKey,
     }
 
     const maskToken = (token: string) => {
       if (!token) return ''
       if (token.length <= 8) return '***'
       return `${token.substring(0, 4)}...${token.substring(token.length - 4)}`
+    }
+
+    const fetchUazapi = async (url: string, options: RequestInit = {}) => {
+      const method = options.method || 'GET'
+      const safeHeaders: Record<string, string> = { ...apiHeaders }
+      if (safeHeaders['admintoken']) {
+        safeHeaders['admintoken'] = maskToken(safeHeaders['admintoken'])
+      }
+
+      console.log(`\n=== UAZAPI REQUEST ===`)
+      console.log(`Method: ${method}`)
+      console.log(`URL: ${url}`)
+      console.log(`Headers: ${JSON.stringify(safeHeaders)}`)
+      if (options.body) {
+        console.log(`Body: ${options.body}`)
+      }
+      console.log(`======================\n`)
+
+      const res = await fetch(url, { ...options, headers: apiHeaders })
+
+      const status = res.status
+      const text = await res.text()
+
+      let parsedBody: any = text
+      try {
+        if (text) parsedBody = JSON.parse(text)
+      } catch (e) {}
+
+      console.log(`\n=== UAZAPI RESPONSE ===`)
+      console.log(`Status: ${status}`)
+      console.log(
+        `Body: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
+      )
+      console.log(`=======================\n`)
+
+      return { ok: res.ok, status, text, parsedBody }
+    }
+
+    if (action !== 'diagnostic') {
+      const validationRes = await fetchUazapi(`${uazapiUrl}/instance/fetchInstances`, {
+        method: 'GET',
+      })
+      if (!validationRes.ok) {
+        return new Response(
+          JSON.stringify({
+            error: `Pre-flight authentication validation failed. Uazapi returned ${validationRes.status}`,
+            details: validationRes.parsedBody,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: validationRes.status === 401 ? 401 : 400,
+          },
+        )
+      }
     }
 
     if (action === 'diagnostic') {
@@ -87,9 +138,7 @@ Deno.serve(async (req: Request) => {
         body: any,
       ) => {
         const safeHeaders = { ...headers }
-        if (safeHeaders.apikey) safeHeaders.apikey = maskedToken
-        if (safeHeaders['admin-token']) safeHeaders['admin-token'] = maskedToken
-        if (safeHeaders.GlobalApiKey) safeHeaders.GlobalApiKey = maskedToken
+        if (safeHeaders.admintoken) safeHeaders.admintoken = maskedToken
 
         const logEntry = {
           step,
@@ -103,16 +152,10 @@ Deno.serve(async (req: Request) => {
       }
 
       const headerConfigurations = [
-        { name: 'apikey', headers: { 'Content-Type': 'application/json', apikey: uazapiKey } },
         {
-          name: 'admin-token',
-          headers: { 'Content-Type': 'application/json', 'admin-token': uazapiKey },
+          name: 'admintoken',
+          headers: { 'Content-Type': 'application/json', admintoken: uazapiKey },
         },
-        {
-          name: 'GlobalApiKey',
-          headers: { 'Content-Type': 'application/json', GlobalApiKey: uazapiKey },
-        },
-        { name: 'All Combined', headers: apiHeaders },
       ]
 
       for (const config of headerConfigurations) {
@@ -120,7 +163,7 @@ Deno.serve(async (req: Request) => {
           const fetchUrl = `${uazapiUrl}/instance/fetchInstances`
           const res = await fetch(fetchUrl, { headers: config.headers })
           const text = await res.text()
-          let jsonBody = text
+          let jsonBody: any = text
           try {
             jsonBody = JSON.parse(text)
           } catch (e) {}
@@ -146,7 +189,7 @@ Deno.serve(async (req: Request) => {
         const fetchUrl = `${uazapiUrl}/instance/connectionState/test`
         const res = await fetch(fetchUrl, { headers: apiHeaders })
         const text = await res.text()
-        let jsonBody = text
+        let jsonBody: any = text
         try {
           jsonBody = JSON.parse(text)
         } catch (e) {}
@@ -161,25 +204,21 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const planNotes =
-        'Uazapi Free Plan: Programmatic instance creation (/instance/create) might be restricted. If all tests return 401/403, the token might be invalid, or the free tier only allows dashboard creation. Verify endpoint path for the Free plan.'
-
       return new Response(
         JSON.stringify({
           success: true,
           message: 'Diagnostic completed',
-          notes: planNotes,
           logs: diagnosticLogs,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     } else if (action === 'sync') {
       try {
-        const chatsRes = await fetch(`${uazapiUrl}/chat/findChats/${instanceName}`, {
-          headers: apiHeaders,
+        const chatsRes = await fetchUazapi(`${uazapiUrl}/chat/findChats/${instanceName}`, {
+          method: 'GET',
         })
         if (chatsRes.ok) {
-          const chats = await chatsRes.json()
+          const chats = chatsRes.parsedBody
 
           const { data: instance } = await supabase
             .from('whatsapp_instances')
@@ -244,8 +283,6 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
-        } else {
-          console.error('Sync Error:', await chatsRes.text())
         }
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -265,21 +302,15 @@ Deno.serve(async (req: Request) => {
         })
       }
       try {
-        const sendRes = await fetch(`${uazapiUrl}/message/sendText/${instanceName}`, {
+        const sendRes = await fetchUazapi(`${uazapiUrl}/message/sendText/${instanceName}`, {
           method: 'POST',
-          headers: apiHeaders,
           body: JSON.stringify({ number, text, delay: 1000 }),
         })
-        const sendData = await sendRes.text()
         if (!sendRes.ok) {
-          let details = sendData
-          try {
-            details = JSON.parse(sendData)
-          } catch (e) {}
           return new Response(
             JSON.stringify({
               error: `Erro ao enviar mensagem: ${sendRes.status}`,
-              details: details,
+              details: sendRes.parsedBody,
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -287,11 +318,7 @@ Deno.serve(async (req: Request) => {
             },
           )
         }
-        let parsed = {}
-        try {
-          parsed = JSON.parse(sendData)
-        } catch (e) {}
-        return new Response(JSON.stringify({ success: true, data: parsed }), {
+        return new Response(JSON.stringify({ success: true, data: sendRes.parsedBody }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       } catch (apiErr: any) {
@@ -312,54 +339,40 @@ Deno.serve(async (req: Request) => {
       }
 
       try {
-        const stateRes = await fetch(`${uazapiUrl}/instance/connectionState/${instanceName}`, {
-          headers: apiHeaders,
-        })
+        const stateRes = await fetchUazapi(
+          `${uazapiUrl}/instance/connectionState/${instanceName}`,
+          { method: 'GET' },
+        )
 
         if (stateRes.ok) {
-          const stateText = await stateRes.text()
-          try {
-            const stateData = JSON.parse(stateText)
-            if (stateData?.instance?.state !== 'open' && stateData?.state !== 'open') {
-              const connectRes = await fetch(`${uazapiUrl}/instance/connect/${instanceName}`, {
-                headers: apiHeaders,
-              })
-              if (connectRes.ok) {
-                const connectText = await connectRes.text()
-                apiData = JSON.parse(connectText)
-              } else {
-                console.error('Connect error:', await connectRes.text())
-                apiData = stateData
-              }
+          const stateData = stateRes.parsedBody
+          if (stateData?.instance?.state !== 'open' && stateData?.state !== 'open') {
+            const connectRes = await fetchUazapi(`${uazapiUrl}/instance/connect/${instanceName}`, {
+              method: 'GET',
+            })
+            if (connectRes.ok) {
+              apiData = connectRes.parsedBody
             } else {
               apiData = stateData
             }
-          } catch (e) {
-            console.error('Failed to parse state:', e)
+          } else {
+            apiData = stateData
           }
         } else {
-          const stateErrText = await stateRes.text()
-          console.warn(`Connection state not ok (${stateRes.status}):`, stateErrText)
+          console.warn(
+            `Instance state failed (${stateRes.status}). Attempting to create instance explicitly as part of manual connection flow.`,
+          )
 
-          const apiRes = await fetch(`${uazapiUrl}/instance/create`, {
+          const apiRes = await fetchUazapi(`${uazapiUrl}/instance/create`, {
             method: 'POST',
-            headers: apiHeaders,
             body: JSON.stringify(createPayload),
           })
 
-          const resText = await apiRes.text()
-
           if (!apiRes.ok) {
-            console.error('Create Instance Error:', apiRes.status, resText)
-            let details = resText
-            try {
-              details = JSON.parse(resText)
-            } catch (e) {}
-
             return new Response(
               JSON.stringify({
                 error: `Falha ao criar instância. A Uazapi retornou o status ${apiRes.status}.`,
-                details: details,
+                details: apiRes.parsedBody,
                 payload: createPayload,
               }),
               {
@@ -369,15 +382,12 @@ Deno.serve(async (req: Request) => {
             )
           }
 
-          try {
-            apiData = resText ? JSON.parse(resText) : {}
-          } catch (e) {}
+          apiData = apiRes.parsedBody
         }
 
         try {
-          const webhookRes = await fetch(`${uazapiUrl}/webhook/set/${instanceName}`, {
+          await fetchUazapi(`${uazapiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
-            headers: apiHeaders,
             body: JSON.stringify({
               url: webhookUrl,
               webhook_by_events: false,
@@ -394,9 +404,6 @@ Deno.serve(async (req: Request) => {
               ],
             }),
           })
-          if (!webhookRes.ok) {
-            console.error('Webhook set error status:', webhookRes.status, await webhookRes.text())
-          }
         } catch (webhookErr) {
           console.error('Webhook set error:', webhookErr)
         }
@@ -480,11 +487,12 @@ Deno.serve(async (req: Request) => {
       })
     } else if (action === 'get-status') {
       try {
-        const stateRes = await fetch(`${uazapiUrl}/instance/connectionState/${instanceName}`, {
-          headers: apiHeaders,
-        })
+        const stateRes = await fetchUazapi(
+          `${uazapiUrl}/instance/connectionState/${instanceName}`,
+          { method: 'GET' },
+        )
         if (stateRes.ok) {
-          const stateData = await stateRes.json()
+          const stateData = stateRes.parsedBody
           const state = stateData?.instance?.state || stateData?.state
           const phone = stateData?.instance?.owner || stateData?.owner || stateData?.number
 
@@ -505,7 +513,13 @@ Deno.serve(async (req: Request) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         } else {
-          console.error('Get status error:', stateRes.status, await stateRes.text())
+          return new Response(
+            JSON.stringify({ error: 'Failed to get state', details: stateRes.parsedBody }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: stateRes.status,
+            },
+          )
         }
       } catch (err: any) {
         return new Response(JSON.stringify({ error: err.message }), {
@@ -515,15 +529,8 @@ Deno.serve(async (req: Request) => {
       }
     } else if (action === 'logout' || action === 'disconnect') {
       try {
-        await fetch(`${uazapiUrl}/instance/logout/${instanceName}`, {
-          method: 'DELETE',
-          headers: apiHeaders,
-        })
-
-        await fetch(`${uazapiUrl}/instance/delete/${instanceName}`, {
-          method: 'DELETE',
-          headers: apiHeaders,
-        })
+        await fetchUazapi(`${uazapiUrl}/instance/logout/${instanceName}`, { method: 'DELETE' })
+        // Intentionally not calling /instance/delete so it can be reused later.
       } catch (err: any) {
         console.error('Erro ao deletar instancia:', err)
       }
