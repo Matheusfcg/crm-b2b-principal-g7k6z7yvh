@@ -131,6 +131,11 @@ export function ConnectionStatus({
             <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300">
               <img src={qrcodeSrc} alt="WhatsApp QR Code" className="w-[200px] h-[200px]" />
             </div>
+          ) : isConnecting ? (
+            <div className="text-center text-slate-500 flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+              <p className="text-sm font-medium">Gerando QR Code...</p>
+            </div>
           ) : isConnected ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-2">
               <MessageCircle className="h-10 w-10 text-green-200" />

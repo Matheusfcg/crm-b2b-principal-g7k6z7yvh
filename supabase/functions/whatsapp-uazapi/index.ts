@@ -58,8 +58,15 @@ Deno.serve(async (req: Request) => {
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
     const instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
 
+    console.log(`\n=== PROCESSING ACTION ===`)
+    console.log(`Action: ${action}`)
+    console.log(`Instance ID: ${instanceName}`)
+    console.log(`User ID: ${user.id}`)
+    console.log(`=========================\n`)
+
     const apiHeaders = {
       'Content-Type': 'application/json',
+      apikey: uazapiKey,
       admintoken: uazapiKey,
     }
 
@@ -92,32 +99,40 @@ Deno.serve(async (req: Request) => {
       return { ok: res.ok, status, text, parsedBody }
     }
 
+    const extractQrCode = (parsedBody: any) => {
+      let rawQrcode =
+        parsedBody?.base64 ||
+        parsedBody?.qrcode?.base64 ||
+        parsedBody?.qrcode ||
+        parsedBody?.qr ||
+        parsedBody?.code ||
+        null
+      console.log(`Extracted raw QR Code field length: ${rawQrcode ? rawQrcode.length : 0}`)
+      let qrcode = rawQrcode
+      if (qrcode && typeof qrcode === 'string') {
+        if (!qrcode.startsWith('data:image')) {
+          qrcode = `data:image/png;base64,${qrcode}`
+        }
+      }
+      return qrcode
+    }
+
     if (action === 'create') {
       const createRes = await fetchUazapi('/instance/create', {
         method: 'POST',
         body: JSON.stringify({ instanceName }),
       })
 
-      let qrcode = null
+      let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
-
-      if (createRes.ok && createRes.parsedBody?.qrcode?.base64) {
-        qrcode = createRes.parsedBody.qrcode.base64
-      } else if (createRes.ok && createRes.parsedBody?.qrcode) {
-        qrcode = createRes.parsedBody.qrcode
-      }
 
       if (!qrcode) {
         const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
         if (connectRes.ok) {
           const apiData = connectRes.parsedBody
-          qrcode = apiData?.qrcode?.base64 || apiData?.qrcode || apiData?.base64 || null
+          qrcode = extractQrCode(apiData)
           status = apiData?.instance?.state || apiData?.state || 'connecting'
         }
-      }
-
-      if (qrcode && typeof qrcode === 'string' && !qrcode.startsWith('data:image')) {
-        qrcode = `data:image/png;base64,${qrcode}`
       }
 
       const instanceData = {
@@ -162,10 +177,7 @@ Deno.serve(async (req: Request) => {
 
       if (connectRes.ok) {
         const apiData = connectRes.parsedBody
-        qrcode = apiData?.qrcode?.base64 || apiData?.qrcode || apiData?.base64 || null
-        if (qrcode && typeof qrcode === 'string' && !qrcode.startsWith('data:image')) {
-          qrcode = `data:image/png;base64,${qrcode}`
-        }
+        qrcode = extractQrCode(apiData)
         status = apiData?.instance?.state || apiData?.state || 'connecting'
       }
 
@@ -185,7 +197,11 @@ Deno.serve(async (req: Request) => {
       })
       if (stateRes.ok) {
         const stateData = stateRes.parsedBody
-        const state = stateData?.instance?.state || stateData?.state
+        const state =
+          stateData?.instance?.state ||
+          stateData?.state ||
+          stateData?.stateConnection ||
+          'connecting'
         const phone = stateData?.instance?.owner || stateData?.owner || stateData?.number
 
         const updateData: any = {
@@ -193,6 +209,7 @@ Deno.serve(async (req: Request) => {
           last_connection: state === 'open' ? new Date().toISOString() : undefined,
         }
         if (phone) updateData.phone = phone
+        if (state === 'open') updateData.qrcode = null
 
         const { data: updated } = await supabase
           .from('whatsapp_instances')
