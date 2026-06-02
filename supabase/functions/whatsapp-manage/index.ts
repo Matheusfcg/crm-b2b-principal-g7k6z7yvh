@@ -115,12 +115,12 @@ Deno.serve(async (req: Request) => {
       if (!validationRes.ok) {
         return new Response(
           JSON.stringify({
-            error: `Pre-flight authentication validation failed. Uazapi returned ${validationRes.status}`,
+            error: `Pre-flight authentication validation failed. Provider returned status ${validationRes.status}.`,
             details: validationRes.parsedBody,
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: validationRes.status === 401 ? 401 : 400,
+            status: validationRes.status === 401 ? 401 : validationRes.status === 404 ? 404 : 400,
           },
         )
       }
@@ -283,6 +283,17 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
+        } else if (chatsRes.status === 404 || chatsRes.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: `Erro de sincronização. O provedor retornou status ${chatsRes.status}`,
+              details: chatsRes.parsedBody,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: chatsRes.status,
+            },
+          )
         }
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -294,18 +305,43 @@ Deno.serve(async (req: Request) => {
         })
       }
     } else if (action === 'send') {
-      const { number, text } = body
-      if (!number || !text) {
-        return new Response(JSON.stringify({ error: 'Número e texto são obrigatórios' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        })
+      const { number, text, media, mediatype, fileName, caption } = body
+      if (!number || (!text && !media)) {
+        return new Response(
+          JSON.stringify({ error: 'Número e texto (ou mídia) são obrigatórios' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          },
+        )
       }
       try {
-        const sendRes = await fetchUazapi(`${uazapiUrl}/message/sendText/${instanceName}`, {
-          method: 'POST',
-          body: JSON.stringify({ number, text, delay: 1000 }),
-        })
+        let sendRes
+        if (media) {
+          sendRes = await fetchUazapi(`${uazapiUrl}/message/sendMedia/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify({
+              number,
+              mediaMessage: {
+                mediatype: mediatype || 'document',
+                fileName: fileName || 'file',
+                caption: caption || text || '',
+                media: media,
+              },
+              options: { delay: 1000 },
+            }),
+          })
+        } else {
+          sendRes = await fetchUazapi(`${uazapiUrl}/message/sendText/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify({
+              number,
+              text,
+              options: { delay: 1000 },
+            }),
+          })
+        }
+
         if (!sendRes.ok) {
           return new Response(
             JSON.stringify({
@@ -314,7 +350,7 @@ Deno.serve(async (req: Request) => {
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 400,
+              status: sendRes.status === 401 ? 401 : sendRes.status === 404 ? 404 : 400,
             },
           )
         }
@@ -329,14 +365,6 @@ Deno.serve(async (req: Request) => {
       }
     } else if (action === 'create-session' || action === 'create') {
       let apiData: any = {}
-
-      const createPayload = {
-        instanceName: instanceName,
-        token: instanceName,
-        qrcode: true,
-        b64: true,
-        integration: 'WHATSAPP-BAILEYS',
-      }
 
       try {
         const stateRes = await fetchUazapi(
@@ -358,31 +386,28 @@ Deno.serve(async (req: Request) => {
           } else {
             apiData = stateData
           }
-        } else {
-          console.warn(
-            `Instance state failed (${stateRes.status}). Attempting to create instance explicitly as part of manual connection flow.`,
+        } else if (stateRes.status === 404) {
+          return new Response(
+            JSON.stringify({
+              error: `Instância não encontrada no provedor. A criação automática não é permitida. Crie a instância manualmente.`,
+              details: stateRes.parsedBody,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 404,
+            },
           )
-
-          const apiRes = await fetchUazapi(`${uazapiUrl}/instance/create`, {
-            method: 'POST',
-            body: JSON.stringify(createPayload),
-          })
-
-          if (!apiRes.ok) {
-            return new Response(
-              JSON.stringify({
-                error: `Falha ao criar instância. A Uazapi retornou o status ${apiRes.status}.`,
-                details: apiRes.parsedBody,
-                payload: createPayload,
-              }),
-              {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: apiRes.status === 401 ? 401 : 400,
-              },
-            )
-          }
-
-          apiData = apiRes.parsedBody
+        } else {
+          return new Response(
+            JSON.stringify({
+              error: `Falha ao obter estado da instância. O provedor retornou status ${stateRes.status}.`,
+              details: stateRes.parsedBody,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: stateRes.status === 401 ? 401 : 400,
+            },
+          )
         }
 
         try {
@@ -517,7 +542,7 @@ Deno.serve(async (req: Request) => {
             JSON.stringify({ error: 'Failed to get state', details: stateRes.parsedBody }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: stateRes.status,
+              status: stateRes.status === 401 ? 401 : stateRes.status === 404 ? 404 : 400,
             },
           )
         }
@@ -529,8 +554,15 @@ Deno.serve(async (req: Request) => {
       }
     } else if (action === 'logout' || action === 'disconnect') {
       try {
-        await fetchUazapi(`${uazapiUrl}/instance/logout/${instanceName}`, { method: 'DELETE' })
-        // Intentionally not calling /instance/delete so it can be reused later.
+        const logoutRes = await fetchUazapi(`${uazapiUrl}/instance/logout/${instanceName}`, {
+          method: 'DELETE',
+        })
+        if (!logoutRes.ok && logoutRes.status === 401) {
+          return new Response(
+            JSON.stringify({ error: `Unauthorized`, details: logoutRes.parsedBody }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 },
+          )
+        }
       } catch (err: any) {
         console.error('Erro ao deletar instancia:', err)
       }
