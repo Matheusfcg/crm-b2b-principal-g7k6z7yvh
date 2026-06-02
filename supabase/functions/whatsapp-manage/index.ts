@@ -70,7 +70,116 @@ Deno.serve(async (req: Request) => {
       GlobalApiKey: uazapiKey,
     }
 
-    if (action === 'sync') {
+    const maskToken = (token: string) => {
+      if (!token) return ''
+      if (token.length <= 8) return '***'
+      return `${token.substring(0, 4)}...${token.substring(token.length - 4)}`
+    }
+
+    if (action === 'diagnostic') {
+      const maskedToken = maskToken(uazapiKey)
+      const diagnosticLogs: any[] = []
+
+      const logDiagnostic = (
+        step: string,
+        url: string,
+        headers: any,
+        status: number,
+        body: any,
+      ) => {
+        const safeHeaders = { ...headers }
+        if (safeHeaders.apikey) safeHeaders.apikey = maskedToken
+        if (safeHeaders.Authorization) safeHeaders.Authorization = `Bearer ${maskedToken}`
+        if (safeHeaders['admin-token']) safeHeaders['admin-token'] = maskedToken
+        if (safeHeaders.GlobalApiKey) safeHeaders.GlobalApiKey = maskedToken
+
+        const logEntry = {
+          step,
+          url,
+          headers: safeHeaders,
+          status,
+          body,
+        }
+        console.log(`[Diagnostic] ${step}:`, JSON.stringify(logEntry, null, 2))
+        diagnosticLogs.push(logEntry)
+      }
+
+      const headerConfigurations = [
+        {
+          name: 'Bearer',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${uazapiKey}` },
+        },
+        { name: 'apikey', headers: { 'Content-Type': 'application/json', apikey: uazapiKey } },
+        {
+          name: 'admin-token',
+          headers: { 'Content-Type': 'application/json', 'admin-token': uazapiKey },
+        },
+        {
+          name: 'GlobalApiKey',
+          headers: { 'Content-Type': 'application/json', GlobalApiKey: uazapiKey },
+        },
+        { name: 'All Combined', headers: apiHeaders },
+      ]
+
+      for (const config of headerConfigurations) {
+        try {
+          const fetchUrl = `${uazapiUrl}/instance/fetchInstances`
+          const res = await fetch(fetchUrl, { headers: config.headers })
+          const text = await res.text()
+          let jsonBody = text
+          try {
+            jsonBody = JSON.parse(text)
+          } catch (e) {}
+          logDiagnostic(
+            `Fetch Instances (${config.name})`,
+            fetchUrl,
+            config.headers,
+            res.status,
+            jsonBody,
+          )
+        } catch (err: any) {
+          logDiagnostic(
+            `Fetch Instances (${config.name}) - ERROR`,
+            `${uazapiUrl}/instance/fetchInstances`,
+            config.headers,
+            500,
+            err.message,
+          )
+        }
+      }
+
+      try {
+        const fetchUrl = `${uazapiUrl}/instance/connectionState/test`
+        const res = await fetch(fetchUrl, { headers: apiHeaders })
+        const text = await res.text()
+        let jsonBody = text
+        try {
+          jsonBody = JSON.parse(text)
+        } catch (e) {}
+        logDiagnostic(`Connection State (test)`, fetchUrl, apiHeaders, res.status, jsonBody)
+      } catch (err: any) {
+        logDiagnostic(
+          `Connection State (test) - ERROR`,
+          `${uazapiUrl}/instance/connectionState/test`,
+          apiHeaders,
+          500,
+          err.message,
+        )
+      }
+
+      const planNotes =
+        'Uazapi Free Plan: Programmatic instance creation (/instance/create) might be restricted. If all tests return 401/403, the token might be invalid, or the free tier only allows dashboard creation. Verify endpoint path for the Free plan.'
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Diagnostic completed',
+          notes: planNotes,
+          logs: diagnosticLogs,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    } else if (action === 'sync') {
       try {
         const chatsRes = await fetch(`${uazapiUrl}/chat/findChats/${instanceName}`, {
           headers: apiHeaders,
