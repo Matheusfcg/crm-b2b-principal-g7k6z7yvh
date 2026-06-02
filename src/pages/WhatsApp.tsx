@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { ConnectionStatus } from '@/components/whatsapp/ConnectionStatus'
-import { ChatInterface } from '@/components/whatsapp/ChatInterface'
 
 export default function WhatsApp() {
   const { user } = useAuth()
@@ -54,10 +53,21 @@ export default function WhatsApp() {
   }, [user])
 
   const checkStatus = async () => {
-    if (!instance || instance.status !== 'open') return
+    if (!instance) return
     try {
-      await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'get-status' },
+      await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'status' },
+      })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const checkConnect = async () => {
+    if (!instance) return
+    try {
+      await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'connect' },
       })
     } catch (e) {
       console.error(e)
@@ -68,7 +78,8 @@ export default function WhatsApp() {
     let interval: ReturnType<typeof setInterval>
     if (instance?.status === 'connecting') {
       interval = setInterval(() => {
-        fetchInstance()
+        checkStatus()
+        checkConnect()
       }, 5000)
     } else if (instance?.status === 'open') {
       checkStatus()
@@ -81,21 +92,11 @@ export default function WhatsApp() {
     }
   }, [instance?.status, user])
 
-  useEffect(() => {
-    if (instance?.status === 'open' && !instance?.synced) {
-      supabase.functions
-        .invoke('whatsapp-manage', {
-          body: { action: 'sync' },
-        })
-        .catch(console.error)
-    }
-  }, [instance?.status])
-
   const handleConnect = async () => {
     setActionLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'create-session' },
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'create' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) {
@@ -115,8 +116,8 @@ export default function WhatsApp() {
   const handleDisconnect = async () => {
     setActionLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'logout' },
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'delete' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) throw new Error(data.error)
@@ -137,8 +138,6 @@ export default function WhatsApp() {
     )
   }
 
-  const isConnected = instance?.status === 'open'
-
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-3 mb-4">
@@ -147,22 +146,16 @@ export default function WhatsApp() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp Integration</h1>
-          <p className="text-slate-500 text-sm">
-            Sincronize mensagens e converse com seus leads diretamente pelo CRM.
-          </p>
+          <p className="text-slate-500 text-sm">Vincule seu WhatsApp para futuras automações.</p>
         </div>
       </div>
 
-      {isConnected ? (
-        <ChatInterface instance={instance} onDisconnect={handleDisconnect} />
-      ) : (
-        <ConnectionStatus
-          instance={instance}
-          actionLoading={actionLoading}
-          onConnect={handleConnect}
-          onDisconnect={handleDisconnect}
-        />
-      )}
+      <ConnectionStatus
+        instance={instance}
+        actionLoading={actionLoading}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+      />
     </div>
   )
 }

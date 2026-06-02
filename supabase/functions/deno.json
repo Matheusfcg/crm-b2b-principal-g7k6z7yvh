@@ -1,6 +1,3 @@
 {
-  "_versions": {
-    "whatsapp-webhook": 35,
-    "whatsapp-manage": 45
-  }
+  "_versions": {}
 }
