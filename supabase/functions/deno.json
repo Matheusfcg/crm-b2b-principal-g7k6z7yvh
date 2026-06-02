@@ -1,6 +1,6 @@
 {
   "_versions": {
-    "whatsapp-webhook": 20,
-    "whatsapp-manage": 25
+    "whatsapp-webhook": 24,
+    "whatsapp-manage": 30
   }
 }

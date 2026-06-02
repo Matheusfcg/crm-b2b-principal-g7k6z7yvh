@@ -52,9 +52,9 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const rawUazapiUrl = Deno.env.get('UAZAPI_SERVER_URL') || 'https://free.uazapi.com'
+    const rawUazapiUrl = Deno.env.get('UAZAPI_URL') || 'https://free.uazapi.com'
     const uazapiKey =
-      Deno.env.get('UAZAPI_ADMIN_TOKEN') || 'ZaW1qwTEkuq7Ub1cBUuyMiK5bNSu3nnMQ9lh7klElc2clSRV8t'
+      Deno.env.get('UAZAPI_TOKEN') || 'ZaW1qwTEkuq7Ub1cBUuyMiK5bNSu3nnMQ9lh7klElc2clSRV8t'
 
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
     const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').trim().replace(/\/$/, '')
