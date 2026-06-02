@@ -65,7 +65,6 @@ Deno.serve(async (req: Request) => {
     const apiHeaders = {
       'Content-Type': 'application/json',
       apikey: uazapiKey,
-      Authorization: `Bearer ${uazapiKey}`,
       'admin-token': uazapiKey,
       GlobalApiKey: uazapiKey,
     }
@@ -89,7 +88,6 @@ Deno.serve(async (req: Request) => {
       ) => {
         const safeHeaders = { ...headers }
         if (safeHeaders.apikey) safeHeaders.apikey = maskedToken
-        if (safeHeaders.Authorization) safeHeaders.Authorization = `Bearer ${maskedToken}`
         if (safeHeaders['admin-token']) safeHeaders['admin-token'] = maskedToken
         if (safeHeaders.GlobalApiKey) safeHeaders.GlobalApiKey = maskedToken
 
@@ -105,10 +103,6 @@ Deno.serve(async (req: Request) => {
       }
 
       const headerConfigurations = [
-        {
-          name: 'Bearer',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${uazapiKey}` },
-        },
         { name: 'apikey', headers: { 'Content-Type': 'application/json', apikey: uazapiKey } },
         {
           name: 'admin-token',
