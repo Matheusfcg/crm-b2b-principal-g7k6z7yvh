@@ -75,9 +75,9 @@ Deno.serve(async (req: Request) => {
       const method = options.method || 'GET'
 
       console.log(`\n=== UAZAPI REQUEST ===`)
-      console.log(`URL called: ${url}`)
-      console.log(`HTTP Method: ${method}`)
-      console.log(`Request Payload: ${options.body || 'None'}`)
+      console.log(`URL: ${url}`)
+      console.log(`METHOD: ${method}`)
+      console.log(`PAYLOAD: ${options.body || 'None'}`)
 
       const res = await fetch(url, { ...options, headers: apiHeaders })
 
@@ -90,11 +90,18 @@ Deno.serve(async (req: Request) => {
       } catch (e) {}
 
       console.log(`\n=== UAZAPI RESPONSE ===`)
-      console.log(`HTTP Status returned: ${status}`)
+      console.log(`URL: ${url}`)
+      console.log(`HTTP Status: ${status}`)
       console.log(
-        `Response Body: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
+        `RESPONSE: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
       )
       console.log(`=======================\n`)
+
+      if (status === 404) {
+        console.error(
+          `[404 NOT FOUND] The endpoint ${method} ${url} returned 404. Check if the path or instanceName is correct.`,
+        )
+      }
 
       return { ok: res.ok, status, text, parsedBody }
     }
@@ -120,8 +127,26 @@ Deno.serve(async (req: Request) => {
     if (action === 'create') {
       const createRes = await fetchUazapi('/instance/create', {
         method: 'POST',
-        body: JSON.stringify({ instanceName }),
+        body: JSON.stringify({ instanceName, qrcode: true }),
       })
+
+      if (
+        !createRes.ok &&
+        createRes.status !== 400 &&
+        createRes.status !== 403 &&
+        createRes.status !== 409
+      ) {
+        return new Response(
+          JSON.stringify({
+            error: 'Failed to create instance in Uazapi',
+            details: createRes.parsedBody,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 502,
+          },
+        )
+      }
 
       let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
@@ -150,21 +175,29 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       let resultInstance
+      let dbError
+
       if (existing) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('whatsapp_instances')
           .update(instanceData)
           .eq('id', existing.id)
           .select()
           .single()
         resultInstance = data
+        dbError = error
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('whatsapp_instances')
-          .insert(instanceData)
+          .upsert(instanceData, { onConflict: 'instance_name' })
           .select()
           .single()
         resultInstance = data
+        dbError = error
+      }
+
+      if (dbError) {
+        console.error('DB Error updating instance:', dbError)
       }
 
       return new Response(JSON.stringify({ success: true, instance: resultInstance }), {

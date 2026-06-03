@@ -11,6 +11,11 @@ export default function WhatsApp() {
   const [instance, setInstance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+
+  const addLog = (msg: string) => {
+    setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
+  }
 
   const fetchInstance = async () => {
     if (!user) return
@@ -55,32 +60,52 @@ export default function WhatsApp() {
   const checkStatus = async () => {
     if (!instance) return
     try {
+      addLog('Verificando status (status)...')
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'status' },
       })
       if (error) {
         console.error('Failed to check status:', error)
-      } else if (data?.success && data?.instance) {
-        setInstance(data.instance)
+        addLog(`Erro ao verificar status: ${error.message}`)
+      } else {
+        if (data?.error) {
+          addLog(`Resposta API erro (status): ${data.error}`)
+        } else {
+          addLog(`Status atualizado: ${data?.instance?.status}`)
+        }
+        if (data?.instance) {
+          setInstance(data.instance)
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      addLog(`Exceção (status): ${e.message}`)
     }
   }
 
   const checkConnect = async () => {
     if (!instance) return
     try {
+      addLog('Verificando conexão/QR (connect)...')
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'connect' },
       })
       if (error) {
         console.error('Failed to check connect:', error)
-      } else if (data?.success && data?.instance) {
-        setInstance(data.instance)
+        addLog(`Erro ao verificar connect: ${error.message}`)
+      } else {
+        if (data?.error) {
+          addLog(`Resposta API erro (connect): ${data.error}`)
+        } else {
+          addLog(`Conexão atualizada: ${data?.instance?.status}`)
+        }
+        if (data?.instance) {
+          setInstance(data.instance)
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      addLog(`Exceção (connect): ${e.message}`)
     }
   }
 
@@ -104,6 +129,7 @@ export default function WhatsApp() {
 
   const handleConnect = async () => {
     setActionLoading(true)
+    addLog('Iniciando criação de instância...')
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'create' },
@@ -114,9 +140,11 @@ export default function WhatsApp() {
           typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
         throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
       }
+      addLog('Instância solicitada. Aguarde o QR Code.')
       toast.success('Instância solicitada. Aguarde o QR Code.')
       await fetchInstance()
     } catch (error: any) {
+      addLog(`Erro ao conectar: ${error.message}`)
       toast.error(`Erro ao conectar: ${error.message}`)
     } finally {
       setActionLoading(false)
@@ -125,15 +153,18 @@ export default function WhatsApp() {
 
   const handleDisconnect = async () => {
     setActionLoading(true)
+    addLog('Iniciando desconexão...')
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'delete' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) throw new Error(data.error)
+      addLog('Instância desconectada com sucesso.')
       toast.success('WhatsApp desconectado.')
       await fetchInstance()
     } catch (error: any) {
+      addLog(`Erro ao desconectar: ${error.message}`)
       toast.error(`Erro ao desconectar: ${error.message}`)
     } finally {
       setActionLoading(false)
@@ -166,6 +197,19 @@ export default function WhatsApp() {
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
       />
+
+      {logs.length > 0 && (
+        <div className="mt-8 bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400 overflow-hidden">
+          <h3 className="text-slate-100 font-bold mb-2">Logs de Depuração da API</h3>
+          <div className="space-y-1">
+            {logs.map((log, i) => (
+              <div key={i} className="break-all">
+                {log}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
