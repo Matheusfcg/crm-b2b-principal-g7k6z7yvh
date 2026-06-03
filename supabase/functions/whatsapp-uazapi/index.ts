@@ -53,10 +53,11 @@ Deno.serve(async (req: Request) => {
     const action = body.action
 
     const rawUazapiUrl =
+      Deno.env.get('UAZAPI_URL') ||
       Deno.env.get('UAZAPI_BASE_URL') ||
       Deno.env.get('UAZAPI_SERVER_URL') ||
       'https://free.uazapi.com'
-    const uazapiKey = Deno.env.get('UAZAPI_API_KEY') || Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
+    const uazapiKey = Deno.env.get('UAZAPI_ADMIN_TOKEN') || Deno.env.get('UAZAPI_API_KEY') || ''
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
     console.log(`[DB_CHECK] Fetching existing instance for user ${user.id}...`)

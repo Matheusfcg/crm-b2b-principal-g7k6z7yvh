@@ -76,15 +76,15 @@ export function ConnectionStatus({
             </div>
           ) : isNotFound ? (
             <div className="flex flex-col items-center text-center space-y-4">
-              <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
-                <WifiOff className="h-8 w-8 text-red-500" />
+              <div className="h-16 w-16 bg-orange-100 rounded-full flex items-center justify-center mb-2">
+                <WifiOff className="h-8 w-8 text-orange-500" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-red-600">Instance Not Found</h3>
+                <h3 className="text-xl font-semibold text-orange-600">Instância Não Encontrada</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  The instance was not found on the server. Click Re-sync Instance to recreate and
-                  sync it.
-                </p>{' '}
+                  A instância não foi encontrada ou foi desconectada. Clique em "Conectar WhatsApp"
+                  para inicializar uma nova.
+                </p>
               </div>
             </div>
           ) : isConnecting ? (
@@ -123,19 +123,6 @@ export function ConnectionStatus({
                 <LogOut className="h-4 w-4" />
               )}
               Desconectar Conta
-            </Button>
-          ) : isNotFound ? (
-            <Button
-              onClick={onConnect}
-              disabled={actionLoading}
-              className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Re-sync Instance
             </Button>
           ) : (
             <Button

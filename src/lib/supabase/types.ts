@@ -752,6 +752,7 @@ export const Constants = {
 //     USING: (user_id = auth.uid())
 //   Policy "whatsapp_instances_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (user_id = auth.uid())
+//     WITH CHECK: (user_id = auth.uid())
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)
@@ -864,3 +865,4 @@ export const Constants = {
 //   CREATE INDEX messages_timestamp_idx ON public.messages USING btree ("timestamp" DESC)
 // Table: whatsapp_instances
 //   CREATE UNIQUE INDEX whatsapp_instances_instance_name_key ON public.whatsapp_instances USING btree (instance_name)
+//   CREATE UNIQUE INDEX whatsapp_instances_user_id_key ON public.whatsapp_instances USING btree (user_id)

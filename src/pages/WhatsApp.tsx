@@ -12,7 +12,6 @@ export default function WhatsApp() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
-  const autoProvisioning = useRef(false)
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
@@ -31,15 +30,8 @@ export default function WhatsApp() {
 
       if (data) {
         setInstance(data)
-        if (data.status === 'not_found' && !autoProvisioning.current) {
-          autoProvisioning.current = true
-          handleCheckOrCreate(true)
-        }
       } else {
-        if (!autoProvisioning.current) {
-          autoProvisioning.current = true
-          handleCheckOrCreate(true)
-        }
+        setInstance(null)
       }
     } catch (e) {
       console.error('Error fetching instance:', e)
@@ -117,17 +109,14 @@ export default function WhatsApp() {
       interval = setInterval(() => {
         checkStatus()
       }, 30000)
-    } else if (instance?.status === 'not_found' && !autoProvisioning.current) {
-      autoProvisioning.current = true
-      handleCheckOrCreate(true)
     }
     return () => {
       if (interval) clearInterval(interval)
     }
   }, [instance?.status, user])
 
-  const handleCheckOrCreate = async (isAuto = false) => {
-    if (!isAuto) setActionLoading(true)
+  const handleCheckOrCreate = async () => {
+    setActionLoading(true)
     addLog(`CHECK OR CREATE INSTANCE...`)
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
@@ -140,26 +129,17 @@ export default function WhatsApp() {
         throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
       }
 
-      setTimeout(() => {
-        autoProvisioning.current = false
-      }, 5000)
-
-      if (!isAuto) {
-        addLog('Instância sincronizada/criada com sucesso.')
-        toast.success('Instância sincronizada. Aguarde o QR Code se necessário.')
-      }
+      addLog('Instância inicializada com sucesso.')
+      toast.success('Instância inicializada. Aguarde o QR Code se necessário.')
 
       if (data?.instance) {
         setInstance(data.instance)
       }
     } catch (error: any) {
-      addLog(`Erro ao sincronizar: ${error.message}`)
-      if (!isAuto) {
-        toast.error(`Erro ao sincronizar: ${error.message}`)
-      }
-      autoProvisioning.current = false
+      addLog(`Erro ao inicializar: ${error.message}`)
+      toast.error(`Erro ao inicializar: ${error.message}`)
     } finally {
-      if (!isAuto) setActionLoading(false)
+      setActionLoading(false)
     }
   }
 
@@ -183,7 +163,7 @@ export default function WhatsApp() {
     }
   }
 
-  const isInitializing = loading || (autoProvisioning.current && !instance)
+  const isInitializing = loading
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -201,15 +181,15 @@ export default function WhatsApp() {
         <div className="flex flex-col items-center justify-center py-20 space-y-4 bg-white rounded-xl border border-slate-200 shadow-sm">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
           <h2 className="text-xl font-medium text-slate-700 animate-pulse">
-            Initializing Instance...
+            Carregando Instância...
           </h2>
-          <p className="text-sm text-slate-500">Preparing your secure connection environment.</p>
+          <p className="text-sm text-slate-500">Verificando o ambiente de conexão.</p>
         </div>
       ) : (
         <ConnectionStatus
           instance={instance}
           actionLoading={actionLoading}
-          onConnect={() => handleCheckOrCreate(false)}
+          onConnect={handleCheckOrCreate}
           onDisconnect={handleDisconnect}
         />
       )}
