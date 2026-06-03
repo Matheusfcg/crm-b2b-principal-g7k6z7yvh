@@ -142,6 +142,14 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({ instanceName, qrcode: true }),
       })
 
+      console.log(
+        `Instance ID from Uazapi: ${createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || 'N/A'}`,
+      )
+      console.log(
+        `Instance Name from Uazapi: ${createRes.parsedBody?.instance?.instanceName || createRes.parsedBody?.instanceName || instanceName}`,
+      )
+      console.log(`Raw JSON from Uazapi: ${JSON.stringify(createRes.parsedBody)}`)
+
       if (
         !createRes.ok &&
         createRes.status !== 400 &&
@@ -165,6 +173,13 @@ Deno.serve(async (req: Request) => {
         createRes.parsedBody?.id ||
         createRes.parsedBody?.instance?.instanceName ||
         createRes.parsedBody?.instanceName
+      const returnedToken =
+        createRes.parsedBody?.hash?.apikey ||
+        createRes.parsedBody?.token ||
+        createRes.parsedBody?.apikey ||
+        null
+      const externalId = createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || null
+
       if (returnedId && typeof returnedId === 'string') {
         instanceName = returnedId
       }
@@ -172,13 +187,19 @@ Deno.serve(async (req: Request) => {
       let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
 
+      console.log(`QR Code Received Confirmation (init): ${qrcode ? 'YES' : 'NO'}`)
+
       if (!qrcode) {
         console.log('GET QRCODE:', instanceName)
         const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+
+        console.log(`Raw JSON from connect: ${JSON.stringify(connectRes.parsedBody)}`)
+
         if (connectRes.ok) {
           const apiData = connectRes.parsedBody
           qrcode = extractQrCode(apiData)
           status = apiData?.instance?.state || apiData?.state || 'connecting'
+          console.log(`QR Code Received Confirmation (connect): ${qrcode ? 'YES' : 'NO'}`)
         }
       }
 
@@ -188,6 +209,8 @@ Deno.serve(async (req: Request) => {
         status: status,
         qrcode: qrcode,
         last_connection: status === 'open' ? new Date().toISOString() : null,
+        instance_token: returnedToken,
+        instance_external_id: externalId,
       }
 
       const existing = existingInstance
@@ -224,6 +247,7 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'connect') {
       console.log('GET QRCODE:', instanceName)
       const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+      console.log(`Raw JSON from connect: ${JSON.stringify(connectRes.parsedBody)}`)
       let qrcode = null
       let status = 'connecting'
 
@@ -231,6 +255,7 @@ Deno.serve(async (req: Request) => {
         const apiData = connectRes.parsedBody
         qrcode = extractQrCode(apiData)
         status = apiData?.instance?.state || apiData?.state || 'connecting'
+        console.log(`QR Code Received Confirmation: ${qrcode ? 'YES' : 'NO'}`)
       } else if (connectRes.status === 404) {
         status = 'disconnected'
       }
@@ -285,33 +310,60 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify({ instanceName, qrcode: true }),
           })
 
+          console.log(
+            `Instance ID from Uazapi: ${createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || 'N/A'}`,
+          )
+          console.log(
+            `Instance Name from Uazapi: ${createRes.parsedBody?.instance?.instanceName || createRes.parsedBody?.instanceName || instanceName}`,
+          )
+          console.log(`Raw JSON from Uazapi: ${JSON.stringify(createRes.parsedBody)}`)
+
           if (createRes.ok) {
             const returnedId =
               createRes.parsedBody?.instance?.id ||
               createRes.parsedBody?.id ||
               createRes.parsedBody?.instance?.instanceName ||
               createRes.parsedBody?.instanceName
+            const returnedToken =
+              createRes.parsedBody?.hash?.apikey ||
+              createRes.parsedBody?.token ||
+              createRes.parsedBody?.apikey ||
+              null
+            const externalId =
+              createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || null
+
             if (returnedId && typeof returnedId === 'string') {
               instanceName = returnedId
             }
             let qrcode = extractQrCode(createRes.parsedBody)
             let status = 'connecting'
+            console.log(`QR Code Received Confirmation (re-init): ${qrcode ? 'YES' : 'NO'}`)
 
             if (!qrcode) {
               console.log('GET QRCODE:', instanceName)
               const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
                 method: 'GET',
               })
+              console.log(
+                `Raw JSON from connect (re-init): ${JSON.stringify(connectRes.parsedBody)}`,
+              )
               if (connectRes.ok) {
                 const apiData = connectRes.parsedBody
                 qrcode = extractQrCode(apiData)
                 status = apiData?.instance?.state || apiData?.state || 'connecting'
+                console.log(`QR Code Received Confirmation (re-connect): ${qrcode ? 'YES' : 'NO'}`)
               }
             }
 
             const { data: updated } = await supabase
               .from('whatsapp_instances')
-              .update({ status, qrcode, instance_name: instanceName })
+              .update({
+                status,
+                qrcode,
+                instance_name: instanceName,
+                instance_token: returnedToken,
+                instance_external_id: externalId,
+              })
               .eq('user_id', user.id)
               .select()
               .single()

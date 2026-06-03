@@ -352,7 +352,9 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          instance_external_id: string | null
           instance_name: string
+          instance_token: string | null
           last_connection: string | null
           phone: string | null
           qrcode: string | null
@@ -362,7 +364,9 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          instance_external_id?: string | null
           instance_name: string
+          instance_token?: string | null
           last_connection?: string | null
           phone?: string | null
           qrcode?: string | null
@@ -372,7 +376,9 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          instance_external_id?: string | null
           instance_name?: string
+          instance_token?: string | null
           last_connection?: string | null
           phone?: string | null
           qrcode?: string | null
@@ -626,6 +632,8 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 //   last_connection: timestamp with time zone (nullable)
 //   phone: text (nullable)
+//   instance_token: text (nullable)
+//   instance_external_id: text (nullable)
 
 // --- CONSTRAINTS ---
 // Table: contacts

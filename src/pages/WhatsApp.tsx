@@ -60,7 +60,7 @@ export default function WhatsApp() {
   const checkStatus = async () => {
     if (!instance) return
     try {
-      addLog('Verificando status (status)...')
+      addLog(`CHECK STATUS: ${instance.instance_name}`)
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'status' },
       })
@@ -86,7 +86,7 @@ export default function WhatsApp() {
   const checkConnect = async () => {
     if (!instance) return
     try {
-      addLog('Verificando conexão/QR (connect)...')
+      addLog(`GET QRCODE: ${instance.instance_name}`)
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'connect' },
       })
@@ -129,7 +129,7 @@ export default function WhatsApp() {
 
   const handleConnect = async () => {
     setActionLoading(true)
-    addLog('Iniciando criação de instância...')
+    addLog(`CREATE INSTANCE: ${instance?.instance_name || 'nova instância'}`)
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'create' },
