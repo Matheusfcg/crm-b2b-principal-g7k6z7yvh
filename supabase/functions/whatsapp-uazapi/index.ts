@@ -56,7 +56,6 @@ Deno.serve(async (req: Request) => {
     const uazapiKey = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
 
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
-    let instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
 
     const { data: existingInstance } = await supabase
       .from('whatsapp_instances')
@@ -64,9 +63,8 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (existingInstance && existingInstance.instance_name) {
-      instanceName = existingInstance.instance_name
-    }
+    let instanceName =
+      existingInstance?.instance_name || `crm_user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
 
     console.log(`\n=== PROCESSING ACTION ===`)
     console.log(`Action: ${action}`)
@@ -136,6 +134,13 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'create') {
       console.log('CREATE INSTANCE:', instanceName)
+      console.log(`Checking if instance exists in Uazapi first...`)
+
+      if (existingInstance?.status === 'not_found') {
+        console.log('Cleaning up not_found instance before recreating...')
+        await fetchUazapi(`/instance/logout/${instanceName}`, { method: 'DELETE' }).catch(() => {})
+      }
+
       const createRes = await fetchUazapi('/instance/init', {
         method: 'POST',
         body: JSON.stringify({ instanceName, qrcode: true }),
@@ -147,6 +152,7 @@ Deno.serve(async (req: Request) => {
         createRes.status !== 403 &&
         createRes.status !== 409
       ) {
+        console.error('Failed to create instance, Uazapi response:', createRes.parsedBody)
         return new Response(
           JSON.stringify({
             error: 'Failed to create instance in Uazapi',
@@ -175,6 +181,7 @@ Deno.serve(async (req: Request) => {
         instanceName = returnedId
       }
 
+      console.log('CHECK STATUS:', instanceName)
       let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
 
@@ -187,6 +194,8 @@ Deno.serve(async (req: Request) => {
           qrcode = extractQrCode(apiData)
           status = apiData?.instance?.state || apiData?.state || 'connecting'
         }
+      } else {
+        console.log('GET QRCODE:', instanceName, '(Retrieved from init payload)')
       }
 
       const instanceData = {
@@ -195,8 +204,8 @@ Deno.serve(async (req: Request) => {
         status: status,
         qrcode: qrcode,
         last_connection: status === 'open' ? new Date().toISOString() : null,
-        instance_token: returnedToken,
-        instance_external_id: externalId,
+        instance_token: returnedToken || existingInstance?.instance_token,
+        instance_external_id: externalId || existingInstance?.instance_external_id,
       }
 
       let resultInstance

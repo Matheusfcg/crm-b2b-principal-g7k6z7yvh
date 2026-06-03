@@ -28,6 +28,10 @@ export default function WhatsApp() {
 
     if (data) {
       setInstance(data)
+      if (data.status === 'not_found' && !autoCreated.current) {
+        autoCreated.current = true
+        handleConnect(true)
+      }
     } else {
       if (!autoCreated.current) {
         autoCreated.current = true
@@ -129,6 +133,9 @@ export default function WhatsApp() {
       interval = setInterval(() => {
         checkStatus()
       }, 30000)
+    } else if (instance?.status === 'not_found' && !autoCreated.current) {
+      autoCreated.current = true
+      handleConnect(true)
     }
     return () => {
       if (interval) clearInterval(interval)
@@ -148,11 +155,21 @@ export default function WhatsApp() {
           typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
         throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
       }
+
+      setTimeout(() => {
+        autoCreated.current = false
+      }, 10000)
+
       if (!isAuto) {
         addLog('Instância solicitada. Aguarde o QR Code.')
         toast.success('Instância solicitada. Aguarde o QR Code.')
       }
-      await fetchInstance()
+
+      if (data?.instance) {
+        setInstance(data.instance)
+      } else {
+        await fetchInstance()
+      }
     } catch (error: any) {
       addLog(`Erro ao conectar: ${error.message}`)
       if (!isAuto) {
