@@ -80,11 +80,11 @@ export function ConnectionStatus({
                 <WifiOff className="h-8 w-8 text-red-500" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-red-600">Instância Não Encontrada</h3>
+                <h3 className="text-xl font-semibold text-red-600">Instance Not Found</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  A instância não foi localizada no servidor. Clique em Re-inicializar para
-                  recriá-la e sincronizar.
-                </p>
+                  The instance was not found on the server. Click Re-sync Instance to recreate and
+                  sync it.
+                </p>{' '}
               </div>
             </div>
           ) : isConnecting ? (
@@ -135,7 +135,7 @@ export function ConnectionStatus({
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              Re-inicializar
+              Re-sync Instance
             </Button>
           ) : (
             <Button

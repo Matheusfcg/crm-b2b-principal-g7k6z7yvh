@@ -12,37 +12,44 @@ export default function WhatsApp() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
-  const autoCreated = useRef(false)
+  const autoProvisioning = useRef(false)
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
   }
 
-  const fetchInstance = async () => {
+  const fetchAndProvisionInstance = async () => {
     if (!user) return
-    const { data } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    setLoading(true)
 
-    if (data) {
-      setInstance(data)
-      if (data.status === 'not_found' && !autoCreated.current) {
-        autoCreated.current = true
-        handleConnect(true)
+    try {
+      const { data } = await supabase
+        .from('whatsapp_instances')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (data) {
+        setInstance(data)
+        if (data.status === 'not_found' && !autoProvisioning.current) {
+          autoProvisioning.current = true
+          handleCheckOrCreate(true)
+        }
+      } else {
+        if (!autoProvisioning.current) {
+          autoProvisioning.current = true
+          handleCheckOrCreate(true)
+        }
       }
-    } else {
-      if (!autoCreated.current) {
-        autoCreated.current = true
-        handleConnect(true)
-      }
+    } catch (e) {
+      console.error('Error fetching instance:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
-    fetchInstance()
+    fetchAndProvisionInstance()
 
     if (!user) return
 
@@ -57,7 +64,9 @@ export default function WhatsApp() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          if (payload.new) {
+          if (payload.eventType === 'DELETE') {
+            setInstance(null)
+          } else if (payload.new) {
             setInstance(payload.new)
           }
         },
@@ -72,9 +81,9 @@ export default function WhatsApp() {
   const checkStatus = async () => {
     if (!instance) return
     try {
-      addLog(`CHECK STATUS: ${instance.instance_name}`)
+      addLog(`GET STATUS: ${instance.instance_name}`)
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'status' },
+        body: { action: 'get_status' },
       })
       if (error) {
         console.error('Failed to check status:', error)
@@ -82,6 +91,9 @@ export default function WhatsApp() {
       } else {
         if (data?.error) {
           addLog(`Resposta API erro (status): ${data.error}`)
+          if (data?.code === 'INSTANCE_NOT_FOUND') {
+            setInstance((prev: any) => ({ ...prev, status: 'not_found' }))
+          }
         } else {
           addLog(`Status atualizado: ${data?.instance?.status}`)
         }
@@ -95,59 +107,31 @@ export default function WhatsApp() {
     }
   }
 
-  const checkConnect = async () => {
-    if (!instance) return
-    try {
-      addLog(`GET QRCODE: ${instance.instance_name}`)
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'connect' },
-      })
-      if (error) {
-        console.error('Failed to check connect:', error)
-        addLog(`Erro ao verificar connect: ${error.message}`)
-      } else {
-        if (data?.error) {
-          addLog(`Resposta API erro (connect): ${data.error}`)
-        } else {
-          addLog(`Conexão atualizada: ${data?.instance?.status}`)
-        }
-        if (data?.instance) {
-          setInstance(data.instance)
-        }
-      }
-    } catch (e: any) {
-      console.error(e)
-      addLog(`Exceção (connect): ${e.message}`)
-    }
-  }
-
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
     if (instance?.status === 'connecting') {
       interval = setInterval(() => {
         checkStatus()
-        checkConnect()
       }, 5000)
     } else if (instance?.status === 'open') {
-      checkStatus()
       interval = setInterval(() => {
         checkStatus()
       }, 30000)
-    } else if (instance?.status === 'not_found' && !autoCreated.current) {
-      autoCreated.current = true
-      handleConnect(true)
+    } else if (instance?.status === 'not_found' && !autoProvisioning.current) {
+      autoProvisioning.current = true
+      handleCheckOrCreate(true)
     }
     return () => {
       if (interval) clearInterval(interval)
     }
   }, [instance?.status, user])
 
-  const handleConnect = async (isAuto = false) => {
-    setActionLoading(true)
-    addLog(`CREATE INSTANCE: ${instance?.instance_name || 'nova instância'}`)
+  const handleCheckOrCreate = async (isAuto = false) => {
+    if (!isAuto) setActionLoading(true)
+    addLog(`CHECK OR CREATE INSTANCE...`)
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'create' },
+        body: { action: 'check_or_create' },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) {
@@ -157,26 +141,25 @@ export default function WhatsApp() {
       }
 
       setTimeout(() => {
-        autoCreated.current = false
-      }, 10000)
+        autoProvisioning.current = false
+      }, 5000)
 
       if (!isAuto) {
-        addLog('Instância solicitada. Aguarde o QR Code.')
-        toast.success('Instância solicitada. Aguarde o QR Code.')
+        addLog('Instância sincronizada/criada com sucesso.')
+        toast.success('Instância sincronizada. Aguarde o QR Code se necessário.')
       }
 
       if (data?.instance) {
         setInstance(data.instance)
-      } else {
-        await fetchInstance()
       }
     } catch (error: any) {
-      addLog(`Erro ao conectar: ${error.message}`)
+      addLog(`Erro ao sincronizar: ${error.message}`)
       if (!isAuto) {
-        toast.error(`Erro ao conectar: ${error.message}`)
+        toast.error(`Erro ao sincronizar: ${error.message}`)
       }
+      autoProvisioning.current = false
     } finally {
-      setActionLoading(false)
+      if (!isAuto) setActionLoading(false)
     }
   }
 
@@ -189,9 +172,9 @@ export default function WhatsApp() {
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) throw new Error(data.error)
-      addLog('Instância desconectada com sucesso.')
+      addLog('Instância desconectada e deletada com sucesso.')
       toast.success('WhatsApp desconectado.')
-      await fetchInstance()
+      setInstance(null)
     } catch (error: any) {
       addLog(`Erro ao desconectar: ${error.message}`)
       toast.error(`Erro ao desconectar: ${error.message}`)
@@ -200,13 +183,7 @@ export default function WhatsApp() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto flex justify-center mt-20">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    )
-  }
+  const isInitializing = loading || (autoProvisioning.current && !instance)
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -220,12 +197,22 @@ export default function WhatsApp() {
         </div>
       </div>
 
-      <ConnectionStatus
-        instance={instance}
-        actionLoading={actionLoading}
-        onConnect={() => handleConnect(false)}
-        onDisconnect={handleDisconnect}
-      />
+      {isInitializing ? (
+        <div className="flex flex-col items-center justify-center py-20 space-y-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+          <h2 className="text-xl font-medium text-slate-700 animate-pulse">
+            Initializing Instance...
+          </h2>
+          <p className="text-sm text-slate-500">Preparing your secure connection environment.</p>
+        </div>
+      ) : (
+        <ConnectionStatus
+          instance={instance}
+          actionLoading={actionLoading}
+          onConnect={() => handleCheckOrCreate(false)}
+          onDisconnect={handleDisconnect}
+        />
+      )}
 
       {logs.length > 0 && (
         <div className="mt-8 bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400 overflow-hidden">
