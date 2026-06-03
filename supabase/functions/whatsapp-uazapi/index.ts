@@ -56,7 +56,18 @@ Deno.serve(async (req: Request) => {
     const uazapiKey = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
 
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
-    const instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
+    let instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
+
+    // Fetch existing instance from DB
+    const { data: existingInstance } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (existingInstance && existingInstance.instance_name) {
+      instanceName = existingInstance.instance_name
+    }
 
     console.log(`\n=== PROCESSING ACTION ===`)
     console.log(`Action: ${action}`)
@@ -125,7 +136,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'create') {
-      const createRes = await fetchUazapi('/instance/create', {
+      console.log('CREATE INSTANCE:', instanceName)
+      const createRes = await fetchUazapi('/instance/init', {
         method: 'POST',
         body: JSON.stringify({ instanceName, qrcode: true }),
       })
@@ -148,10 +160,20 @@ Deno.serve(async (req: Request) => {
         )
       }
 
+      const returnedId =
+        createRes.parsedBody?.instance?.id ||
+        createRes.parsedBody?.id ||
+        createRes.parsedBody?.instance?.instanceName ||
+        createRes.parsedBody?.instanceName
+      if (returnedId && typeof returnedId === 'string') {
+        instanceName = returnedId
+      }
+
       let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
 
       if (!qrcode) {
+        console.log('GET QRCODE:', instanceName)
         const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
         if (connectRes.ok) {
           const apiData = connectRes.parsedBody
@@ -168,11 +190,7 @@ Deno.serve(async (req: Request) => {
         last_connection: status === 'open' ? new Date().toISOString() : null,
       }
 
-      const { data: existing } = await supabase
-        .from('whatsapp_instances')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const existing = existingInstance
 
       let resultInstance
       let dbError
@@ -204,6 +222,7 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     } else if (action === 'connect') {
+      console.log('GET QRCODE:', instanceName)
       const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
       let qrcode = null
       let status = 'connecting'
@@ -227,17 +246,18 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     } else if (action === 'status') {
-      const stateRes = await fetchUazapi(`/instance/connectionState/${instanceName}`, {
-        method: 'GET',
-      })
+      console.log('CHECK STATUS:', instanceName)
+      const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, { method: 'GET' })
       if (stateRes.ok) {
         const stateData = stateRes.parsedBody
         const state =
           stateData?.instance?.state ||
           stateData?.state ||
           stateData?.stateConnection ||
+          stateData?.status ||
           'connecting'
-        const phone = stateData?.instance?.owner || stateData?.owner || stateData?.number
+        const phone =
+          stateData?.instance?.owner || stateData?.owner || stateData?.number || stateData?.phone
 
         const updateData: any = {
           status: state,
@@ -257,6 +277,51 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       } else if (stateRes.status === 404) {
+        if (existingInstance) {
+          console.log('Instance not found remotely. Attempting re-initialization...')
+          console.log('CREATE INSTANCE:', instanceName)
+          const createRes = await fetchUazapi('/instance/init', {
+            method: 'POST',
+            body: JSON.stringify({ instanceName, qrcode: true }),
+          })
+
+          if (createRes.ok) {
+            const returnedId =
+              createRes.parsedBody?.instance?.id ||
+              createRes.parsedBody?.id ||
+              createRes.parsedBody?.instance?.instanceName ||
+              createRes.parsedBody?.instanceName
+            if (returnedId && typeof returnedId === 'string') {
+              instanceName = returnedId
+            }
+            let qrcode = extractQrCode(createRes.parsedBody)
+            let status = 'connecting'
+
+            if (!qrcode) {
+              console.log('GET QRCODE:', instanceName)
+              const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+                method: 'GET',
+              })
+              if (connectRes.ok) {
+                const apiData = connectRes.parsedBody
+                qrcode = extractQrCode(apiData)
+                status = apiData?.instance?.state || apiData?.state || 'connecting'
+              }
+            }
+
+            const { data: updated } = await supabase
+              .from('whatsapp_instances')
+              .update({ status, qrcode, instance_name: instanceName })
+              .eq('user_id', user.id)
+              .select()
+              .single()
+
+            return new Response(JSON.stringify({ success: true, instance: updated }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          }
+        }
+
         const { data: updated } = await supabase
           .from('whatsapp_instances')
           .update({ status: 'disconnected', qrcode: null })
