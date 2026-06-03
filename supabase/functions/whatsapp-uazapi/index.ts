@@ -179,6 +179,8 @@ Deno.serve(async (req: Request) => {
         const apiData = connectRes.parsedBody
         qrcode = extractQrCode(apiData)
         status = apiData?.instance?.state || apiData?.state || 'connecting'
+      } else if (connectRes.status === 404) {
+        status = 'disconnected'
       }
 
       const { data: updated } = await supabase
@@ -221,12 +223,27 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: true, instance: updated, phone: phone }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
+      } else if (stateRes.status === 404) {
+        const { data: updated } = await supabase
+          .from('whatsapp_instances')
+          .update({ status: 'disconnected', qrcode: null })
+          .eq('user_id', user.id)
+          .select()
+          .single()
+
+        return new Response(
+          JSON.stringify({ success: true, error: 'Instance not found', instance: updated }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        )
       } else {
         return new Response(
           JSON.stringify({ error: 'Failed to get state', details: stateRes.parsedBody }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: stateRes.status === 401 ? 401 : stateRes.status === 404 ? 404 : 400,
+            status: stateRes.status === 401 ? 401 : 400,
           },
         )
       }

@@ -55,9 +55,14 @@ export default function WhatsApp() {
   const checkStatus = async () => {
     if (!instance) return
     try {
-      await supabase.functions.invoke('whatsapp-uazapi', {
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'status' },
       })
+      if (error) {
+        console.error('Failed to check status:', error)
+      } else if (data?.success && data?.instance) {
+        setInstance(data.instance)
+      }
     } catch (e) {
       console.error(e)
     }
@@ -66,9 +71,14 @@ export default function WhatsApp() {
   const checkConnect = async () => {
     if (!instance) return
     try {
-      await supabase.functions.invoke('whatsapp-uazapi', {
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'connect' },
       })
+      if (error) {
+        console.error('Failed to check connect:', error)
+      } else if (data?.success && data?.instance) {
+        setInstance(data.instance)
+      }
     } catch (e) {
       console.error(e)
     }
