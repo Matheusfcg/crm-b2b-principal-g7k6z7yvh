@@ -1,4 +1,13 @@
-import { MessageCircle, QrCode, Smartphone, Wifi, WifiOff, Loader2, LogOut } from 'lucide-react'
+import {
+  MessageCircle,
+  QrCode,
+  Smartphone,
+  Wifi,
+  WifiOff,
+  Loader2,
+  LogOut,
+  RefreshCw,
+} from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -25,6 +34,7 @@ export function ConnectionStatus({
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open'
   const isConnecting = status === 'connecting'
+  const isNotFound = status === 'not_found'
   const qrcodeSrc = instance?.qrcode
 
   return (
@@ -64,6 +74,19 @@ export function ConnectionStatus({
                 </div>
               </div>
             </div>
+          ) : isNotFound ? (
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
+                <WifiOff className="h-8 w-8 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-red-600">Instância Não Encontrada</h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
+                  A instância não foi localizada no servidor. Clique em Re-inicializar para
+                  recriá-la e sincronizar.
+                </p>
+              </div>
+            </div>
           ) : isConnecting ? (
             <div className="flex flex-col items-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
@@ -100,6 +123,19 @@ export function ConnectionStatus({
                 <LogOut className="h-4 w-4" />
               )}
               Desconectar Conta
+            </Button>
+          ) : isNotFound ? (
+            <Button
+              onClick={onConnect}
+              disabled={actionLoading}
+              className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Re-inicializar
             </Button>
           ) : (
             <Button
@@ -140,6 +176,11 @@ export function ConnectionStatus({
             <div className="text-center text-slate-500 flex flex-col items-center gap-2">
               <MessageCircle className="h-10 w-10 text-green-200" />
               <p className="text-sm">Dispositivo autenticado com sucesso.</p>
+            </div>
+          ) : isNotFound ? (
+            <div className="text-center text-slate-400 flex flex-col items-center gap-2">
+              <WifiOff className="h-12 w-12 opacity-50 text-red-500" />
+              <p className="text-sm">Instância não sincronizada.</p>
             </div>
           ) : (
             <div className="text-center text-slate-400 flex flex-col items-center gap-2">

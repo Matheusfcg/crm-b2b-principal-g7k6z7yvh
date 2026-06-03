@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
@@ -12,6 +12,7 @@ export default function WhatsApp() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
+  const autoCreated = useRef(false)
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
@@ -25,7 +26,14 @@ export default function WhatsApp() {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (data) setInstance(data)
+    if (data) {
+      setInstance(data)
+    } else {
+      if (!autoCreated.current) {
+        autoCreated.current = true
+        handleConnect(true)
+      }
+    }
     setLoading(false)
   }
 
@@ -127,7 +135,7 @@ export default function WhatsApp() {
     }
   }, [instance?.status, user])
 
-  const handleConnect = async () => {
+  const handleConnect = async (isAuto = false) => {
     setActionLoading(true)
     addLog(`CREATE INSTANCE: ${instance?.instance_name || 'nova instância'}`)
     try {
@@ -140,12 +148,16 @@ export default function WhatsApp() {
           typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
         throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
       }
-      addLog('Instância solicitada. Aguarde o QR Code.')
-      toast.success('Instância solicitada. Aguarde o QR Code.')
+      if (!isAuto) {
+        addLog('Instância solicitada. Aguarde o QR Code.')
+        toast.success('Instância solicitada. Aguarde o QR Code.')
+      }
       await fetchInstance()
     } catch (error: any) {
       addLog(`Erro ao conectar: ${error.message}`)
-      toast.error(`Erro ao conectar: ${error.message}`)
+      if (!isAuto) {
+        toast.error(`Erro ao conectar: ${error.message}`)
+      }
     } finally {
       setActionLoading(false)
     }
@@ -194,7 +206,7 @@ export default function WhatsApp() {
       <ConnectionStatus
         instance={instance}
         actionLoading={actionLoading}
-        onConnect={handleConnect}
+        onConnect={() => handleConnect(false)}
         onDisconnect={handleDisconnect}
       />
 

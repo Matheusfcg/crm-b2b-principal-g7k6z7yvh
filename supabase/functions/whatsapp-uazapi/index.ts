@@ -58,7 +58,6 @@ Deno.serve(async (req: Request) => {
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
     let instanceName = `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
 
-    // Fetch existing instance from DB
     const { data: existingInstance } = await supabase
       .from('whatsapp_instances')
       .select('*')
@@ -84,11 +83,12 @@ Deno.serve(async (req: Request) => {
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
       const method = options.method || 'GET'
+      const payload = options.body || 'None'
 
       console.log(`\n=== UAZAPI REQUEST ===`)
-      console.log(`URL: ${url}`)
-      console.log(`METHOD: ${method}`)
-      console.log(`PAYLOAD: ${options.body || 'None'}`)
+      console.log('URL:', url)
+      console.log('METHOD:', method)
+      console.log('PAYLOAD:', payload)
 
       const res = await fetch(url, { ...options, headers: apiHeaders })
 
@@ -100,12 +100,12 @@ Deno.serve(async (req: Request) => {
         if (text) parsedBody = JSON.parse(text)
       } catch (e) {}
 
+      const responseLog = typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)
+
       console.log(`\n=== UAZAPI RESPONSE ===`)
-      console.log(`URL: ${url}`)
+      console.log('URL:', url)
       console.log(`HTTP Status: ${status}`)
-      console.log(
-        `RESPONSE: ${typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody)}`,
-      )
+      console.log('RESPONSE:', responseLog)
       console.log(`=======================\n`)
 
       if (status === 404) {
@@ -125,7 +125,6 @@ Deno.serve(async (req: Request) => {
         parsedBody?.qr ||
         parsedBody?.code ||
         null
-      console.log(`Extracted raw QR Code field length: ${rawQrcode ? rawQrcode.length : 0}`)
       let qrcode = rawQrcode
       if (qrcode && typeof qrcode === 'string') {
         if (!qrcode.startsWith('data:image')) {
@@ -141,14 +140,6 @@ Deno.serve(async (req: Request) => {
         method: 'POST',
         body: JSON.stringify({ instanceName, qrcode: true }),
       })
-
-      console.log(
-        `Instance ID from Uazapi: ${createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || 'N/A'}`,
-      )
-      console.log(
-        `Instance Name from Uazapi: ${createRes.parsedBody?.instance?.instanceName || createRes.parsedBody?.instanceName || instanceName}`,
-      )
-      console.log(`Raw JSON from Uazapi: ${JSON.stringify(createRes.parsedBody)}`)
 
       if (
         !createRes.ok &&
@@ -187,19 +178,14 @@ Deno.serve(async (req: Request) => {
       let qrcode = extractQrCode(createRes.parsedBody)
       let status = 'connecting'
 
-      console.log(`QR Code Received Confirmation (init): ${qrcode ? 'YES' : 'NO'}`)
-
       if (!qrcode) {
         console.log('GET QRCODE:', instanceName)
         const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-
-        console.log(`Raw JSON from connect: ${JSON.stringify(connectRes.parsedBody)}`)
 
         if (connectRes.ok) {
           const apiData = connectRes.parsedBody
           qrcode = extractQrCode(apiData)
           status = apiData?.instance?.state || apiData?.state || 'connecting'
-          console.log(`QR Code Received Confirmation (connect): ${qrcode ? 'YES' : 'NO'}`)
         }
       }
 
@@ -213,16 +199,14 @@ Deno.serve(async (req: Request) => {
         instance_external_id: externalId,
       }
 
-      const existing = existingInstance
-
       let resultInstance
       let dbError
 
-      if (existing) {
+      if (existingInstance) {
         const { data, error } = await supabase
           .from('whatsapp_instances')
           .update(instanceData)
-          .eq('id', existing.id)
+          .eq('id', existingInstance.id)
           .select()
           .single()
         resultInstance = data
@@ -247,7 +231,6 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'connect') {
       console.log('GET QRCODE:', instanceName)
       const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-      console.log(`Raw JSON from connect: ${JSON.stringify(connectRes.parsedBody)}`)
       let qrcode = null
       let status = 'connecting'
 
@@ -255,9 +238,8 @@ Deno.serve(async (req: Request) => {
         const apiData = connectRes.parsedBody
         qrcode = extractQrCode(apiData)
         status = apiData?.instance?.state || apiData?.state || 'connecting'
-        console.log(`QR Code Received Confirmation: ${qrcode ? 'YES' : 'NO'}`)
       } else if (connectRes.status === 404) {
-        status = 'disconnected'
+        status = 'not_found'
       }
 
       const { data: updated } = await supabase
@@ -302,81 +284,9 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       } else if (stateRes.status === 404) {
-        if (existingInstance) {
-          console.log('Instance not found remotely. Attempting re-initialization...')
-          console.log('CREATE INSTANCE:', instanceName)
-          const createRes = await fetchUazapi('/instance/init', {
-            method: 'POST',
-            body: JSON.stringify({ instanceName, qrcode: true }),
-          })
-
-          console.log(
-            `Instance ID from Uazapi: ${createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || 'N/A'}`,
-          )
-          console.log(
-            `Instance Name from Uazapi: ${createRes.parsedBody?.instance?.instanceName || createRes.parsedBody?.instanceName || instanceName}`,
-          )
-          console.log(`Raw JSON from Uazapi: ${JSON.stringify(createRes.parsedBody)}`)
-
-          if (createRes.ok) {
-            const returnedId =
-              createRes.parsedBody?.instance?.id ||
-              createRes.parsedBody?.id ||
-              createRes.parsedBody?.instance?.instanceName ||
-              createRes.parsedBody?.instanceName
-            const returnedToken =
-              createRes.parsedBody?.hash?.apikey ||
-              createRes.parsedBody?.token ||
-              createRes.parsedBody?.apikey ||
-              null
-            const externalId =
-              createRes.parsedBody?.instance?.id || createRes.parsedBody?.id || null
-
-            if (returnedId && typeof returnedId === 'string') {
-              instanceName = returnedId
-            }
-            let qrcode = extractQrCode(createRes.parsedBody)
-            let status = 'connecting'
-            console.log(`QR Code Received Confirmation (re-init): ${qrcode ? 'YES' : 'NO'}`)
-
-            if (!qrcode) {
-              console.log('GET QRCODE:', instanceName)
-              const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-                method: 'GET',
-              })
-              console.log(
-                `Raw JSON from connect (re-init): ${JSON.stringify(connectRes.parsedBody)}`,
-              )
-              if (connectRes.ok) {
-                const apiData = connectRes.parsedBody
-                qrcode = extractQrCode(apiData)
-                status = apiData?.instance?.state || apiData?.state || 'connecting'
-                console.log(`QR Code Received Confirmation (re-connect): ${qrcode ? 'YES' : 'NO'}`)
-              }
-            }
-
-            const { data: updated } = await supabase
-              .from('whatsapp_instances')
-              .update({
-                status,
-                qrcode,
-                instance_name: instanceName,
-                instance_token: returnedToken,
-                instance_external_id: externalId,
-              })
-              .eq('user_id', user.id)
-              .select()
-              .single()
-
-            return new Response(JSON.stringify({ success: true, instance: updated }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-          }
-        }
-
         const { data: updated } = await supabase
           .from('whatsapp_instances')
-          .update({ status: 'disconnected', qrcode: null })
+          .update({ status: 'not_found', qrcode: null })
           .eq('user_id', user.id)
           .select()
           .single()
