@@ -69,7 +69,7 @@ export default function WhatsApp() {
         }
         if (data?.instance) {
           setInstance(data.instance)
-          if (data.instance.status === 'open') {
+          if (data.instance.status === 'open' || data.instance.status === 'connected') {
             setIsPolling(false)
           }
         }
@@ -114,7 +114,7 @@ export default function WhatsApp() {
 
       if (functionError === 'LIMIT_REACHED' || (error && error.message.includes('LIMIT_REACHED'))) {
         throw new Error(
-          'Limite de instâncias atingido. Por favor, remova instâncias antigas no painel da Uazapi para continuar.',
+          'Limite de instâncias atingido no seu plano Uazapi. Por favor, remova uma instância antiga no painel da Uazapi.',
         )
       }
 

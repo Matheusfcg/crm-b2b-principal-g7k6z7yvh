@@ -32,7 +32,7 @@ export function ConnectionStatus({
   onDisconnect,
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
-  const isConnected = status === 'open'
+  const isConnected = status === 'open' || status === 'connected'
   const isConnecting = status === 'connecting' || status === 'qrcode'
   const isNotFound = status === 'not_found'
   const qrcodeSrc = instance?.qrcode

@@ -59,11 +59,15 @@ Deno.serve(async (req: Request) => {
     const action = body.action
 
     const rawUazapiUrl =
+      Deno.env.get('UAZAPI_SERVER_URL') ||
       Deno.env.get('UAZAPI_URL') ||
       Deno.env.get('UAZAPI_BASE_URL') ||
-      Deno.env.get('UAZAPI_SERVER_URL') ||
-      'https://free.uazapi.com'
-    const uazapiKey = Deno.env.get('UAZAPI_ADMIN_TOKEN') || Deno.env.get('UAZAPI_API_KEY') || ''
+      'https://apiwhatsvexaview.uazapi.com'
+    const uazapiKey =
+      Deno.env.get('UAZAPI_TOKEN') ||
+      Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
+      Deno.env.get('UAZAPI_API_KEY') ||
+      ''
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
     const apiHeaders = {
@@ -152,9 +156,10 @@ Deno.serve(async (req: Request) => {
           status === 'connecting' ||
           status === 'close'
         ) {
-          const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'GET',
-          })
+          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          if (!connectRes.ok || connectRes.status === 404) {
+            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+          }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
             status =
@@ -242,9 +247,10 @@ Deno.serve(async (req: Request) => {
         status = 'connecting'
 
         if (!qrcode) {
-          const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'GET',
-          })
+          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          if (!connectRes.ok || connectRes.status === 404) {
+            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+          }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
             status =
@@ -258,7 +264,8 @@ Deno.serve(async (req: Request) => {
         instance_name: instanceName,
         status: status,
         qrcode: qrcode,
-        last_connection: status === 'open' ? new Date().toISOString() : null,
+        last_connection:
+          status === 'open' || status === 'connected' ? new Date().toISOString() : null,
         instance_token: returnedToken,
         instance_external_id: returnedId,
         updated_at: new Date().toISOString(),
@@ -313,13 +320,14 @@ Deno.serve(async (req: Request) => {
           updated_at: new Date().toISOString(),
         }
         if (phone) updateData.phone = phone
-        if (state === 'open') {
+        if (state === 'open' || state === 'connected') {
           updateData.qrcode = null
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
-          const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'GET',
-          })
+          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          if (!connectRes.ok || connectRes.status === 404) {
+            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+          }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             const qr = extractQrCode(connectRes.parsedBody)
             if (qr) updateData.qrcode = qr
