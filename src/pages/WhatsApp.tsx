@@ -31,7 +31,7 @@ export default function WhatsApp() {
 
       if (data) {
         setInstance(data)
-        if (data.status === 'connecting') {
+        if (data.status === 'connecting' || data.status === 'qrcode') {
           setIsPolling(true)
         }
       } else {
@@ -69,6 +69,9 @@ export default function WhatsApp() {
         }
         if (data?.instance) {
           setInstance(data.instance)
+          if (data.instance.status === 'open') {
+            setIsPolling(false)
+          }
         }
       }
     } catch (e: any) {
@@ -79,7 +82,7 @@ export default function WhatsApp() {
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
-    if (instance?.status === 'connecting' && isPolling) {
+    if ((instance?.status === 'connecting' || instance?.status === 'qrcode') && isPolling) {
       interval = setInterval(() => {
         checkStatus()
       }, 5000)

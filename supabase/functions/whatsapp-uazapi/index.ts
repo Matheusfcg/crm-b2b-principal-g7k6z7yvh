@@ -204,6 +204,7 @@ Deno.serve(async (req: Request) => {
         }
 
         returnedId =
+          resBody?.instance?.instanceId ||
           resBody?.instance?.id ||
           resBody?.id ||
           resBody?.instance?.instanceName ||
@@ -250,6 +251,7 @@ Deno.serve(async (req: Request) => {
         qrcode: qrcode,
         last_connection: status === 'open' ? new Date().toISOString() : null,
         instance_token: returnedToken,
+        instance_external_id: returnedId,
         updated_at: new Date().toISOString(),
       }
 
@@ -302,8 +304,23 @@ Deno.serve(async (req: Request) => {
           updated_at: new Date().toISOString(),
         }
         if (phone) updateData.phone = phone
-        if (state === 'open') updateData.qrcode = null
-        if (state === 'open') updateData.last_connection = new Date().toISOString()
+        if (state === 'open') {
+          updateData.qrcode = null
+          updateData.last_connection = new Date().toISOString()
+        } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
+          const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+            method: 'GET',
+          })
+          if (connectRes.ok && !connectRes.parsedBody?.error) {
+            const qr = extractQrCode(connectRes.parsedBody)
+            if (qr) updateData.qrcode = qr
+            if (connectRes.parsedBody?.instance?.state) {
+              updateData.status = connectRes.parsedBody.instance.state
+            } else if (connectRes.parsedBody?.state) {
+              updateData.status = connectRes.parsedBody.state
+            }
+          }
+        }
 
         let finalInstance = existingInstance
 
