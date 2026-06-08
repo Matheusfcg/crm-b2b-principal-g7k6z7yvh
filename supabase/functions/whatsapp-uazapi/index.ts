@@ -207,7 +207,7 @@ Deno.serve(async (req: Request) => {
             JSON.stringify({ error: customErrorMsg, details: resBody || createRes.text }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 400,
+              status: 200,
             },
           )
         }
@@ -229,7 +229,7 @@ Deno.serve(async (req: Request) => {
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 400,
+              status: 200,
             },
           )
         }

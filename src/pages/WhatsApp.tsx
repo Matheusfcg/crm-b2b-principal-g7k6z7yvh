@@ -100,16 +100,32 @@ export default function WhatsApp() {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'check_or_create', instanceName },
       })
-      if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
-      if (data?.error) {
-        if (data.error === 'LIMIT_REACHED') {
-          throw new Error(
-            'Limite de instâncias atingido no Uazapi. Por favor, remova uma instância antiga antes de tentar novamente.',
-          )
+
+      let functionError = data?.error
+      if (error) {
+        try {
+          if ((error as any).context?.error) {
+            functionError = (error as any).context.error
+          }
+        } catch {
+          /* intentionally ignored */
         }
+      }
+
+      if (functionError === 'LIMIT_REACHED' || (error && error.message.includes('LIMIT_REACHED'))) {
+        throw new Error(
+          'Limite de instâncias atingido. Por favor, remova instâncias antigas no painel da Uazapi para continuar.',
+        )
+      }
+
+      if (error && !functionError) {
+        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      }
+
+      if (functionError) {
         const detailsStr =
-          typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
-        const errorMessage = data.error || 'Erro desconhecido ao criar instância'
+          typeof data?.details === 'object' ? JSON.stringify(data.details) : data?.details
+        const errorMessage = functionError || 'Erro desconhecido ao criar instância'
         throw new Error(detailsStr ? `${errorMessage} - Detalhes: ${detailsStr}` : errorMessage)
       }
 
@@ -122,7 +138,11 @@ export default function WhatsApp() {
       }
     } catch (error: any) {
       addLog(`Erro ao inicializar: ${error.message}`)
-      toast.error(`Erro ao inicializar: ${error.message}`)
+      if (error.message.includes('Limite de instâncias atingido')) {
+        toast.error(error.message)
+      } else {
+        toast.error(`Erro ao inicializar: ${error.message}`)
+      }
     } finally {
       setActionLoading(false)
     }
