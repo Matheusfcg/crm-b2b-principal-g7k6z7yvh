@@ -12,6 +12,7 @@ export default function WhatsApp() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
+  const [isPolling, setIsPolling] = useState(false)
 
   const addLog = (msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
@@ -30,6 +31,9 @@ export default function WhatsApp() {
 
       if (data) {
         setInstance(data)
+        if (data.status === 'connecting') {
+          setIsPolling(true)
+        }
       } else {
         setInstance(null)
       }
@@ -75,7 +79,7 @@ export default function WhatsApp() {
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
-    if (instance?.status === 'connecting') {
+    if (instance?.status === 'connecting' && isPolling) {
       interval = setInterval(() => {
         checkStatus()
       }, 5000)
@@ -83,7 +87,7 @@ export default function WhatsApp() {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [instance?.status])
+  }, [instance?.status, isPolling])
 
   const handleCheckOrCreate = async () => {
     setActionLoading(true)
@@ -104,6 +108,7 @@ export default function WhatsApp() {
 
       if (data?.instance) {
         setInstance(data.instance)
+        setIsPolling(true)
       }
     } catch (error: any) {
       addLog(`Erro ao inicializar: ${error.message}`)
@@ -125,6 +130,7 @@ export default function WhatsApp() {
       addLog('Instância desconectada e deletada com sucesso.')
       toast.success('WhatsApp desconectado.')
       setInstance(null)
+      setIsPolling(false)
     } catch (error: any) {
       addLog(`Erro ao desconectar: ${error.message}`)
       toast.error(`Erro ao desconectar: ${error.message}`)

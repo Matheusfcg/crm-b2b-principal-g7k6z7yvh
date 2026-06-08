@@ -133,29 +133,33 @@ Deno.serve(async (req: Request) => {
 
         if (stateRes.ok) {
           const stateData = stateRes.parsedBody
-          status =
-            stateData?.instance?.state ||
-            stateData?.state ||
-            stateData?.stateConnection ||
-            stateData?.status ||
-            'connecting'
+          if (stateData?.error || stateData?.message === 'Instance not found') {
+            status = 'not_found'
+          } else {
+            status =
+              stateData?.instance?.state ||
+              stateData?.state ||
+              stateData?.stateConnection ||
+              stateData?.status ||
+              'connecting'
 
-          if (
-            status === 'disconnected' ||
-            status === 'qrcode' ||
-            status === 'connecting' ||
-            status === 'close'
-          ) {
-            const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-              method: 'GET',
-            })
-            if (connectRes.ok) {
-              qrcode = extractQrCode(connectRes.parsedBody)
-              status =
-                connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
+            if (
+              status === 'disconnected' ||
+              status === 'qrcode' ||
+              status === 'connecting' ||
+              status === 'close'
+            ) {
+              const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+                method: 'GET',
+              })
+              if (connectRes.ok && !connectRes.parsedBody?.error) {
+                qrcode = extractQrCode(connectRes.parsedBody)
+                status =
+                  connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
+              }
             }
           }
-        } else if (stateRes.status === 404) {
+        } else if (stateRes.status === 404 || stateRes.parsedBody?.error) {
           status = 'not_found'
         }
       } else {
@@ -163,7 +167,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (status === 'not_found') {
-        if (existingInstance?.status === 'not_found') {
+        if (existingInstance?.status === 'not_found' || existingInstance) {
           await fetchUazapi(`/instance/logout/${instanceName}`, { method: 'DELETE' }).catch(
             () => {},
           )
@@ -174,48 +178,56 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({ instanceName, qrcode: true }),
         })
 
+        const body = createRes.parsedBody
         if (
-          !createRes.ok &&
-          createRes.status !== 400 &&
-          createRes.status !== 403 &&
-          createRes.status !== 409
+          !createRes.ok ||
+          body?.error ||
+          body?.message === 'Instance not found' ||
+          body?.status === 'error' ||
+          body?.status === 'Fail'
         ) {
           return new Response(
             JSON.stringify({
               error: 'Failed to create instance in Uazapi',
-              details: createRes.parsedBody,
+              details: body || createRes.text,
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 502,
+              status: 400,
             },
           )
         }
 
         returnedId =
-          createRes.parsedBody?.instance?.id ||
-          createRes.parsedBody?.id ||
-          createRes.parsedBody?.instance?.instanceName ||
-          createRes.parsedBody?.instanceName ||
+          body?.instance?.id ||
+          body?.id ||
+          body?.instance?.instanceName ||
+          body?.instanceName ||
           instanceName
-        returnedToken =
-          createRes.parsedBody?.hash?.apikey ||
-          createRes.parsedBody?.token ||
-          createRes.parsedBody?.apikey ||
-          returnedToken
+        returnedToken = body?.hash?.apikey || body?.token || body?.apikey || returnedToken
+
+        if (!returnedId && !returnedToken) {
+          return new Response(
+            JSON.stringify({ error: 'Uazapi did not return valid instance data', details: body }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            },
+          )
+        }
 
         if (returnedId && typeof returnedId === 'string') {
           instanceName = returnedId
         }
 
-        qrcode = extractQrCode(createRes.parsedBody)
+        qrcode = extractQrCode(body)
         status = 'connecting'
 
         if (!qrcode) {
           const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
             method: 'GET',
           })
-          if (connectRes.ok) {
+          if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
             status =
               connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
@@ -266,7 +278,7 @@ Deno.serve(async (req: Request) => {
       })
     } else if (action === 'get_status') {
       const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, { method: 'GET' })
-      if (stateRes.ok) {
+      if (stateRes.ok && !stateRes.parsedBody?.error) {
         const stateData = stateRes.parsedBody
         const state =
           stateData?.instance?.state ||
@@ -312,7 +324,11 @@ Deno.serve(async (req: Request) => {
           JSON.stringify({ success: true, instance: safeInstance, phone: phone }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
-      } else if (stateRes.status === 404) {
+      } else if (
+        stateRes.status === 404 ||
+        stateRes.parsedBody?.error ||
+        stateRes.parsedBody?.message === 'Instance not found'
+      ) {
         if (existingInstance) {
           const { data } = await supabaseAdmin
             .from('whatsapp_instances')
@@ -332,9 +348,10 @@ Deno.serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: true,
-              error: 'Instance not found',
+              error: stateRes.parsedBody?.error || 'Instance not found',
               instance: safeInstance,
               code: 'INSTANCE_NOT_FOUND',
+              details: stateRes.parsedBody,
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },

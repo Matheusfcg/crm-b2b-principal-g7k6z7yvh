@@ -359,6 +359,7 @@ export type Database = {
           phone: string | null
           qrcode: string | null
           status: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -371,6 +372,7 @@ export type Database = {
           phone?: string | null
           qrcode?: string | null
           status?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -383,6 +385,7 @@ export type Database = {
           phone?: string | null
           qrcode?: string | null
           status?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -394,6 +397,36 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      whatsapp_logs: {
+        Row: {
+          created_at: string | null
+          endpoint: string | null
+          id: string
+          instance_name: string | null
+          payload: Json | null
+          response: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          endpoint?: string | null
+          id?: string
+          instance_name?: string | null
+          payload?: Json | null
+          response?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          endpoint?: string | null
+          id?: string
+          instance_name?: string | null
+          payload?: Json | null
+          response?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -634,6 +667,15 @@ export const Constants = {
 //   phone: text (nullable)
 //   instance_token: text (nullable)
 //   instance_external_id: text (nullable)
+//   updated_at: timestamp with time zone (nullable, default: now())
+// Table: whatsapp_logs
+//   id: uuid (not null, default: gen_random_uuid())
+//   instance_name: text (nullable)
+//   endpoint: text (nullable)
+//   payload: jsonb (nullable)
+//   response: jsonb (nullable)
+//   user_id: uuid (nullable)
+//   created_at: timestamp with time zone (nullable, default: now())
 
 // --- CONSTRAINTS ---
 // Table: contacts
@@ -671,6 +713,9 @@ export const Constants = {
 //   UNIQUE whatsapp_instances_instance_name_key: UNIQUE (instance_name)
 //   PRIMARY KEY whatsapp_instances_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY whatsapp_instances_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+// Table: whatsapp_logs
+//   PRIMARY KEY whatsapp_logs_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY whatsapp_logs_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: contacts
@@ -753,6 +798,11 @@ export const Constants = {
 //   Policy "whatsapp_instances_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (user_id = auth.uid())
 //     WITH CHECK: (user_id = auth.uid())
+// Table: whatsapp_logs
+//   Policy "whatsapp_logs_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (user_id = auth.uid())
+//   Policy "whatsapp_logs_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)
