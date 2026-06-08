@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
@@ -15,44 +15,140 @@ export default function WhatsApp() {
   const [logs, setLogs] = useState<string[]>([])
   const [isPolling, setIsPolling] = useState(false)
 
-  const addLog = (msg: string) => {
-    setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
-  }
+  const hasInitialized = useRef(false)
 
-  const checkStatus = useCallback(async (inst: any) => {
-    if (!inst) return
-    try {
-      addLog(`GET STATUS via Edge Function`)
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'get_status', instanceName: inst.instance_name },
-      })
-      if (error) {
-        console.error('Failed to check status:', error)
-        addLog(`Erro ao verificar status: ${error.message}`)
-      } else {
-        if (data?.error) {
-          addLog(`Resposta API erro (status): ${data.error}`)
-          if (data?.code === 'INSTANCE_NOT_FOUND') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-            setIsPolling(false)
-          }
-        } else {
-          addLog(`Status atualizado: ${data?.instance?.status}`)
+  const addLog = useCallback((msg: string) => {
+    setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
+  }, [])
+
+  const checkStatus = useCallback(
+    async (inst: any) => {
+      if (!inst) return
+      try {
+        addLog(`GET STATUS via Edge Function`)
+        const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+          body: { action: 'get_status', instanceName: inst.instance_name },
+        })
+
+        console.log('Complete JSON response from whatsapp-uazapi (get_status):', data)
+        if (data?.instance?.qrcode) {
+          console.log(
+            'Specific value of qrcode field:',
+            data.instance.qrcode.substring(0, 50) + '...',
+          )
+          console.log('Length of base64 string received:', data.instance.qrcode.length)
         }
+        console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
+
+        if (error) {
+          console.error('Failed to check status:', error)
+          addLog(`Erro ao verificar status: ${error.message}`)
+        } else {
+          if (data?.error) {
+            addLog(`Resposta API erro (status): ${data.error}`)
+            if (data?.code === 'INSTANCE_NOT_FOUND') {
+              setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
+              setIsPolling(false)
+            }
+          } else {
+            addLog(`Status atualizado: ${data?.instance?.status}`)
+          }
+          if (data?.instance) {
+            setInstance(data.instance)
+            if (data.instance.status === 'open' || data.instance.status === 'connected') {
+              setIsPolling(false)
+            } else if (data.instance.status === 'connecting' || data.instance.status === 'qrcode') {
+              setIsPolling(true)
+            }
+          }
+        }
+      } catch (e: any) {
+        console.error(e)
+        addLog(`Exceção (status): ${e.message}`)
+      }
+    },
+    [addLog],
+  )
+
+  const handleCheckOrCreate = useCallback(
+    async (forcedInstanceName?: string) => {
+      setActionLoading(true)
+      addLog(`CHECK OR CREATE INSTANCE...`)
+      try {
+        const instanceName = forcedInstanceName || `user_${user?.id}`
+        const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+          body: { action: 'check_or_create', instanceName },
+        })
+
+        console.log('Complete JSON response from whatsapp-uazapi (check_or_create):', data)
+        if (data?.instance?.qrcode) {
+          console.log(
+            'Specific value of qrcode field:',
+            data.instance.qrcode.substring(0, 50) + '...',
+          )
+          console.log('Length of base64 string received:', data.instance.qrcode.length)
+        }
+        console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
+
+        let functionError = data?.error
+        if (error) {
+          try {
+            if ((error as any).context?.error) {
+              functionError = (error as any).context.error
+            }
+          } catch {
+            /* intentionally ignored */
+          }
+        }
+
+        if (
+          functionError === 'LIMIT_REACHED' ||
+          (error && error.message.includes('LIMIT_REACHED'))
+        ) {
+          throw new Error(
+            'Limite de instâncias atingido no seu plano Uazapi. Por favor, remova uma instância antiga no painel da Uazapi.',
+          )
+        }
+
+        if (error && !functionError) {
+          throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+        }
+
+        if (functionError) {
+          const detailsStr =
+            typeof data?.details === 'object' ? JSON.stringify(data.details) : data?.details
+          const errorMessage = functionError || 'Erro desconhecido ao criar instância'
+          throw new Error(detailsStr ? `${errorMessage} - Detalhes: ${detailsStr}` : errorMessage)
+        }
+
+        addLog('Instância inicializada/recuperada.')
+
+        if (
+          !data?.instance?.qrcode &&
+          (data?.instance?.status === 'connecting' || data?.instance?.status === 'qrcode')
+        ) {
+          toast.info('Instância verificada. Aguardando QR Code...')
+        } else if (data?.instance?.status !== 'connected' && data?.instance?.status !== 'open') {
+          toast.success('Instância conectada ao servidor. QR Code gerado.')
+        }
+
         if (data?.instance) {
           setInstance(data.instance)
-          if (data.instance.status === 'open' || data.instance.status === 'connected') {
-            setIsPolling(false)
-          } else if (data.instance.status === 'connecting' || data.instance.status === 'qrcode') {
-            setIsPolling(true)
-          }
+          setIsPolling(true)
         }
+      } catch (error: any) {
+        addLog(`Erro ao inicializar: ${error.message}`)
+        if (error.message.includes('Limite de instâncias atingido')) {
+          toast.error(error.message)
+        } else {
+          toast.error(`Erro ao inicializar: ${error.message}`)
+        }
+      } finally {
+        setActionLoading(false)
       }
-    } catch (e: any) {
-      console.error(e)
-      addLog(`Exceção (status): ${e.message}`)
-    }
-  }, [])
+    },
+    [user, addLog],
+  )
 
   const fetchInstance = useCallback(async () => {
     if (!user) return
@@ -70,21 +166,24 @@ export default function WhatsApp() {
         if (data.status === 'connecting' || data.status === 'qrcode') {
           setIsPolling(true)
         }
-        if (data.instance_name && data.status !== 'open' && data.status !== 'connected') {
-          await checkStatus(data)
-        }
+
+        await handleCheckOrCreate(data.instance_name)
       } else {
         setInstance(null)
+        await handleCheckOrCreate(`user_${user.id}`)
       }
     } catch (e) {
       console.error('Error fetching instance:', e)
     } finally {
       setLoading(false)
     }
-  }, [user, checkStatus])
+  }, [user, handleCheckOrCreate])
 
   useEffect(() => {
-    fetchInstance()
+    if (!hasInitialized.current) {
+      hasInitialized.current = true
+      fetchInstance()
+    }
   }, [fetchInstance])
 
   useEffect(() => {
@@ -98,62 +197,6 @@ export default function WhatsApp() {
       if (interval) clearInterval(interval)
     }
   }, [instance, isPolling, checkStatus])
-
-  const handleCheckOrCreate = async () => {
-    setActionLoading(true)
-    addLog(`CHECK OR CREATE INSTANCE...`)
-    try {
-      const instanceName = instance?.instance_name || `user_${user?.id}`
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'check_or_create', instanceName },
-      })
-
-      let functionError = data?.error
-      if (error) {
-        try {
-          if ((error as any).context?.error) {
-            functionError = (error as any).context.error
-          }
-        } catch {
-          /* intentionally ignored */
-        }
-      }
-
-      if (functionError === 'LIMIT_REACHED' || (error && error.message.includes('LIMIT_REACHED'))) {
-        throw new Error(
-          'Limite de instâncias atingido no seu plano Uazapi. Por favor, remova uma instância antiga no painel da Uazapi.',
-        )
-      }
-
-      if (error && !functionError) {
-        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
-      }
-
-      if (functionError) {
-        const detailsStr =
-          typeof data?.details === 'object' ? JSON.stringify(data.details) : data?.details
-        const errorMessage = functionError || 'Erro desconhecido ao criar instância'
-        throw new Error(detailsStr ? `${errorMessage} - Detalhes: ${detailsStr}` : errorMessage)
-      }
-
-      addLog('Instância inicializada com sucesso.')
-      toast.success('Instância criada/recuperada com sucesso. Gerando QR Code...')
-
-      if (data?.instance) {
-        setInstance(data.instance)
-        setIsPolling(true)
-      }
-    } catch (error: any) {
-      addLog(`Erro ao inicializar: ${error.message}`)
-      if (error.message.includes('Limite de instâncias atingido')) {
-        toast.error(error.message)
-      } else {
-        toast.error(`Erro ao inicializar: ${error.message}`)
-      }
-    } finally {
-      setActionLoading(false)
-    }
-  }
 
   const handleDisconnect = async () => {
     setActionLoading(true)
@@ -176,7 +219,7 @@ export default function WhatsApp() {
     }
   }
 
-  const isInitializing = loading
+  const isInitializing = loading && !instance
   const isConnected = instance?.status === 'open' || instance?.status === 'connected'
 
   return (
@@ -201,14 +244,35 @@ export default function WhatsApp() {
         </div>
       ) : (
         <div className="space-y-6">
-          <ConnectionStatus
-            instance={instance}
-            actionLoading={actionLoading}
-            onConnect={handleCheckOrCreate}
-            onDisconnect={handleDisconnect}
-          />
+          {!isConnected && (
+            <ConnectionStatus
+              instance={instance}
+              actionLoading={actionLoading}
+              onConnect={() => handleCheckOrCreate()}
+              onDisconnect={handleDisconnect}
+            />
+          )}
 
-          {isConnected && instance?.id && <WhatsAppChat instanceId={instance.id} />}
+          {isConnected && instance?.id && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                <div>
+                  <h3 className="font-semibold text-slate-900">
+                    Conectado como {instance.phone || instance.instance_name}
+                  </h3>
+                  <p className="text-sm text-slate-500">Sincronizado e pronto para uso.</p>
+                </div>
+                <button
+                  onClick={handleDisconnect}
+                  disabled={actionLoading}
+                  className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                  {actionLoading ? 'Desconectando...' : 'Desconectar'}
+                </button>
+              </div>
+              <WhatsAppChat instanceId={instance.id} />
+            </div>
+          )}
         </div>
       )}
 
