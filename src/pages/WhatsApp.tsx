@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { MessageCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { ConnectionStatus } from '@/components/whatsapp/ConnectionStatus'
+import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
 
 export default function WhatsApp() {
   const { user } = useAuth()
@@ -18,14 +19,49 @@ export default function WhatsApp() {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
   }
 
-  const fetchInstance = async () => {
+  const checkStatus = useCallback(async (inst: any) => {
+    if (!inst) return
+    try {
+      addLog(`GET STATUS via Edge Function`)
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'get_status', instanceName: inst.instance_name },
+      })
+      if (error) {
+        console.error('Failed to check status:', error)
+        addLog(`Erro ao verificar status: ${error.message}`)
+      } else {
+        if (data?.error) {
+          addLog(`Resposta API erro (status): ${data.error}`)
+          if (data?.code === 'INSTANCE_NOT_FOUND') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
+            setIsPolling(false)
+          }
+        } else {
+          addLog(`Status atualizado: ${data?.instance?.status}`)
+        }
+        if (data?.instance) {
+          setInstance(data.instance)
+          if (data.instance.status === 'open' || data.instance.status === 'connected') {
+            setIsPolling(false)
+          } else if (data.instance.status === 'connecting' || data.instance.status === 'qrcode') {
+            setIsPolling(true)
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error(e)
+      addLog(`Exceção (status): ${e.message}`)
+    }
+  }, [])
+
+  const fetchInstance = useCallback(async () => {
     if (!user) return
     setLoading(true)
 
     try {
       const { data } = await supabase
         .from('whatsapp_instances')
-        .select('id, user_id, status, qrcode, last_connection, phone')
+        .select('id, user_id, status, qrcode, last_connection, phone, instance_name')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -33,6 +69,9 @@ export default function WhatsApp() {
         setInstance(data)
         if (data.status === 'connecting' || data.status === 'qrcode') {
           setIsPolling(true)
+        }
+        if (data.instance_name && data.status !== 'open' && data.status !== 'connected') {
+          await checkStatus(data)
         }
       } else {
         setInstance(null)
@@ -42,55 +81,23 @@ export default function WhatsApp() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, checkStatus])
 
   useEffect(() => {
     fetchInstance()
-  }, [user])
-
-  const checkStatus = async () => {
-    if (!instance) return
-    try {
-      addLog(`GET STATUS via Edge Function`)
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'get_status', instanceName: instance.instance_name },
-      })
-      if (error) {
-        console.error('Failed to check status:', error)
-        addLog(`Erro ao verificar status: ${error.message}`)
-      } else {
-        if (data?.error) {
-          addLog(`Resposta API erro (status): ${data.error}`)
-          if (data?.code === 'INSTANCE_NOT_FOUND') {
-            setInstance((prev: any) => ({ ...prev, status: 'not_found' }))
-          }
-        } else {
-          addLog(`Status atualizado: ${data?.instance?.status}`)
-        }
-        if (data?.instance) {
-          setInstance(data.instance)
-          if (data.instance.status === 'open' || data.instance.status === 'connected') {
-            setIsPolling(false)
-          }
-        }
-      }
-    } catch (e: any) {
-      console.error(e)
-      addLog(`Exceção (status): ${e.message}`)
-    }
-  }
+  }, [fetchInstance])
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
     if ((instance?.status === 'connecting' || instance?.status === 'qrcode') && isPolling) {
       interval = setInterval(() => {
-        checkStatus()
+        checkStatus(instance)
       }, 5000)
     }
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [instance?.status, isPolling])
+  }, [instance, isPolling, checkStatus])
 
   const handleCheckOrCreate = async () => {
     setActionLoading(true)
@@ -170,6 +177,7 @@ export default function WhatsApp() {
   }
 
   const isInitializing = loading
+  const isConnected = instance?.status === 'open' || instance?.status === 'connected'
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -192,12 +200,16 @@ export default function WhatsApp() {
           <p className="text-sm text-slate-500">Verificando o ambiente de conexão.</p>
         </div>
       ) : (
-        <ConnectionStatus
-          instance={instance}
-          actionLoading={actionLoading}
-          onConnect={handleCheckOrCreate}
-          onDisconnect={handleDisconnect}
-        />
+        <div className="space-y-6">
+          <ConnectionStatus
+            instance={instance}
+            actionLoading={actionLoading}
+            onConnect={handleCheckOrCreate}
+            onDisconnect={handleDisconnect}
+          />
+
+          {isConnected && instance?.id && <WhatsAppChat instanceId={instance.id} />}
+        </div>
       )}
 
       {logs.length > 0 && (

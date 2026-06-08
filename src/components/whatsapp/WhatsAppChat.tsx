@@ -1,0 +1,327 @@
+import { useEffect, useState, useRef } from 'react'
+import { supabase } from '@/lib/supabase/client'
+import { Card } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { format } from 'date-fns'
+import { MessageSquare, User, Loader2, Send } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+interface Contact {
+  id: string
+  push_name: string | null
+  remote_jid: string
+  profile_picture: string | null
+}
+
+interface Conversation {
+  id: string
+  last_message: string | null
+  updated_at: string | null
+  unread_count: number
+  contact: Contact | null
+}
+
+interface Message {
+  id: string
+  content: string | null
+  from_me: boolean | null
+  timestamp: string | null
+  status: string
+  type: string | null
+}
+
+export function WhatsAppChat({ instanceId }: { instanceId: string }) {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [loading, setLoading] = useState(true)
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('conversations')
+          .select(`
+            id, last_message, updated_at, unread_count,
+            contact:contacts(id, push_name, remote_jid, profile_picture)
+          `)
+          .eq('instance_id', instanceId)
+          .order('updated_at', { ascending: false })
+
+        if (!error && data) {
+          const parsed = data.map((d: any) => ({
+            ...d,
+            contact: Array.isArray(d.contact) ? d.contact[0] : d.contact,
+          })) as Conversation[]
+          setConversations(parsed)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (instanceId) {
+      fetchConversations()
+    }
+
+    const channel = supabase
+      .channel('conversations-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `instance_id=eq.${instanceId}`,
+        },
+        fetchConversations,
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [instanceId])
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!selectedConvId) return
+      setMessagesLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', selectedConvId)
+          .order('timestamp', { ascending: true })
+
+        if (!error && data) {
+          setMessages(data)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setMessagesLoading(false)
+      }
+    }
+
+    fetchMessages()
+
+    const channel = supabase
+      .channel('messages-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${selectedConvId}`,
+        },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message])
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [selectedConvId])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!replyText.trim() || !selectedConvId) return
+
+    // In a real app, this would call an Edge Function to send via Uazapi.
+    // We clear the text to simulate sending.
+    console.log('Sending message:', replyText)
+    setReplyText('')
+  }
+
+  const selectedConv = conversations.find((c) => c.id === selectedConvId)
+
+  return (
+    <Card className="flex flex-col md:flex-row h-[600px] overflow-hidden border-slate-200 shadow-sm mt-6">
+      {/* Sidebar: Conversations List */}
+      <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50/50">
+        <div className="p-4 border-b border-slate-200 bg-white">
+          <h2 className="font-semibold flex items-center gap-2 text-slate-800">
+            <MessageSquare className="h-5 w-5" />
+            Conversas
+          </h2>
+        </div>
+        <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="p-8 flex justify-center text-slate-400">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-sm">
+              Nenhuma conversa encontrada.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  onClick={() => setSelectedConvId(conv.id)}
+                  className={cn(
+                    'p-3 flex items-center gap-3 cursor-pointer hover:bg-slate-100 transition-colors',
+                    selectedConvId === conv.id && 'bg-blue-50/50 hover:bg-blue-50/80',
+                  )}
+                >
+                  <Avatar className="h-10 w-10 border border-slate-200">
+                    <AvatarImage src={conv.contact?.profile_picture || undefined} />
+                    <AvatarFallback className="bg-slate-200 text-slate-600">
+                      {conv.contact?.push_name?.charAt(0)?.toUpperCase() || (
+                        <User className="h-5 w-5" />
+                      )}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {conv.contact?.push_name ||
+                          conv.contact?.remote_jid?.split('@')[0] ||
+                          'Desconhecido'}
+                      </p>
+                      {conv.updated_at && (
+                        <span className="text-xs text-slate-400">
+                          {format(new Date(conv.updated_at), 'HH:mm')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 truncate">
+                      {conv.last_message || 'Nenhuma mensagem'}
+                    </p>
+                  </div>
+                  {conv.unread_count > 0 && (
+                    <div className="h-5 w-5 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                      {conv.unread_count}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-white">
+        {selectedConvId ? (
+          <>
+            {/* Chat Header */}
+            <div className="p-4 border-b border-slate-200 flex items-center gap-3 bg-white">
+              <Avatar className="h-10 w-10 border border-slate-200">
+                <AvatarImage src={selectedConv?.contact?.profile_picture || undefined} />
+                <AvatarFallback className="bg-slate-200 text-slate-600">
+                  {selectedConv?.contact?.push_name?.charAt(0)?.toUpperCase() || (
+                    <User className="h-5 w-5" />
+                  )}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-semibold text-slate-900">
+                  {selectedConv?.contact?.push_name ||
+                    selectedConv?.contact?.remote_jid?.split('@')[0] ||
+                    'Desconhecido'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selectedConv?.contact?.remote_jid?.split('@')[0]}
+                </p>
+              </div>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50" ref={scrollRef}>
+              {messagesLoading ? (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="text-center text-slate-500 text-sm mt-10">
+                  Nenhuma mensagem nesta conversa.
+                </div>
+              ) : (
+                messages.map((msg) => {
+                  const isMe = msg.from_me
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn('flex w-full', isMe ? 'justify-end' : 'justify-start')}
+                    >
+                      <div
+                        className={cn(
+                          'max-w-[75%] rounded-2xl px-4 py-2 shadow-sm text-sm',
+                          isMe
+                            ? 'bg-green-600 text-white rounded-br-none'
+                            : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none',
+                        )}
+                      >
+                        {msg.content}
+                        <div
+                          className={cn(
+                            'text-[10px] mt-1 text-right',
+                            isMe ? 'text-green-200' : 'text-slate-400',
+                          )}
+                        >
+                          {msg.timestamp ? format(new Date(msg.timestamp), 'HH:mm') : ''}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Input Area */}
+            <div className="p-3 border-t border-slate-200 bg-white">
+              <form onSubmit={handleSend} className="flex gap-2">
+                <Input
+                  placeholder="Digite uma mensagem..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  className="flex-1 bg-slate-50 border-slate-200 focus-visible:ring-green-500"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center space-y-4">
+            <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center">
+              <MessageSquare className="h-8 w-8 text-slate-300" />
+            </div>
+            <div>
+              <p className="font-medium text-slate-600 mb-1">WhatsApp Web</p>
+              <p className="text-sm text-slate-400">
+                Selecione uma conversa para começar a enviar mensagens
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
