@@ -102,6 +102,11 @@ export default function WhatsApp() {
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) {
+        if (data.error === 'LIMIT_REACHED') {
+          throw new Error(
+            'Limite de instâncias atingido no Uazapi. Por favor, remova uma instância antiga antes de tentar novamente.',
+          )
+        }
         const detailsStr =
           typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
         const errorMessage = data.error || 'Erro desconhecido ao criar instância'
@@ -109,7 +114,7 @@ export default function WhatsApp() {
       }
 
       addLog('Instância inicializada com sucesso.')
-      toast.success('Instância criada com sucesso. Gerando QR Code...')
+      toast.success('Instância criada/recuperada com sucesso. Gerando QR Code...')
 
       if (data?.instance) {
         setInstance(data.instance)

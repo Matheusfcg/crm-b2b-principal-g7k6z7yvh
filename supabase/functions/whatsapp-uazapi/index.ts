@@ -127,45 +127,41 @@ Deno.serve(async (req: Request) => {
       let returnedToken = existingInstance?.instance_token
       let returnedId = instanceName
 
-      if (existingInstance && existingInstance.status !== 'not_found') {
-        const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, { method: 'GET' })
+      const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, { method: 'GET' })
+      let instanceExistsInUazapi = false
+      let uazapiState = 'not_found'
 
-        if (stateRes.ok) {
-          const stateData = stateRes.parsedBody
-          if (stateData?.error || stateData?.message === 'Instance not found') {
-            status = 'not_found'
-          } else {
-            status =
-              stateData?.instance?.state ||
-              stateData?.state ||
-              stateData?.stateConnection ||
-              stateData?.status ||
-              'connecting'
-
-            if (
-              status === 'disconnected' ||
-              status === 'qrcode' ||
-              status === 'connecting' ||
-              status === 'close'
-            ) {
-              const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-                method: 'GET',
-              })
-              if (connectRes.ok && !connectRes.parsedBody?.error) {
-                qrcode = extractQrCode(connectRes.parsedBody)
-                status =
-                  connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
-              }
-            }
-          }
-        } else if (stateRes.status === 404 || stateRes.parsedBody?.error) {
-          status = 'not_found'
+      if (stateRes.ok) {
+        const stateData = stateRes.parsedBody
+        if (!stateData?.error && stateData?.message !== 'Instance not found') {
+          instanceExistsInUazapi = true
+          uazapiState =
+            stateData?.instance?.state ||
+            stateData?.state ||
+            stateData?.stateConnection ||
+            stateData?.status ||
+            'connecting'
         }
-      } else {
-        status = 'not_found'
       }
 
-      if (status === 'not_found') {
+      if (instanceExistsInUazapi) {
+        status = uazapiState
+        if (
+          status === 'disconnected' ||
+          status === 'qrcode' ||
+          status === 'connecting' ||
+          status === 'close'
+        ) {
+          const connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+            method: 'GET',
+          })
+          if (connectRes.ok && !connectRes.parsedBody?.error) {
+            qrcode = extractQrCode(connectRes.parsedBody)
+            status =
+              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
+          }
+        }
+      } else {
         if (existingInstance?.status === 'not_found' || existingInstance) {
           await fetchUazapi(`/instance/logout/${instanceName}`, { method: 'DELETE' }).catch(
             () => {},
@@ -194,8 +190,21 @@ Deno.serve(async (req: Request) => {
         ) {
           const errorMsg =
             resBody?.message || resBody?.error || 'Failed to create instance in Uazapi'
+          let customErrorMsg = `Uazapi: ${errorMsg}`
+
+          if (
+            typeof errorMsg === 'string' &&
+            (errorMsg.includes('Maximum number of instances reached') ||
+              errorMsg.includes('limit') ||
+              errorMsg.includes('Limit'))
+          ) {
+            customErrorMsg = 'LIMIT_REACHED'
+          } else if (typeof resBody?.message === 'string' && resBody.message.includes('reached')) {
+            customErrorMsg = 'LIMIT_REACHED'
+          }
+
           return new Response(
-            JSON.stringify({ error: `Uazapi: ${errorMsg}`, details: resBody || createRes.text }),
+            JSON.stringify({ error: customErrorMsg, details: resBody || createRes.text }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               status: 400,
