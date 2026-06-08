@@ -30,12 +30,9 @@ export default function WhatsApp() {
           body: { action: 'get_status', instanceName: inst.instance_name },
         })
 
-        console.log('Complete JSON response from whatsapp-uazapi (get_status):', data)
+        console.log('Complete JSON response from whatsapp-uazapi:', data)
+        console.log('Specific value of qrcode field:', data?.instance?.qrcode)
         if (data?.instance?.qrcode) {
-          console.log(
-            'Specific value of qrcode field:',
-            data.instance.qrcode.substring(0, 50) + '...',
-          )
           console.log('Length of base64 string received:', data.instance.qrcode.length)
         }
         console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
@@ -80,12 +77,9 @@ export default function WhatsApp() {
           body: { action: 'check_or_create', instanceName },
         })
 
-        console.log('Complete JSON response from whatsapp-uazapi (check_or_create):', data)
+        console.log('Complete JSON response from whatsapp-uazapi:', data)
+        console.log('Specific value of qrcode field:', data?.instance?.qrcode)
         if (data?.instance?.qrcode) {
-          console.log(
-            'Specific value of qrcode field:',
-            data.instance.qrcode.substring(0, 50) + '...',
-          )
           console.log('Length of base64 string received:', data.instance.qrcode.length)
         }
         console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
@@ -221,6 +215,13 @@ export default function WhatsApp() {
 
   const isInitializing = loading && !instance
   const isConnected = instance?.status === 'open' || instance?.status === 'connected'
+  const isQRCodeAvailable = !!instance?.qrcode
+
+  useEffect(() => {
+    if (isQRCodeAvailable) {
+      console.log('Render Trigger: React state updated with new QR data, isQRCodeAvailable is true')
+    }
+  }, [isQRCodeAvailable])
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">

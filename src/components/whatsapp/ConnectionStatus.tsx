@@ -35,7 +35,12 @@ export function ConnectionStatus({
   const isConnected = status === 'open' || status === 'connected'
   const isConnecting = status === 'connecting' || status === 'qrcode'
   const isNotFound = status === 'not_found'
-  const qrcodeSrc = instance?.qrcode
+  const rawQr = instance?.qrcode
+  const qrcodeSrc = rawQr
+    ? rawQr.startsWith('data:image')
+      ? rawQr
+      : `data:image/png;base64,${rawQr}`
+    : null
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
