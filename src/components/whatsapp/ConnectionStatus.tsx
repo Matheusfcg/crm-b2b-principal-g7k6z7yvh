@@ -23,6 +23,7 @@ interface ConnectionStatusProps {
   actionLoading: boolean
   onConnect: () => void
   onDisconnect: () => void
+  error?: string | null
 }
 
 export function ConnectionStatus({
@@ -30,6 +31,7 @@ export function ConnectionStatus({
   actionLoading,
   onConnect,
   onDisconnect,
+  error,
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
@@ -41,6 +43,8 @@ export function ConnectionStatus({
       ? rawQr
       : `data:image/png;base64,${rawQr}`
     : null
+
+  const isGeneratingQr = actionLoading || isConnecting
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -92,7 +96,7 @@ export function ConnectionStatus({
                 </p>
               </div>
             </div>
-          ) : isConnecting ? (
+          ) : isGeneratingQr ? (
             <div className="flex flex-col items-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
               <div>
@@ -115,7 +119,7 @@ export function ConnectionStatus({
           )}
         </CardContent>
         <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-center p-4">
-          {isConnected || isConnecting ? (
+          {isConnected || isGeneratingQr || !!qrcodeSrc ? (
             <Button
               variant="destructive"
               onClick={onDisconnect}
@@ -155,11 +159,16 @@ export function ConnectionStatus({
           <CardDescription>Escaneie o código para vincular.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center min-h-[250px] p-6">
-          {qrcodeSrc && isConnecting ? (
+          {qrcodeSrc ? (
             <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300">
               <img src={qrcodeSrc} alt="WhatsApp QR Code" className="w-[200px] h-[200px]" />
             </div>
-          ) : isConnecting ? (
+          ) : error ? (
+            <div className="text-center text-red-500 flex flex-col items-center gap-3 max-w-[250px]">
+              <WifiOff className="h-8 w-8" />
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+          ) : isGeneratingQr ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-3">
               <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
               <p className="text-sm font-medium">Gerando QR Code...</p>

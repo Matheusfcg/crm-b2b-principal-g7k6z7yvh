@@ -14,6 +14,7 @@ export default function WhatsApp() {
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [isPolling, setIsPolling] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
 
   const hasInitialized = useRef(false)
 
@@ -54,7 +55,11 @@ export default function WhatsApp() {
             setInstance(data.instance)
             if (data.instance.status === 'open' || data.instance.status === 'connected') {
               setIsPolling(false)
-            } else if (data.instance.status === 'connecting' || data.instance.status === 'qrcode') {
+            } else if (
+              data.instance.status === 'connecting' ||
+              data.instance.status === 'qrcode' ||
+              !!data.instance.qrcode
+            ) {
               setIsPolling(true)
             }
           }
@@ -70,6 +75,7 @@ export default function WhatsApp() {
   const handleCheckOrCreate = useCallback(
     async (forcedInstanceName?: string) => {
       setActionLoading(true)
+      setConnectError(null)
       addLog(`CHECK OR CREATE INSTANCE...`)
       try {
         const instanceName = forcedInstanceName || `user_${user?.id}`
@@ -122,7 +128,11 @@ export default function WhatsApp() {
           (data?.instance?.status === 'connecting' || data?.instance?.status === 'qrcode')
         ) {
           toast.info('Instância verificada. Aguardando QR Code...')
-        } else if (data?.instance?.status !== 'connected' && data?.instance?.status !== 'open') {
+        } else if (
+          data?.instance?.qrcode &&
+          data?.instance?.status !== 'connected' &&
+          data?.instance?.status !== 'open'
+        ) {
           toast.success('Instância conectada ao servidor. QR Code gerado.')
         }
 
@@ -132,11 +142,11 @@ export default function WhatsApp() {
         }
       } catch (error: any) {
         addLog(`Erro ao inicializar: ${error.message}`)
-        if (error.message.includes('Limite de instâncias atingido')) {
-          toast.error(error.message)
-        } else {
-          toast.error(`Erro ao inicializar: ${error.message}`)
-        }
+        const errMsg = error.message.includes('Limite de instâncias atingido')
+          ? error.message
+          : `Erro ao inicializar: ${error.message}`
+        toast.error(errMsg)
+        setConnectError(errMsg)
       } finally {
         setActionLoading(false)
       }
@@ -157,7 +167,7 @@ export default function WhatsApp() {
 
       if (data) {
         setInstance(data)
-        if (data.status === 'connecting' || data.status === 'qrcode') {
+        if (data.status === 'connecting' || data.status === 'qrcode' || !!data.qrcode) {
           setIsPolling(true)
         }
 
@@ -182,7 +192,10 @@ export default function WhatsApp() {
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
-    if ((instance?.status === 'connecting' || instance?.status === 'qrcode') && isPolling) {
+    const isConnecting = instance?.status === 'connecting' || instance?.status === 'qrcode'
+    const hasQrCode = !!instance?.qrcode
+
+    if ((isConnecting || hasQrCode) && isPolling) {
       interval = setInterval(() => {
         checkStatus(instance)
       }, 5000)
@@ -251,6 +264,7 @@ export default function WhatsApp() {
               actionLoading={actionLoading}
               onConnect={() => handleCheckOrCreate()}
               onDisconnect={handleDisconnect}
+              error={connectError}
             />
           )}
 
