@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    let instanceName = existingInstance?.instance_name || `user_${user.id}`
+    let instanceName = body.instanceName || existingInstance?.instance_name || `user_${user.id}`
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
@@ -182,19 +182,20 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        const body = createRes.parsedBody
+        const resBody = createRes.parsedBody
+
         if (
           !createRes.ok ||
-          body?.error ||
-          body?.message === 'Instance not found' ||
-          body?.status === 'error' ||
-          body?.status === 'Fail'
+          !resBody ||
+          resBody?.error ||
+          resBody?.message === 'Instance not found' ||
+          resBody?.status === 'error' ||
+          resBody?.status === 'Fail'
         ) {
+          const errorMsg =
+            resBody?.message || resBody?.error || 'Failed to create instance in Uazapi'
           return new Response(
-            JSON.stringify({
-              error: 'Failed to create instance in Uazapi',
-              details: body || createRes.text,
-            }),
+            JSON.stringify({ error: `Uazapi: ${errorMsg}`, details: resBody || createRes.text }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               status: 400,
@@ -203,16 +204,19 @@ Deno.serve(async (req: Request) => {
         }
 
         returnedId =
-          body?.instance?.id ||
-          body?.id ||
-          body?.instance?.instanceName ||
-          body?.instanceName ||
+          resBody?.instance?.id ||
+          resBody?.id ||
+          resBody?.instance?.instanceName ||
+          resBody?.instanceName ||
           instanceName
-        returnedToken = body?.hash?.apikey || body?.token || body?.apikey || returnedToken
+        returnedToken = resBody?.hash?.apikey || resBody?.token || resBody?.apikey || returnedToken
 
-        if (!returnedId && !returnedToken) {
+        if (!returnedId) {
           return new Response(
-            JSON.stringify({ error: 'Uazapi did not return valid instance data', details: body }),
+            JSON.stringify({
+              error: 'Uazapi did not return a valid instance identifier',
+              details: resBody,
+            }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               status: 400,
@@ -224,7 +228,7 @@ Deno.serve(async (req: Request) => {
           instanceName = returnedId
         }
 
-        qrcode = extractQrCode(body)
+        qrcode = extractQrCode(resBody)
         status = 'connecting'
 
         if (!qrcode) {

@@ -53,7 +53,7 @@ export default function WhatsApp() {
     try {
       addLog(`GET STATUS via Edge Function`)
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'get_status' },
+        body: { action: 'get_status', instanceName: instance.instance_name },
       })
       if (error) {
         console.error('Failed to check status:', error)
@@ -93,14 +93,16 @@ export default function WhatsApp() {
     setActionLoading(true)
     addLog(`CHECK OR CREATE INSTANCE...`)
     try {
+      const instanceName = instance?.instance_name || `user_${user?.id}`
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'check_or_create' },
+        body: { action: 'check_or_create', instanceName },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) {
         const detailsStr =
           typeof data.details === 'object' ? JSON.stringify(data.details) : data.details
-        throw new Error(detailsStr ? `${data.error} - Detalhes: ${detailsStr}` : data.error)
+        const errorMessage = data.error || 'Erro desconhecido ao criar instância'
+        throw new Error(detailsStr ? `${errorMessage} - Detalhes: ${detailsStr}` : errorMessage)
       }
 
       addLog('Instância inicializada com sucesso.')
@@ -123,7 +125,7 @@ export default function WhatsApp() {
     addLog('Iniciando desconexão...')
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'delete' },
+        body: { action: 'delete', instanceName: instance?.instance_name },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       if (data?.error) throw new Error(data.error)
