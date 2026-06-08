@@ -115,6 +115,10 @@ Deno.serve(async (req: Request) => {
         parsedBody?.qrcode ||
         parsedBody?.qr ||
         parsedBody?.code ||
+        parsedBody?.instance?.qrcode ||
+        parsedBody?.instance?.qr ||
+        parsedBody?.data?.qrcode ||
+        parsedBody?.data?.qr ||
         null
       let qrcode = rawQrcode
       if (qrcode && typeof qrcode === 'string') {
@@ -157,8 +161,13 @@ Deno.serve(async (req: Request) => {
           status === 'close'
         ) {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+            console.log(
+              'Response from GET /instance/qrcode:',
+              JSON.stringify(connectRes.parsedBody),
+            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
@@ -184,6 +193,7 @@ Deno.serve(async (req: Request) => {
         })
 
         const resBody = createRes.parsedBody
+        console.log('Response from POST /instance/init:', JSON.stringify(resBody))
 
         if (
           !createRes.ok ||
@@ -248,8 +258,13 @@ Deno.serve(async (req: Request) => {
 
         if (!qrcode) {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+            console.log(
+              'Response from GET /instance/qrcode:',
+              JSON.stringify(connectRes.parsedBody),
+            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
@@ -325,8 +340,13 @@ Deno.serve(async (req: Request) => {
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+            console.log(
+              'Response from GET /instance/qrcode:',
+              JSON.stringify(connectRes.parsedBody),
+            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             const qr = extractQrCode(connectRes.parsedBody)

@@ -53,12 +53,14 @@ export default function WhatsApp() {
           }
           if (data?.instance) {
             setInstance(data.instance)
+            const hasQrCode = !!data.instance.qrcode
+
             if (data.instance.status === 'open' || data.instance.status === 'connected') {
               setIsPolling(false)
             } else if (
               data.instance.status === 'connecting' ||
               data.instance.status === 'qrcode' ||
-              !!data.instance.qrcode
+              hasQrCode
             ) {
               setIsPolling(true)
             }
@@ -138,7 +140,9 @@ export default function WhatsApp() {
 
         if (data?.instance) {
           setInstance(data.instance)
-          setIsPolling(true)
+          const isConnectedInstance =
+            data.instance.status === 'open' || data.instance.status === 'connected'
+          setIsPolling(!isConnectedInstance)
         }
       } catch (error: any) {
         addLog(`Erro ao inicializar: ${error.message}`)
@@ -228,7 +232,9 @@ export default function WhatsApp() {
 
   const isInitializing = loading && !instance
   const isConnected = instance?.status === 'open' || instance?.status === 'connected'
-  const isQRCodeAvailable = !!instance?.qrcode
+  const isQRCodeAvailable = Boolean(
+    instance?.qrcode && typeof instance.qrcode === 'string' && instance.qrcode.length > 10,
+  )
 
   useEffect(() => {
     if (isQRCodeAvailable) {
