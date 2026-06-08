@@ -78,8 +78,7 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    let instanceName =
-      existingInstance?.instance_name || `user_${user.id.replace(/[^a-zA-Z0-9]/g, '')}`
+    let instanceName = existingInstance?.instance_name || `user_${user.id}`
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
@@ -175,7 +174,12 @@ Deno.serve(async (req: Request) => {
 
         const createRes = await fetchUazapi('/instance/init', {
           method: 'POST',
-          body: JSON.stringify({ instanceName, qrcode: true }),
+          body: JSON.stringify({
+            instanceName: instanceName,
+            Name: instanceName,
+            name: instanceName,
+            qrcode: true,
+          }),
         })
 
         const body = createRes.parsedBody
