@@ -99,7 +99,7 @@ Deno.serve(async (req: Request) => {
 
       await supabaseAdmin.from('whatsapp_logs').insert({
         instance_name: instanceName,
-        endpoint: path,
+        endpoint: url,
         payload: payload,
         response: { status, body: parsedBody },
         user_id: user.id,
@@ -227,13 +227,13 @@ Deno.serve(async (req: Request) => {
           )
         }
 
+        const uazapiInstanceName =
+          resBody?.instance?.instanceName || resBody?.instanceName || instanceName
         returnedId =
           resBody?.instance?.instanceId ||
           resBody?.instance?.id ||
           resBody?.id ||
-          resBody?.instance?.instanceName ||
-          resBody?.instanceName ||
-          instanceName
+          uazapiInstanceName
         returnedToken = resBody?.hash?.apikey || resBody?.token || resBody?.apikey || returnedToken
 
         if (!returnedId) {
@@ -249,8 +249,8 @@ Deno.serve(async (req: Request) => {
           )
         }
 
-        if (returnedId && typeof returnedId === 'string') {
-          instanceName = returnedId
+        if (uazapiInstanceName && typeof uazapiInstanceName === 'string') {
+          instanceName = uazapiInstanceName
         }
 
         qrcode = extractQrCode(resBody)
