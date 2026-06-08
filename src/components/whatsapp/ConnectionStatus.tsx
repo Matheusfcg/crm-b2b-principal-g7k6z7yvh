@@ -67,9 +67,9 @@ export function ConnectionStatus({
                   </span>
                 </div>
                 <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2">
-                  <span className="text-sm font-medium text-slate-700">Instância</span>
+                  <span className="text-sm font-medium text-slate-700">ID da Conexão</span>
                   <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
-                    {instance?.instance_name}
+                    {instance?.id?.split('-')[0] || 'N/A'}
                   </span>
                 </div>
               </div>
@@ -91,9 +91,9 @@ export function ConnectionStatus({
             <div className="flex flex-col items-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
               <div>
-                <h3 className="text-lg font-medium text-slate-900">Aguardando leitura...</h3>
+                <h3 className="text-lg font-medium text-slate-900">Criando instância...</h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Abra o WhatsApp no seu celular e escaneie o QR code ao lado.
+                  Aguarde enquanto geramos seu QR Code.
                 </p>
               </div>
             </div>

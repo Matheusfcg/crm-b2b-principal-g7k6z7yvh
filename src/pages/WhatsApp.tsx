@@ -17,14 +17,14 @@ export default function WhatsApp() {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
   }
 
-  const fetchAndProvisionInstance = async () => {
+  const fetchInstance = async () => {
     if (!user) return
     setLoading(true)
 
     try {
       const { data } = await supabase
         .from('whatsapp_instances')
-        .select('*')
+        .select('id, user_id, status, qrcode, last_connection, phone')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -41,39 +41,13 @@ export default function WhatsApp() {
   }
 
   useEffect(() => {
-    fetchAndProvisionInstance()
-
-    if (!user) return
-
-    const channel = supabase
-      .channel('whatsapp_instances_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'whatsapp_instances',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setInstance(null)
-          } else if (payload.new) {
-            setInstance(payload.new)
-          }
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    fetchInstance()
   }, [user])
 
   const checkStatus = async () => {
     if (!instance) return
     try {
-      addLog(`GET STATUS: ${instance.instance_name}`)
+      addLog(`GET STATUS via Edge Function`)
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'get_status' },
       })
@@ -105,15 +79,11 @@ export default function WhatsApp() {
       interval = setInterval(() => {
         checkStatus()
       }, 5000)
-    } else if (instance?.status === 'open') {
-      interval = setInterval(() => {
-        checkStatus()
-      }, 30000)
     }
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [instance?.status, user])
+  }, [instance?.status])
 
   const handleCheckOrCreate = async () => {
     setActionLoading(true)
@@ -130,7 +100,7 @@ export default function WhatsApp() {
       }
 
       addLog('Instância inicializada com sucesso.')
-      toast.success('Instância inicializada. Aguarde o QR Code se necessário.')
+      toast.success('Instância criada com sucesso. Gerando QR Code...')
 
       if (data?.instance) {
         setInstance(data.instance)
