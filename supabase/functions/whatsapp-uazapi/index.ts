@@ -83,6 +83,11 @@ Deno.serve(async (req: Request) => {
         } catch (_) {
           errorDetails = await res.text().catch(() => 'No response body')
         }
+
+        console.error(
+          `[ERROR] action: ${actionQuery}, instance: ${instanceQuery}, status: ${res.status}, details: ${errorDetails}`,
+        )
+
         return new Response(
           JSON.stringify({
             error: 'Failed to fetch QR code from Uazapi',
@@ -197,6 +202,12 @@ Deno.serve(async (req: Request) => {
         response: { status, body: parsedBody },
         user_id: user.id,
       })
+
+      if (!res.ok) {
+        console.error(
+          `[ERROR] action: uazapi_fetch, instance: ${instanceName}, status: ${status}, path: ${path}, details: ${text}`,
+        )
+      }
 
       return { ok: res.ok, status, text, parsedBody }
     }

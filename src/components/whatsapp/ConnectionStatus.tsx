@@ -90,6 +90,11 @@ export function ConnectionStatus({
           } catch (e) {
             // ignore
           }
+
+          if (res.status === 404 || errData?.status === 404) {
+            throw new Error('Instance not found or still initializing')
+          }
+
           throw new Error(
             errData?.error ||
               errData?.details ||
@@ -106,6 +111,11 @@ export function ConnectionStatus({
           } catch (e) {
             // ignore
           }
+
+          if (errData?.status === 404) {
+            throw new Error('Instance not found or still initializing')
+          }
+
           throw new Error(
             errData?.error ||
               errData?.details ||
