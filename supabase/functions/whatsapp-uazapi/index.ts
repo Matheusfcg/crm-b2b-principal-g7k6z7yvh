@@ -40,6 +40,42 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    const url = new URL(req.url)
+    const actionQuery = url.searchParams.get('action')
+    if (req.method === 'GET' && actionQuery === 'qrcode') {
+      const instanceQuery = url.searchParams.get('instance')
+      const tokenQuery = url.searchParams.get('token') || '21e316ff-0990-46ed-8e24-e189051278fe'
+
+      if (!instanceQuery) {
+        return new Response(JSON.stringify({ error: 'Instance name required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const uazapiUrl = `https://uazapi.com/instance/qrcode?instance=${instanceQuery}`
+      const res = await fetch(uazapiUrl, {
+        headers: {
+          Authorization: `Bearer ${tokenQuery}`,
+        },
+      })
+
+      if (!res.ok) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch QR code from Uazapi' }), {
+          status: res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const blob = await res.blob()
+      return new Response(blob, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': res.headers.get('Content-Type') || 'image/png',
+        },
+      })
+    }
+
     const supabaseAdmin = createClient(
       supabaseUrl,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? supabaseKey,

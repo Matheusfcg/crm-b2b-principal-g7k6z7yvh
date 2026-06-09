@@ -18,6 +18,7 @@ import {
   CardFooter,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase/client'
 
 interface ConnectionStatusProps {
   instance: any
@@ -50,7 +51,7 @@ export function ConnectionStatus({
       : `data:image/png;base64,${rawQr}`
     : null
 
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [directImageUrl, setDirectImageUrl] = useState<string | null>(null)
   const [imgError, setImgError] = useState(false)
   const [isFetchingBlob, setIsFetchingBlob] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
@@ -60,19 +61,25 @@ export function ConnectionStatus({
 
   useEffect(() => {
     let isMounted = true
-    let currentBlobUrl: string | null = null
+    let currentImageUrl: string | null = null
 
     const fetchImg = async () => {
       setIsFetchingBlob(true)
       setImgError(false)
       try {
-        const url = `https://uazapi.com/instance/qrcode?instance=${instance.instance_name}`
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+
+        if (!accessToken) throw new Error('No access token')
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
         const token = instance.instance_token || '21e316ff-0990-46ed-8e24-e189051278fe'
+        const url = `${supabaseUrl}/functions/v1/whatsapp-uazapi?action=qrcode&instance=${instance.instance_name}&token=${token}`
 
         const res = await fetch(url, {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         })
 
@@ -80,8 +87,8 @@ export function ConnectionStatus({
 
         const blob = await res.blob()
         if (isMounted) {
-          currentBlobUrl = URL.createObjectURL(blob)
-          setBlobUrl(currentBlobUrl)
+          currentImageUrl = URL.createObjectURL(blob)
+          setDirectImageUrl(currentImageUrl)
         }
       } catch (err) {
         console.error('Failed to fetch QR code:', err)
@@ -98,19 +105,19 @@ export function ConnectionStatus({
     if (shouldFetchDirect) {
       fetchImg()
     } else {
-      setBlobUrl(null)
+      setDirectImageUrl(null)
       setImgError(false)
     }
 
     return () => {
       isMounted = false
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl)
+      if (currentImageUrl) {
+        URL.revokeObjectURL(currentImageUrl)
       }
     }
   }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token, retryCount])
 
-  const qrcodeSrc = qrcodeSrcBase64 || blobUrl
+  const qrcodeSrc = qrcodeSrcBase64 || directImageUrl
 
   const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !imgError)
 
