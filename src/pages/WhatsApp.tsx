@@ -57,6 +57,13 @@ export default function WhatsApp() {
             addLog(`Status atualizado: ${data?.instance?.status}`)
           }
           if (data?.instance) {
+            // Ensure qrcode is null if it's not a valid string
+            if (
+              data.instance.qrcode &&
+              (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
+            ) {
+              data.instance.qrcode = null
+            }
             setInstance(data.instance)
             const hasQrCode = !!data.instance.qrcode
 
@@ -160,6 +167,12 @@ export default function WhatsApp() {
         }
 
         if (data?.instance) {
+          if (
+            data.instance.qrcode &&
+            (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
+          ) {
+            data.instance.qrcode = null
+          }
           setInstance(data.instance)
           const isConnectedInstance =
             data.instance.status === 'open' || data.instance.status === 'connected'
@@ -191,6 +204,9 @@ export default function WhatsApp() {
         .maybeSingle()
 
       if (data) {
+        if (data.qrcode && (typeof data.qrcode !== 'string' || data.qrcode.length < 10)) {
+          data.qrcode = null
+        }
         setInstance(data)
         if (data.status === 'connecting' || data.status === 'qrcode' || !!data.qrcode) {
           setIsPolling(true)
@@ -286,13 +302,26 @@ export default function WhatsApp() {
       ) : (
         <div className="space-y-6">
           {!isConnected && (
-            <ConnectionStatus
-              instance={instance}
-              actionLoading={actionLoading}
-              onConnect={() => handleCheckOrCreate()}
-              onDisconnect={handleDisconnect}
-              error={connectError}
-            />
+            <div className="space-y-4">
+              <ConnectionStatus
+                instance={instance}
+                actionLoading={actionLoading}
+                onConnect={() => handleCheckOrCreate()}
+                onDisconnect={handleDisconnect}
+                error={connectError}
+              />
+              {connectError && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={() => handleCheckOrCreate()}
+                    disabled={actionLoading}
+                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {actionLoading ? 'Processando...' : 'Tentar Novamente'}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {isConnected && instance?.id && (

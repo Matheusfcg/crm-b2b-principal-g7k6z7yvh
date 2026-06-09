@@ -288,15 +288,24 @@ Deno.serve(async (req: Request) => {
           instanceName = uazapiInstanceName
         }
 
+        // Step 2: Connect immediately using the instance.name
+        console.log(`[INIT] Triggering connection for instance: ${instanceName}`)
+        let initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+          method: 'POST',
+        })
+        if (initConnectRes.status === 404 || initConnectRes.status === 405 || !initConnectRes.ok) {
+          await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
+        }
+
+        // Step 3: Mandatory Delay of 5 seconds
+        console.log(`[INIT] Starting 5s mandatory delay for instance: ${instanceName}`)
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+
         qrcode = extractQrCode(resBody)
         status = 'connecting'
 
         if (!qrcode) {
-          console.log(
-            `[INIT] No initial QR code. Starting 8s initial delay for instance: ${instanceName}`,
-          )
-          await new Promise((resolve) => setTimeout(resolve, 8000))
-
+          // Step 4: Polling loop
           let loopCount = 0
           const maxAttempts = 5
 
@@ -306,42 +315,45 @@ Deno.serve(async (req: Request) => {
               `[INIT] Polling attempt ${loopCount} of ${maxAttempts} for instance: ${instanceName}`,
             )
 
-            let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+            let connectRes = await fetchUazapi(`/instance/status/${instanceName}`, {
               method: 'GET',
             })
-            if (
-              !connectRes.ok ||
-              connectRes.status === 404 ||
-              connectRes.parsedBody?.message === 'Instance not found'
-            ) {
-              connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-            }
+            let qrRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
 
             const parsed = connectRes.parsedBody
+            const qrParsed = qrRes.parsedBody
+
             const isNotFound =
               connectRes.status === 404 ||
               parsed?.message === 'Instance not found' ||
-              parsed?.error === 'Instance not found'
+              parsed?.error === 'Instance not found' ||
+              qrRes.status === 404 ||
+              qrParsed?.message === 'Instance not found'
 
-            if (connectRes.ok && !parsed?.error && !isNotFound) {
-              qrcode = extractQrCode(parsed)
-              if (qrcode) {
-                status = parsed?.instance?.state || parsed?.state || 'qrcode'
-                console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
-                break
-              } else {
-                status = parsed?.instance?.state || parsed?.state || 'connecting'
-                console.log(`[INIT] No QR code yet, status: ${status}`)
-              }
+            qrcode = extractQrCode(qrParsed) || extractQrCode(parsed)
+
+            if (qrcode) {
+              status =
+                parsed?.instance?.state ||
+                parsed?.state ||
+                qrParsed?.instance?.state ||
+                qrParsed?.state ||
+                'qrcode'
+              console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
+              break
             } else if (isNotFound) {
+              status = 'connecting'
               console.log(
                 `[INIT] Instance not found on attempt ${loopCount}. Treating as transient error.`,
               )
             } else {
-              console.log(`[INIT] Error on attempt ${loopCount}: ${JSON.stringify(parsed)}`)
+              status = parsed?.instance?.state || parsed?.state || 'connecting'
+              console.log(
+                `[INIT] No QR code yet, status: ${status}. Response: ${JSON.stringify(parsed)}`,
+              )
             }
 
-            if (loopCount < maxAttempts) {
+            if (loopCount < maxAttempts && !qrcode) {
               console.log(`[INIT] Waiting 4s before next attempt...`)
               await new Promise((resolve) => setTimeout(resolve, 4000))
             }
