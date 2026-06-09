@@ -292,17 +292,59 @@ Deno.serve(async (req: Request) => {
         status = 'connecting'
 
         if (!qrcode) {
-          // Delay QR code retrieval by 3 seconds as required
-          await new Promise((resolve) => setTimeout(resolve, 3000))
+          console.log(
+            `[INIT] No initial QR code. Starting 8s initial delay for instance: ${instanceName}`,
+          )
+          await new Promise((resolve) => setTimeout(resolve, 8000))
 
-          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-          if (!connectRes.ok || connectRes.status === 404) {
-            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-          }
-          if (connectRes.ok && !connectRes.parsedBody?.error) {
-            qrcode = extractQrCode(connectRes.parsedBody)
-            status =
-              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
+          let loopCount = 0
+          const maxAttempts = 5
+
+          while (loopCount < maxAttempts) {
+            loopCount++
+            console.log(
+              `[INIT] Polling attempt ${loopCount} of ${maxAttempts} for instance: ${instanceName}`,
+            )
+
+            let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+              method: 'GET',
+            })
+            if (
+              !connectRes.ok ||
+              connectRes.status === 404 ||
+              connectRes.parsedBody?.message === 'Instance not found'
+            ) {
+              connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+            }
+
+            const parsed = connectRes.parsedBody
+            const isNotFound =
+              connectRes.status === 404 ||
+              parsed?.message === 'Instance not found' ||
+              parsed?.error === 'Instance not found'
+
+            if (connectRes.ok && !parsed?.error && !isNotFound) {
+              qrcode = extractQrCode(parsed)
+              if (qrcode) {
+                status = parsed?.instance?.state || parsed?.state || 'qrcode'
+                console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
+                break
+              } else {
+                status = parsed?.instance?.state || parsed?.state || 'connecting'
+                console.log(`[INIT] No QR code yet, status: ${status}`)
+              }
+            } else if (isNotFound) {
+              console.log(
+                `[INIT] Instance not found on attempt ${loopCount}. Treating as transient error.`,
+              )
+            } else {
+              console.log(`[INIT] Error on attempt ${loopCount}: ${JSON.stringify(parsed)}`)
+            }
+
+            if (loopCount < maxAttempts) {
+              console.log(`[INIT] Waiting 4s before next attempt...`)
+              await new Promise((resolve) => setTimeout(resolve, 4000))
+            }
           }
         }
       }

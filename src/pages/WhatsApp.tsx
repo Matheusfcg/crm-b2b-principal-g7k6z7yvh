@@ -70,7 +70,7 @@ export default function WhatsApp() {
             ) {
               if (!hasQrCode && data.instance.status === 'connecting') {
                 pollCountRef.current += 1
-                if (pollCountRef.current >= 10) {
+                if (pollCountRef.current >= 5) {
                   setIsPolling(false)
                   setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
                   setConnectError('Tempo limite atingido aguardando QR Code. Tente novamente.')
@@ -223,7 +223,7 @@ export default function WhatsApp() {
     if ((isConnecting || hasQrCode) && isPolling) {
       timeoutId = setTimeout(() => {
         checkStatus(instance)
-      }, 3000)
+      }, 4000)
     }
     return () => {
       if (timeoutId) clearTimeout(timeoutId)
