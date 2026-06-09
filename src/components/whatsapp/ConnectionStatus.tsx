@@ -37,14 +37,16 @@ export function ConnectionStatus({
   const isConnected = status === 'open' || status === 'connected'
   const isConnecting = status === 'connecting' || status === 'qrcode'
   const isNotFound = status === 'not_found'
+  const isTimeout = status === 'timeout'
   const rawQr = instance?.qrcode
-  const qrcodeSrc = rawQr
+  const isValidBase64 = rawQr && typeof rawQr === 'string' && rawQr.length > 20
+  const qrcodeSrc = isValidBase64
     ? rawQr.startsWith('data:image')
       ? rawQr
       : `data:image/png;base64,${rawQr}`
     : null
 
-  const isGeneratingQr = actionLoading || isConnecting
+  const isGeneratingQr = (actionLoading || isConnecting) && !qrcodeSrc
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -141,10 +143,12 @@ export function ConnectionStatus({
             >
               {actionLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : error || isTimeout ? (
+                <RefreshCw className="h-4 w-4" />
               ) : (
                 <QrCode className="h-4 w-4" />
               )}
-              Conectar WhatsApp
+              {error || isTimeout ? 'Tentar Novamente' : 'Conectar WhatsApp'}
             </Button>
           )}
         </CardFooter>

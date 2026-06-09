@@ -292,6 +292,9 @@ Deno.serve(async (req: Request) => {
         status = 'connecting'
 
         if (!qrcode) {
+          // Delay QR code retrieval by 3 seconds as required
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })

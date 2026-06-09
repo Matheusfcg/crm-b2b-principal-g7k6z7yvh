@@ -17,6 +17,7 @@ export default function WhatsApp() {
   const [connectError, setConnectError] = useState<string | null>(null)
 
   const hasInitialized = useRef(false)
+  const pollCountRef = useRef(0)
 
   const addLog = useCallback((msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
@@ -47,6 +48,10 @@ export default function WhatsApp() {
             if (data?.code === 'INSTANCE_NOT_FOUND') {
               setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
               setIsPolling(false)
+              setConnectError('Instância não encontrada na API. Tente conectar novamente.')
+            } else {
+              setIsPolling(false)
+              setConnectError(`Erro na API: ${data.error}`)
             }
           } else {
             addLog(`Status atualizado: ${data?.instance?.status}`)
@@ -57,11 +62,23 @@ export default function WhatsApp() {
 
             if (data.instance.status === 'open' || data.instance.status === 'connected') {
               setIsPolling(false)
+              pollCountRef.current = 0
             } else if (
               data.instance.status === 'connecting' ||
               data.instance.status === 'qrcode' ||
               hasQrCode
             ) {
+              if (!hasQrCode && data.instance.status === 'connecting') {
+                pollCountRef.current += 1
+                if (pollCountRef.current >= 10) {
+                  setIsPolling(false)
+                  setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+                  setConnectError('Tempo limite atingido aguardando QR Code. Tente novamente.')
+                  return
+                }
+              } else {
+                pollCountRef.current = 0
+              }
               setIsPolling(true)
             }
           }
@@ -69,6 +86,8 @@ export default function WhatsApp() {
       } catch (e: any) {
         console.error(e)
         addLog(`Exceção (status): ${e.message}`)
+        setIsPolling(false)
+        setConnectError(`Erro de comunicação: ${e.message}`)
       }
     },
     [addLog],
@@ -78,6 +97,8 @@ export default function WhatsApp() {
     async (forcedInstanceName?: string) => {
       setActionLoading(true)
       setConnectError(null)
+      pollCountRef.current = 0
+      setIsPolling(false)
       addLog(`CHECK OR CREATE INSTANCE...`)
       try {
         const instanceName = forcedInstanceName || `user_${user?.id}`
@@ -195,17 +216,17 @@ export default function WhatsApp() {
   }, [fetchInstance])
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>
+    let timeoutId: ReturnType<typeof setTimeout>
     const isConnecting = instance?.status === 'connecting' || instance?.status === 'qrcode'
     const hasQrCode = !!instance?.qrcode
 
     if ((isConnecting || hasQrCode) && isPolling) {
-      interval = setInterval(() => {
+      timeoutId = setTimeout(() => {
         checkStatus(instance)
-      }, 5000)
+      }, 3000)
     }
     return () => {
-      if (interval) clearInterval(interval)
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [instance, isPolling, checkStatus])
 
