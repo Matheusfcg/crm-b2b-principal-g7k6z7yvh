@@ -46,9 +46,17 @@ export default function WhatsApp() {
           if (data?.error) {
             addLog(`Resposta API erro (status): ${data.error}`)
             if (data?.code === 'INSTANCE_NOT_FOUND') {
-              setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-              setIsPolling(false)
-              setConnectError('Instância não encontrada na API. Tente conectar novamente.')
+              pollCountRef.current += 1
+              if (pollCountRef.current >= 5) {
+                setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
+                setIsPolling(false)
+                setConnectError('Instância não encontrada na API. Tente conectar novamente.')
+              } else {
+                addLog(
+                  `Ignorando erro 'Instance not found' (tentativa ${pollCountRef.current} de 5).`,
+                )
+                setIsPolling(true)
+              }
             } else {
               setIsPolling(false)
               setConnectError(`Erro na API: ${data.error}`)
@@ -239,7 +247,7 @@ export default function WhatsApp() {
     if ((isConnecting || hasQrCode) && isPolling) {
       timeoutId = setTimeout(() => {
         checkStatus(instance)
-      }, 4000)
+      }, 3000)
     }
     return () => {
       if (timeoutId) clearTimeout(timeoutId)

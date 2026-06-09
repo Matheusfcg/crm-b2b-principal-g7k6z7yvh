@@ -214,7 +214,8 @@ Deno.serve(async (req: Request) => {
           )
         }
 
-        const createRes = await fetchUazapi('/instance/init', {
+        // Step 1: Instance Creation
+        let createRes = await fetchUazapi('/instance/create', {
           method: 'POST',
           body: JSON.stringify({
             instanceName: instanceName,
@@ -224,7 +225,20 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        const resBody = createRes.parsedBody
+        let resBody = createRes.parsedBody
+
+        if (createRes.status === 404) {
+          createRes = await fetchUazapi('/instance/init', {
+            method: 'POST',
+            body: JSON.stringify({
+              instanceName: instanceName,
+              Name: instanceName,
+              name: instanceName,
+              qrcode: true,
+            }),
+          })
+          resBody = createRes.parsedBody
+        }
 
         if (
           !createRes.ok ||
@@ -288,11 +302,17 @@ Deno.serve(async (req: Request) => {
           instanceName = uazapiInstanceName
         }
 
-        // Step 2: Connect immediately using the instance.name
+        // Step 2: Mandatory Connection Trigger
         console.log(`[INIT] Triggering connection for instance: ${instanceName}`)
-        let initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+        let initConnectRes = await fetchUazapi('/instance/connect', {
           method: 'POST',
+          body: JSON.stringify({ instanceName: instanceName }),
         })
+        if (initConnectRes.status === 404 || !initConnectRes.ok) {
+          initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+            method: 'POST',
+          })
+        }
         if (initConnectRes.status === 404 || initConnectRes.status === 405 || !initConnectRes.ok) {
           await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
         }
@@ -305,7 +325,7 @@ Deno.serve(async (req: Request) => {
         status = 'connecting'
 
         if (!qrcode) {
-          // Step 4: Polling loop
+          // Step 4 & 6: Polling loop with Not Found error suppression
           let loopCount = 0
           const maxAttempts = 5
 
@@ -318,27 +338,18 @@ Deno.serve(async (req: Request) => {
             let connectRes = await fetchUazapi(`/instance/status/${instanceName}`, {
               method: 'GET',
             })
-            let qrRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
 
             const parsed = connectRes.parsedBody
-            const qrParsed = qrRes.parsedBody
-
             const isNotFound =
               connectRes.status === 404 ||
               parsed?.message === 'Instance not found' ||
-              parsed?.error === 'Instance not found' ||
-              qrRes.status === 404 ||
-              qrParsed?.message === 'Instance not found'
+              parsed?.error === 'Instance not found'
 
-            qrcode = extractQrCode(qrParsed) || extractQrCode(parsed)
+            // Step 5: QR Code Extraction specifically from instance.qrcode
+            qrcode = extractQrCode({ base64: parsed?.instance?.qrcode }) || extractQrCode(parsed)
 
             if (qrcode) {
-              status =
-                parsed?.instance?.state ||
-                parsed?.state ||
-                qrParsed?.instance?.state ||
-                qrParsed?.state ||
-                'qrcode'
+              status = parsed?.instance?.state || parsed?.state || 'qrcode'
               console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
               break
             } else if (isNotFound) {
@@ -354,8 +365,8 @@ Deno.serve(async (req: Request) => {
             }
 
             if (loopCount < maxAttempts && !qrcode) {
-              console.log(`[INIT] Waiting 4s before next attempt...`)
-              await new Promise((resolve) => setTimeout(resolve, 4000))
+              console.log(`[INIT] Waiting 3s before next attempt...`)
+              await new Promise((resolve) => setTimeout(resolve, 3000))
             }
           }
         }
@@ -426,17 +437,30 @@ Deno.serve(async (req: Request) => {
           updateData.qrcode = null
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
-          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-          if (!connectRes.ok || connectRes.status === 404) {
-            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-          }
-          if (connectRes.ok && !connectRes.parsedBody?.error) {
-            const qr = extractQrCode(connectRes.parsedBody)
-            if (qr) updateData.qrcode = qr
-            if (connectRes.parsedBody?.instance?.state) {
-              updateData.status = connectRes.parsedBody.instance.state
-            } else if (connectRes.parsedBody?.state) {
-              updateData.status = connectRes.parsedBody.state
+          // Also look for qrcode directly in status response
+          const statusQr = stateData?.instance?.qrcode
+
+          if (statusQr) {
+            updateData.qrcode = statusQr.startsWith('data:image')
+              ? statusQr
+              : `data:image/png;base64,${statusQr}`
+          } else {
+            let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+              method: 'GET',
+            })
+            if (!connectRes.ok || connectRes.status === 404) {
+              connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
+            }
+            if (connectRes.ok && !connectRes.parsedBody?.error) {
+              const qr =
+                extractQrCode({ base64: connectRes.parsedBody?.instance?.qrcode }) ||
+                extractQrCode(connectRes.parsedBody)
+              if (qr) updateData.qrcode = qr
+              if (connectRes.parsedBody?.instance?.state) {
+                updateData.status = connectRes.parsedBody.instance.state
+              } else if (connectRes.parsedBody?.state) {
+                updateData.status = connectRes.parsedBody.state
+              }
             }
           }
         }
