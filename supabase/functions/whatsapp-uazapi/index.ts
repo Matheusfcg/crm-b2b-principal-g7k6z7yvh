@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url)
     const actionQuery = url.searchParams.get('action')
     if (req.method === 'GET' && actionQuery === 'qrcode') {
-      const instanceQuery = url.searchParams.get('instance')
+      let instanceQuery = url.searchParams.get('instance')
       const tokenQuery = url.searchParams.get('token') || '21e316ff-0990-46ed-8e24-e189051278fe'
 
       if (!instanceQuery) {
@@ -53,6 +53,8 @@ Deno.serve(async (req: Request) => {
         })
       }
 
+      instanceQuery = instanceQuery.split('?')[0].split('&')[0].trim()
+
       const rawUazapiUrl =
         Deno.env.get('UAZAPI_SERVER_URL') ||
         Deno.env.get('UAZAPI_URL') ||
@@ -60,42 +62,78 @@ Deno.serve(async (req: Request) => {
         'https://apiwhatsvexaview.uazapi.com'
       const baseApiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
       const uazapiKey =
-        Deno.env.get('UAZAPI_TOKEN') ||
         Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
+        Deno.env.get('UAZAPI_TOKEN') ||
         Deno.env.get('UAZAPI_API_KEY') ||
         ''
 
-      const uazapiUrl = `${baseApiUrl}/instance/qrcode?instance=${instanceQuery}`
-      const res = await fetch(uazapiUrl, {
-        headers: {
-          Authorization: `Bearer ${tokenQuery}`,
-          apikey: tokenQuery,
-          admintoken: uazapiKey,
-          instance: instanceQuery,
-        },
-      })
+      const uazapiUrl = `${baseApiUrl}/instance/qrcode/${instanceQuery}`
 
-      if (!res.ok) {
-        let errorDetails = ''
+      let res: Response | null = null
+      let attempt = 0
+      const maxAttempts = 3
+      let errorDetails = ''
+
+      while (attempt < maxAttempts) {
+        attempt++
         try {
-          const errorJson = await res.json()
-          errorDetails = JSON.stringify(errorJson)
+          res = await fetch(uazapiUrl, {
+            headers: {
+              Authorization: `Bearer ${uazapiKey || tokenQuery}`,
+              apikey: tokenQuery,
+              admintoken: uazapiKey,
+              instance: instanceQuery,
+            },
+          })
+
+          if (res.ok) break
+
+          if (res.status === 404 && attempt < maxAttempts) {
+            console.log(
+              `[QR_CODE] Attempt ${attempt} failed with 404 for instance ${instanceQuery}, retrying in 2s...`,
+            )
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+            continue
+          }
+
+          break
+        } catch (err: any) {
+          errorDetails = err.message
+          if (attempt < maxAttempts) {
+            console.log(
+              `[QR_CODE] Attempt ${attempt} error for instance ${instanceQuery}, retrying in 2s...`,
+            )
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+          }
+        }
+      }
+
+      if (!res || !res.ok) {
+        try {
+          if (res) {
+            const errorJson = await res.json().catch(() => null)
+            if (errorJson) {
+              errorDetails = JSON.stringify(errorJson)
+            } else {
+              errorDetails = await res.text().catch(() => 'No response body')
+            }
+          }
         } catch (_) {
-          errorDetails = await res.text().catch(() => 'No response body')
+          // ignore
         }
 
         console.error(
-          `[ERROR] action: ${actionQuery}, instance: ${instanceQuery}, status: ${res.status}, details: ${errorDetails}`,
+          `[ERROR] action: ${actionQuery}, instance: ${instanceQuery}, status: ${res?.status || 500}, details: ${errorDetails}`,
         )
 
         return new Response(
           JSON.stringify({
             error: 'Failed to fetch QR code from Uazapi',
             details: errorDetails,
-            status: res.status,
+            status: res?.status || 500,
           }),
           {
-            status: res.status,
+            status: res?.status || 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           },
         )
@@ -105,7 +143,7 @@ Deno.serve(async (req: Request) => {
       return new Response(blob, {
         headers: {
           ...corsHeaders,
-          'Content-Type': res.headers.get('Content-Type') || 'image/png',
+          'Content-Type': res?.headers.get('Content-Type') || 'image/png',
         },
       })
     }
@@ -239,6 +277,7 @@ Deno.serve(async (req: Request) => {
     const getApiHeaders = (token: string, instance?: string) => {
       const headers: any = {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${uazapiKey || token}`,
         apikey: token,
         admintoken: uazapiKey,
       }
