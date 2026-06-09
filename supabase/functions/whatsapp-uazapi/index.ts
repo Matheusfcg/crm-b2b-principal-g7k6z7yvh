@@ -61,10 +61,18 @@ Deno.serve(async (req: Request) => {
       })
 
       if (!res.ok) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch QR code from Uazapi' }), {
-          status: res.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        const errorText = await res.text().catch(() => 'No response body')
+        return new Response(
+          JSON.stringify({
+            error: 'Failed to fetch QR code from Uazapi',
+            details: errorText,
+            status: res.status,
+          }),
+          {
+            status: res.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       const blob = await res.blob()

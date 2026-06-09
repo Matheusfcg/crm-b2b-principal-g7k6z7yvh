@@ -52,7 +52,7 @@ export function ConnectionStatus({
     : null
 
   const [directImageUrl, setDirectImageUrl] = useState<string | null>(null)
-  const [imgError, setImgError] = useState(false)
+  const [imgError, setImgError] = useState<string | boolean>(false)
   const [isFetchingBlob, setIsFetchingBlob] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
 
@@ -83,17 +83,20 @@ export function ConnectionStatus({
           },
         })
 
-        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null)
+          throw new Error(errData?.error || `HTTP Error: ${res.status}`)
+        }
 
         const blob = await res.blob()
         if (isMounted) {
           currentImageUrl = URL.createObjectURL(blob)
           setDirectImageUrl(currentImageUrl)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to fetch QR code:', err)
         if (isMounted) {
-          setImgError(true)
+          setImgError(err.message || true)
         }
       } finally {
         if (isMounted) {
@@ -252,7 +255,9 @@ export function ConnectionStatus({
             <div className="text-center text-red-500 flex flex-col items-center gap-4 max-w-[250px]">
               <WifiOff className="h-8 w-8" />
               <p className="text-sm font-medium">
-                Falha ao carregar o QR Code. Ocorreu um erro de rede.
+                {typeof imgError === 'string'
+                  ? imgError
+                  : 'Falha ao carregar o QR Code. Ocorreu um erro de rede.'}
               </p>
               <Button
                 variant="outline"
