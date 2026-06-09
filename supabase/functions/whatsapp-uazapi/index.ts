@@ -215,7 +215,7 @@ Deno.serve(async (req: Request) => {
         }
 
         // Step 1: Instance Creation
-        let createRes = await fetchUazapi('/instance/create', {
+        let createRes = await fetchUazapi('/instance/init', {
           method: 'POST',
           body: JSON.stringify({
             instanceName: instanceName,
@@ -226,19 +226,6 @@ Deno.serve(async (req: Request) => {
         })
 
         let resBody = createRes.parsedBody
-
-        if (createRes.status === 404) {
-          createRes = await fetchUazapi('/instance/init', {
-            method: 'POST',
-            body: JSON.stringify({
-              instanceName: instanceName,
-              Name: instanceName,
-              name: instanceName,
-              qrcode: true,
-            }),
-          })
-          resBody = createRes.parsedBody
-        }
 
         if (
           !createRes.ok ||
@@ -306,11 +293,12 @@ Deno.serve(async (req: Request) => {
         console.log(`[INIT] Triggering connection for instance: ${instanceName}`)
         let initConnectRes = await fetchUazapi('/instance/connect', {
           method: 'POST',
-          body: JSON.stringify({ instanceName: instanceName }),
+          body: JSON.stringify({ instanceName: instanceName, token: returnedToken }),
         })
         if (initConnectRes.status === 404 || !initConnectRes.ok) {
           initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
             method: 'POST',
+            body: JSON.stringify({ token: returnedToken }),
           })
         }
         if (initConnectRes.status === 404 || initConnectRes.status === 405 || !initConnectRes.ok) {
