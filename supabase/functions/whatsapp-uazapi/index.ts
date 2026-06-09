@@ -53,19 +53,40 @@ Deno.serve(async (req: Request) => {
         })
       }
 
-      const uazapiUrl = `https://uazapi.com/instance/qrcode?instance=${instanceQuery}`
+      const rawUazapiUrl =
+        Deno.env.get('UAZAPI_SERVER_URL') ||
+        Deno.env.get('UAZAPI_URL') ||
+        Deno.env.get('UAZAPI_BASE_URL') ||
+        'https://apiwhatsvexaview.uazapi.com'
+      const baseApiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
+      const uazapiKey =
+        Deno.env.get('UAZAPI_TOKEN') ||
+        Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
+        Deno.env.get('UAZAPI_API_KEY') ||
+        ''
+
+      const uazapiUrl = `${baseApiUrl}/instance/qrcode?instance=${instanceQuery}`
       const res = await fetch(uazapiUrl, {
         headers: {
           Authorization: `Bearer ${tokenQuery}`,
+          apikey: tokenQuery,
+          admintoken: uazapiKey,
+          instance: instanceQuery,
         },
       })
 
       if (!res.ok) {
-        const errorText = await res.text().catch(() => 'No response body')
+        let errorDetails = ''
+        try {
+          const errorJson = await res.json()
+          errorDetails = JSON.stringify(errorJson)
+        } catch (_) {
+          errorDetails = await res.text().catch(() => 'No response body')
+        }
         return new Response(
           JSON.stringify({
             error: 'Failed to fetch QR code from Uazapi',
-            details: errorText,
+            details: errorDetails,
             status: res.status,
           }),
           {

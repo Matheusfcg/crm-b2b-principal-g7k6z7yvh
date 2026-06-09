@@ -84,11 +84,35 @@ export function ConnectionStatus({
         })
 
         if (!res.ok) {
-          const errData = await res.json().catch(() => null)
-          throw new Error(errData?.error || `HTTP Error: ${res.status}`)
+          let errData = null
+          try {
+            errData = await res.json()
+          } catch (e) {
+            // ignore
+          }
+          throw new Error(
+            errData?.error ||
+              errData?.details ||
+              'Failed to load QR Code. Please check if the instance is active.',
+          )
         }
 
         const blob = await res.blob()
+        if (blob.type.includes('json')) {
+          const text = await blob.text()
+          let errData = null
+          try {
+            errData = JSON.parse(text)
+          } catch (e) {
+            // ignore
+          }
+          throw new Error(
+            errData?.error ||
+              errData?.details ||
+              'Failed to load QR Code. Please check if the instance is active.',
+          )
+        }
+
         if (isMounted) {
           currentImageUrl = URL.createObjectURL(blob)
           setDirectImageUrl(currentImageUrl)
@@ -257,7 +281,7 @@ export function ConnectionStatus({
               <p className="text-sm font-medium">
                 {typeof imgError === 'string'
                   ? imgError
-                  : 'Falha ao carregar o QR Code. Ocorreu um erro de rede.'}
+                  : 'Failed to load QR Code. Please check if the instance is active.'}
               </p>
               <Button
                 variant="outline"
