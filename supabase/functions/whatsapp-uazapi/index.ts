@@ -76,13 +76,50 @@ Deno.serve(async (req: Request) => {
       admintoken: uazapiKey,
     }
 
-    const { data: existingInstance } = await supabaseAdmin
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const providedId = body.instanceId || body.instanceName
+    const isProvidedIdUuid =
+      providedId &&
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+        providedId,
+      )
 
-    let instanceName = body.instanceName || existingInstance?.instance_name || `user_${user.id}`
+    let query = supabaseAdmin.from('whatsapp_instances').select('*').eq('user_id', user.id)
+
+    if (isProvidedIdUuid) {
+      query = query.eq('id', providedId)
+    }
+
+    const { data: existingInstance } = await query.maybeSingle()
+
+    let instanceName = existingInstance?.instance_name
+
+    // Prevent using a 36-char Supabase UUID as the Uazapi instance name
+    if (
+      instanceName &&
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+        instanceName,
+      )
+    ) {
+      instanceName = null
+    }
+
+    if (!instanceName) {
+      if (action === 'check_or_create') {
+        instanceName = `user_${user.id.replace(/-/g, '')}`
+      } else {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            error: 'Instance not found in database',
+            code: 'INSTANCE_NOT_FOUND',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        )
+      }
+    }
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
@@ -133,7 +170,7 @@ Deno.serve(async (req: Request) => {
       let qrcode = null
       let status = 'connecting'
       let returnedToken = existingInstance?.instance_token
-      let returnedId = instanceName
+      let returnedId = existingInstance?.instance_external_id || instanceName
 
       const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, { method: 'GET' })
       let instanceExistsInUazapi = false
@@ -161,13 +198,8 @@ Deno.serve(async (req: Request) => {
           status === 'close'
         ) {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-            console.log(
-              'Response from GET /instance/qrcode:',
-              JSON.stringify(connectRes.parsedBody),
-            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
@@ -193,7 +225,6 @@ Deno.serve(async (req: Request) => {
         })
 
         const resBody = createRes.parsedBody
-        console.log('Response from POST /instance/init:', JSON.stringify(resBody))
 
         if (
           !createRes.ok ||
@@ -228,7 +259,11 @@ Deno.serve(async (req: Request) => {
         }
 
         const uazapiInstanceName =
-          resBody?.instance?.instanceName || resBody?.instanceName || instanceName
+          resBody?.instance?.instanceName ||
+          resBody?.instance?.name ||
+          resBody?.instanceName ||
+          resBody?.name ||
+          instanceName
         returnedId =
           resBody?.instance?.instanceId ||
           resBody?.instance?.id ||
@@ -258,13 +293,8 @@ Deno.serve(async (req: Request) => {
 
         if (!qrcode) {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-            console.log(
-              'Response from GET /instance/qrcode:',
-              JSON.stringify(connectRes.parsedBody),
-            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             qrcode = extractQrCode(connectRes.parsedBody)
@@ -340,13 +370,8 @@ Deno.serve(async (req: Request) => {
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, { method: 'GET' })
-          console.log('Response from GET /instance/connect:', JSON.stringify(connectRes.parsedBody))
           if (!connectRes.ok || connectRes.status === 404) {
             connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, { method: 'GET' })
-            console.log(
-              'Response from GET /instance/qrcode:',
-              JSON.stringify(connectRes.parsedBody),
-            )
           }
           if (connectRes.ok && !connectRes.parsedBody?.error) {
             const qr = extractQrCode(connectRes.parsedBody)
@@ -448,12 +473,14 @@ Deno.serve(async (req: Request) => {
         console.error('Logout error:', err)
       }
 
-      const { error } = await supabaseAdmin
-        .from('whatsapp_instances')
-        .delete()
-        .eq('user_id', user.id)
+      if (existingInstance) {
+        const { error } = await supabaseAdmin
+          .from('whatsapp_instances')
+          .delete()
+          .eq('id', existingInstance.id)
+        if (error) throw error
+      }
 
-      if (error) throw error
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
