@@ -44,7 +44,7 @@ Deno.serve(async (req: Request) => {
     const actionQuery = url.searchParams.get('action')
     if (req.method === 'GET' && actionQuery === 'qrcode') {
       let instanceQuery = url.searchParams.get('instance')
-      const tokenQuery = url.searchParams.get('token') || '21e316ff-0990-46ed-8e24-e189051278fe'
+      const tokenQuery = url.searchParams.get('token') || ''
 
       if (!instanceQuery) {
         return new Response(JSON.stringify({ error: 'Instance name required' }), {
@@ -55,19 +55,19 @@ Deno.serve(async (req: Request) => {
 
       instanceQuery = instanceQuery.split('?')[0].split('&')[0].trim()
 
-      const rawUazapiUrl =
-        Deno.env.get('UAZAPI_SERVER_URL') ||
-        Deno.env.get('UAZAPI_URL') ||
-        Deno.env.get('UAZAPI_BASE_URL') ||
-        'https://apiwhatsvexaview.uazapi.com'
-      const baseApiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
+      const parts = instanceQuery.split('_')
+      if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
+        parts.pop()
+        instanceQuery = parts.join('_')
+      }
+
       const uazapiKey =
         Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
         Deno.env.get('UAZAPI_TOKEN') ||
         Deno.env.get('UAZAPI_API_KEY') ||
         ''
 
-      const uazapiUrl = `${baseApiUrl}/instance/qrcode/${instanceQuery}`
+      const uazapiUrl = `https://uazapi.com/${instanceQuery}`
 
       let res: Response | null = null
       let attempt = 0
@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
         try {
           res = await fetch(uazapiUrl, {
             headers: {
-              Authorization: `Bearer ${uazapiKey || tokenQuery}`,
+              Authorization: `Bearer ${uazapiKey}`,
               apikey: tokenQuery,
               admintoken: uazapiKey,
               instance: instanceQuery,
@@ -139,13 +139,24 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const blob = await res.blob()
-      return new Response(blob, {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': res?.headers.get('Content-Type') || 'image/png',
-        },
-      })
+      const contentType = res?.headers.get('Content-Type') || 'image/png'
+      if (contentType.includes('application/json')) {
+        const text = await res.text()
+        return new Response(text, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': contentType,
+          },
+        })
+      } else {
+        const blob = await res.blob()
+        return new Response(blob, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': contentType,
+          },
+        })
+      }
     }
 
     const supabaseAdmin = createClient(
@@ -172,8 +183,8 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('UAZAPI_BASE_URL') ||
       'https://apiwhatsvexaview.uazapi.com'
     const uazapiKey =
-      Deno.env.get('UAZAPI_TOKEN') ||
       Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
+      Deno.env.get('UAZAPI_TOKEN') ||
       Deno.env.get('UAZAPI_API_KEY') ||
       ''
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
@@ -277,7 +288,7 @@ Deno.serve(async (req: Request) => {
     const getApiHeaders = (token: string, instance?: string) => {
       const headers: any = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${uazapiKey || token}`,
+        Authorization: `Bearer ${uazapiKey}`,
         apikey: token,
         admintoken: uazapiKey,
       }
