@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   MessageCircle,
   QrCode,
@@ -40,20 +41,71 @@ export function ConnectionStatus({
   const isConnecting = status === 'connecting' || status === 'qrcode'
   const isNotFound = status === 'not_found'
   const isTimeout = status === 'timeout'
+
   const rawQr = instance?.qrcode
   const isValidBase64 = rawQr && typeof rawQr === 'string' && rawQr.length > 20
-  const qrcodeSrc = isValidBase64
+  const qrcodeSrcBase64 = isValidBase64
     ? rawQr.startsWith('data:image')
       ? rawQr
       : `data:image/png;base64,${rawQr}`
     : null
 
-  const directImageUrl =
-    !isValidBase64 && status === 'qrcode' && uazapiUrl && instance?.instance_name
-      ? `${uazapiUrl}/instance/qrCode/${instance.instance_name}?apikey=${instance.instance_token || ''}`
-      : null
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [imgError, setImgError] = useState(false)
+  const [isFetchingBlob, setIsFetchingBlob] = useState(false)
 
-  const isGeneratingQr = (actionLoading || isConnecting) && !qrcodeSrc && !directImageUrl
+  const shouldFetchDirect =
+    !isValidBase64 && (status === 'connecting' || status === 'qrcode') && instance?.instance_name
+
+  useEffect(() => {
+    let isMounted = true
+    let currentBlobUrl: string | null = null
+
+    const fetchImg = async () => {
+      setIsFetchingBlob(true)
+      setImgError(false)
+      try {
+        const url = `https://uazapi.com/instance/qrcode?instance=${instance.instance_name}`
+        const res = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${instance.instance_token || ''}`,
+          },
+        })
+        if (!res.ok) throw new Error('Failed to fetch image')
+        const blob = await res.blob()
+        if (isMounted) {
+          currentBlobUrl = URL.createObjectURL(blob)
+          setBlobUrl(currentBlobUrl)
+        }
+      } catch (err) {
+        if (isMounted) {
+          setImgError(true)
+        }
+      } finally {
+        if (isMounted) {
+          setIsFetchingBlob(false)
+        }
+      }
+    }
+
+    if (shouldFetchDirect) {
+      fetchImg()
+    } else {
+      setBlobUrl(null)
+      setImgError(false)
+    }
+
+    return () => {
+      isMounted = false
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl)
+      }
+    }
+  }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token])
+
+  const qrcodeSrc = qrcodeSrcBase64 || blobUrl
+
+  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !imgError)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

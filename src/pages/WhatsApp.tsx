@@ -199,7 +199,8 @@ export default function WhatsApp() {
           setInstance(data.instance)
           const isConnectedInstance =
             data.instance.status === 'open' || data.instance.status === 'connected'
-          setIsPolling(!isConnectedInstance && !data.instance.qrcode)
+          const isQrCodeStatus = data.instance.status === 'qrcode'
+          setIsPolling(!isConnectedInstance && !isQrCodeStatus && !data.instance.qrcode)
         }
       } catch (error: any) {
         addLog(`Erro ao inicializar: ${error.message}`)
@@ -233,7 +234,7 @@ export default function WhatsApp() {
           data.qrcode = null
         }
         setInstance(data)
-        if ((data.status === 'connecting' || data.status === 'qrcode') && !data.qrcode) {
+        if (data.status === 'connecting' && !data.qrcode) {
           setIsPolling(true)
         }
 
