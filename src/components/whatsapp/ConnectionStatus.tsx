@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import {
   MessageCircle,
   QrCode,
@@ -18,7 +17,6 @@ import {
   CardFooter,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase/client'
 
 interface ConnectionStatusProps {
   instance: any
@@ -31,7 +29,6 @@ interface ConnectionStatusProps {
 
 export function ConnectionStatus({
   instance,
-  uazapiUrl,
   actionLoading,
   onConnect,
   onDisconnect,
@@ -45,118 +42,16 @@ export function ConnectionStatus({
 
   const rawQr = instance?.qrcode
   const isValidBase64 = rawQr && typeof rawQr === 'string' && rawQr.length > 20
-  const qrcodeSrcBase64 = isValidBase64
-    ? rawQr.startsWith('data:image')
-      ? rawQr
-      : `data:image/png;base64,${rawQr}`
-    : null
 
-  const [directImageUrl, setDirectImageUrl] = useState<string | null>(null)
-  const [imgError, setImgError] = useState<string | boolean>(false)
-  const [isFetchingBlob, setIsFetchingBlob] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
+  let qrcodeSrc = null
+  if (isValidBase64) {
+    qrcodeSrc =
+      rawQr.startsWith('data:image') || rawQr.startsWith('http')
+        ? rawQr
+        : `data:image/png;base64,${rawQr}`
+  }
 
-  const shouldFetchDirect =
-    !isValidBase64 && (status === 'connecting' || status === 'qrcode') && instance?.instance_name
-
-  useEffect(() => {
-    let isMounted = true
-    let currentImageUrl: string | null = null
-
-    const fetchImg = async () => {
-      setIsFetchingBlob(true)
-      setImgError(false)
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const accessToken = sessionData.session?.access_token
-
-        if (!accessToken) throw new Error('No access token')
-
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-        const token = instance.instance_token || '21e316ff-0990-46ed-8e24-e189051278fe'
-        const url = `${supabaseUrl}/functions/v1/whatsapp-uazapi?action=qrcode&instance=${instance.instance_name}&token=${token}`
-
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        })
-
-        if (!res.ok) {
-          let errData = null
-          try {
-            errData = await res.json()
-          } catch (e) {
-            // ignore
-          }
-
-          if (res.status === 404 || errData?.status === 404) {
-            throw new Error('Instance not found or still initializing')
-          }
-
-          throw new Error(
-            errData?.error ||
-              errData?.details ||
-              'Failed to load QR Code. Please check if the instance is active.',
-          )
-        }
-
-        const blob = await res.blob()
-        if (blob.type.includes('json')) {
-          const text = await blob.text()
-          let errData = null
-          try {
-            errData = JSON.parse(text)
-          } catch (e) {
-            // ignore
-          }
-
-          if (errData?.status === 404) {
-            throw new Error('Instance not found or still initializing')
-          }
-
-          throw new Error(
-            errData?.error ||
-              errData?.details ||
-              'Failed to load QR Code. Please check if the instance is active.',
-          )
-        }
-
-        if (isMounted) {
-          currentImageUrl = URL.createObjectURL(blob)
-          setDirectImageUrl(currentImageUrl)
-        }
-      } catch (err: any) {
-        console.error('Failed to fetch QR code:', err)
-        if (isMounted) {
-          setImgError(err.message || true)
-        }
-      } finally {
-        if (isMounted) {
-          setIsFetchingBlob(false)
-        }
-      }
-    }
-
-    if (shouldFetchDirect) {
-      fetchImg()
-    } else {
-      setDirectImageUrl(null)
-      setImgError(false)
-    }
-
-    return () => {
-      isMounted = false
-      if (currentImageUrl) {
-        URL.revokeObjectURL(currentImageUrl)
-      }
-    }
-  }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token, retryCount])
-
-  const qrcodeSrc = qrcodeSrcBase64 || directImageUrl
-
-  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !imgError)
+  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !error)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -284,24 +179,6 @@ export function ConnectionStatus({
                     'https://img.usecurling.com/i?q=qr-code-error&color=gray'
                 }}
               />
-            </div>
-          ) : imgError ? (
-            <div className="text-center text-red-500 flex flex-col items-center gap-4 max-w-[250px]">
-              <WifiOff className="h-8 w-8" />
-              <p className="text-sm font-medium">
-                {typeof imgError === 'string'
-                  ? imgError
-                  : 'Failed to load QR Code. Please check if the instance is active.'}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRetryCount((c) => c + 1)}
-                className="gap-2 text-slate-700"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Tentar Novamente
-              </Button>
             </div>
           ) : error ? (
             <div className="text-center text-red-500 flex flex-col items-center gap-3 max-w-[250px]">

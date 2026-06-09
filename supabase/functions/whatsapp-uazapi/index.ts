@@ -8,6 +8,17 @@ const corsHeaders = {
     'authorization, x-client-info, x-supabase-client-platform, apikey, content-type, instance',
 }
 
+const sanitizeInstanceName = (name: string) => {
+  if (!name) return name
+  let cleanName = name.split('?')[0].split('&')[0].trim()
+  const parts = cleanName.split('_')
+  if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
+    parts.pop()
+    cleanName = parts.join('_')
+  }
+  return cleanName
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -38,125 +49,6 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 401,
       })
-    }
-
-    const url = new URL(req.url)
-    const actionQuery = url.searchParams.get('action')
-    if (req.method === 'GET' && actionQuery === 'qrcode') {
-      let instanceQuery = url.searchParams.get('instance')
-      const tokenQuery = url.searchParams.get('token') || ''
-
-      if (!instanceQuery) {
-        return new Response(JSON.stringify({ error: 'Instance name required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      instanceQuery = instanceQuery.split('?')[0].split('&')[0].trim()
-
-      const parts = instanceQuery.split('_')
-      if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
-        parts.pop()
-        instanceQuery = parts.join('_')
-      }
-
-      const uazapiKey =
-        Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
-        Deno.env.get('UAZAPI_TOKEN') ||
-        Deno.env.get('UAZAPI_API_KEY') ||
-        ''
-
-      const uazapiUrl = `https://uazapi.com/${instanceQuery}`
-
-      let res: Response | null = null
-      let attempt = 0
-      const maxAttempts = 3
-      let errorDetails = ''
-
-      while (attempt < maxAttempts) {
-        attempt++
-        try {
-          res = await fetch(uazapiUrl, {
-            headers: {
-              Authorization: `Bearer ${uazapiKey}`,
-              apikey: tokenQuery,
-              admintoken: uazapiKey,
-              instance: instanceQuery,
-            },
-          })
-
-          if (res.ok) break
-
-          if (res.status === 404 && attempt < maxAttempts) {
-            console.log(
-              `[QR_CODE] Attempt ${attempt} failed with 404 for instance ${instanceQuery}, retrying in 2s...`,
-            )
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-            continue
-          }
-
-          break
-        } catch (err: any) {
-          errorDetails = err.message
-          if (attempt < maxAttempts) {
-            console.log(
-              `[QR_CODE] Attempt ${attempt} error for instance ${instanceQuery}, retrying in 2s...`,
-            )
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-          }
-        }
-      }
-
-      if (!res || !res.ok) {
-        try {
-          if (res) {
-            const errorJson = await res.json().catch(() => null)
-            if (errorJson) {
-              errorDetails = JSON.stringify(errorJson)
-            } else {
-              errorDetails = await res.text().catch(() => 'No response body')
-            }
-          }
-        } catch (_) {
-          // ignore
-        }
-
-        console.error(
-          `[ERROR] action: ${actionQuery}, instance: ${instanceQuery}, status: ${res?.status || 500}, details: ${errorDetails}`,
-        )
-
-        return new Response(
-          JSON.stringify({
-            error: 'Failed to fetch QR code from Uazapi',
-            details: errorDetails,
-            status: res?.status || 500,
-          }),
-          {
-            status: res?.status || 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        )
-      }
-
-      const contentType = res?.headers.get('Content-Type') || 'image/png'
-      if (contentType.includes('application/json')) {
-        const text = await res.text()
-        return new Response(text, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': contentType,
-          },
-        })
-      } else {
-        const blob = await res.blob()
-        return new Response(blob, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': contentType,
-          },
-        })
-      }
     }
 
     const supabaseAdmin = createClient(
@@ -215,20 +107,18 @@ Deno.serve(async (req: Request) => {
       instanceName = null
     }
 
-    if (!instanceName) {
-      if (action !== 'check_or_create') {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            error: 'Instance not found in database',
-            code: 'INSTANCE_NOT_FOUND',
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          },
-        )
-      }
+    if (!instanceName && action !== 'check_or_create') {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          error: 'Instance not found in database',
+          code: 'INSTANCE_NOT_FOUND',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        },
+      )
     }
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
@@ -278,7 +168,7 @@ Deno.serve(async (req: Request) => {
         if (qrcode.length <= 3 || qrcode === '404') {
           return null
         }
-        if (!qrcode.startsWith('data:image')) {
+        if (!qrcode.startsWith('data:image') && !qrcode.startsWith('http')) {
           qrcode = `data:image/png;base64,${qrcode}`
         }
       }
@@ -298,14 +188,44 @@ Deno.serve(async (req: Request) => {
       return headers
     }
 
+    const connectInstance = async (targetInstanceName: string, token: string) => {
+      const cleanInstanceName = sanitizeInstanceName(targetInstanceName)
+      const connectPath = `/instance/connect/${cleanInstanceName}`
+      const connectHeaders = getApiHeaders(token, cleanInstanceName)
+
+      let attempt = 0
+      const maxAttempts = 3
+      let connectRes: any = null
+
+      while (attempt < maxAttempts) {
+        attempt++
+        connectRes = await fetchUazapi(connectPath, {
+          method: 'POST',
+          headers: connectHeaders,
+          body: JSON.stringify({ phone: '' }),
+        })
+
+        if (connectRes.status !== 404) {
+          break
+        }
+
+        if (attempt < maxAttempts) {
+          console.log(
+            `[CONNECT] Attempt ${attempt} failed with 404 for instance ${cleanInstanceName}, retrying in 2s...`,
+          )
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+        }
+      }
+
+      return connectRes
+    }
+
     if (action === 'check_or_create') {
       let qrcode = null
       let status = 'connecting'
       let returnedToken = existingInstance?.instance_token
       let returnedId = existingInstance?.instance_external_id || instanceName
 
-      let instanceExistsInUazapi = false
-      let uazapiState = 'not_found'
       let needsInit = true
 
       if (existingInstance && instanceName) {
@@ -320,31 +240,7 @@ Deno.serve(async (req: Request) => {
           !stateRes.parsedBody.error &&
           stateRes.parsedBody.message !== 'Instance not found'
         ) {
-          instanceExistsInUazapi = true
-          uazapiState =
-            stateRes.parsedBody?.instance?.state ||
-            stateRes.parsedBody?.state ||
-            stateRes.parsedBody?.stateConnection ||
-            stateRes.parsedBody?.status ||
-            'connecting'
           needsInit = false
-        } else {
-          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'GET',
-            headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-          })
-          if (
-            connectRes.ok &&
-            connectRes.parsedBody &&
-            !connectRes.parsedBody.error &&
-            connectRes.parsedBody.message !== 'Instance not found'
-          ) {
-            instanceExistsInUazapi = true
-            needsInit = false
-            qrcode = extractQrCode(connectRes.parsedBody)
-            uazapiState =
-              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
-          }
         }
       }
 
@@ -414,150 +310,25 @@ Deno.serve(async (req: Request) => {
           resBody?.instance?.token ||
           returnedToken
 
-        if (!returnedId || !uazapiInstanceName) {
-          return new Response(
-            JSON.stringify({
-              error: 'Uazapi did not return a valid instance identifier',
-              details: resBody,
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200,
-            },
-          )
-        }
-
         if (uazapiInstanceName && typeof uazapiInstanceName === 'string') {
           instanceName = uazapiInstanceName
         }
 
-        if (
-          !instanceName ||
-          instanceName.trim() === '' ||
-          !returnedToken ||
-          returnedToken.trim() === ''
-        ) {
-          return new Response(
-            JSON.stringify({
-              error: 'Invalid instance name or token returned from Uazapi',
-              details: resBody,
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200,
-            },
-          )
-        }
+        console.log(`[INIT] Triggering connection POST for instance: ${instanceName}`)
 
-        console.log(`[INIT] Triggering connection for instance: ${instanceName}`)
+        let connectRes = await connectInstance(instanceName, returnedToken || uazapiKey)
 
-        const connectHeaders = getApiHeaders(returnedToken, instanceName)
-
-        let initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-          method: 'GET',
-          headers: connectHeaders,
-        })
-
-        if (initConnectRes.status === 404 || initConnectRes.status === 405 || !initConnectRes.ok) {
-          initConnectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'POST',
-            headers: connectHeaders,
-            body: JSON.stringify({ instanceName: instanceName }),
-          })
-        }
-
-        console.log(`[INIT] Starting 5s mandatory delay for instance: ${instanceName}`)
-        await new Promise((resolve) => setTimeout(resolve, 5000))
-
-        qrcode = extractQrCode(resBody)
-        status = 'connecting'
+        qrcode = extractQrCode(connectRes?.parsedBody) || extractQrCode(resBody)
+        status =
+          connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'connecting'
       } else {
-        status = uazapiState
-        if (
-          status === 'disconnected' ||
-          status === 'qrcode' ||
-          status === 'connecting' ||
-          status === 'close'
-        ) {
-          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-            method: 'GET',
-            headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-          })
-          if (!connectRes.ok || connectRes.status === 404) {
-            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, {
-              method: 'GET',
-              headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-            })
-          }
-          if (connectRes.ok && !connectRes.parsedBody?.error) {
-            qrcode = extractQrCode(connectRes.parsedBody)
-            status =
-              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
-          }
-        }
-      }
-
-      if (!qrcode) {
-        let loopCount = 0
-        const maxAttempts = 6
-        const connectHeaders = getApiHeaders(returnedToken || uazapiKey, instanceName)
-
-        while (loopCount < maxAttempts) {
-          loopCount++
-          console.log(
-            `[INIT] Polling attempt ${loopCount} of ${maxAttempts} for instance: ${instanceName}`,
-          )
-
-          let connectRes = await fetchUazapi(`/instance/status/${instanceName}`, {
-            method: 'GET',
-            headers: connectHeaders,
-          })
-
-          const parsed = connectRes.parsedBody
-          const isNotFound =
-            connectRes.status === 404 ||
-            parsed?.message === 'Instance not found' ||
-            parsed?.error === 'Instance not found'
-
-          qrcode = extractQrCode({ base64: parsed?.instance?.qrcode }) || extractQrCode(parsed)
-          status = parsed?.instance?.state || parsed?.state || status
-
-          if (status === 'qrcode') {
-            console.log(
-              `[INIT] QR Code extracted successfully (status qrcode) on attempt ${loopCount}`,
-            )
-            break
-          } else if (qrcode) {
-            console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
-            break
-          } else if (isNotFound) {
-            status = 'connecting'
-            if (loopCount <= 5) {
-              console.log(
-                `[INIT] Instance not found on attempt ${loopCount}. Treating as expected delay.`,
-              )
-            } else {
-              console.log(`[INIT] Instance still not found on attempt ${loopCount}. Proceeding.`)
-              break
-            }
-          } else {
-            console.log(
-              `[INIT] No QR code yet, status: ${status}. Response: ${JSON.stringify(parsed)}`,
-            )
-            if (status === 'open' || status === 'connected') {
-              break
-            }
-          }
-
-          if (
-            loopCount < maxAttempts &&
-            status !== 'qrcode' &&
-            status !== 'open' &&
-            status !== 'connected'
-          ) {
-            console.log(`[INIT] Waiting 3s before next attempt...`)
-            await new Promise((resolve) => setTimeout(resolve, 3000))
-          }
+        let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
+        if (connectRes?.ok && !connectRes?.parsedBody?.error) {
+          qrcode = extractQrCode(connectRes.parsedBody)
+          status =
+            connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
+        } else {
+          status = existingInstance?.status || 'disconnected'
         }
       }
 
@@ -634,33 +405,25 @@ Deno.serve(async (req: Request) => {
           updateData.qrcode = null
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
-          const statusQr =
+          let statusQr =
             extractQrCode({ base64: stateData?.instance?.qrcode }) || extractQrCode(stateData)
 
-          if (statusQr) {
-            updateData.qrcode = statusQr
-          } else {
-            let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
-              method: 'GET',
-              headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-            })
-            if (!connectRes.ok || connectRes.status === 404 || connectRes.status === 405) {
-              connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, {
-                method: 'GET',
-                headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-              })
-            }
-            if (connectRes.ok && !connectRes.parsedBody?.error) {
-              const qr =
+          if (!statusQr) {
+            let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
+            if (connectRes?.ok && !connectRes?.parsedBody?.error) {
+              statusQr =
                 extractQrCode({ base64: connectRes.parsedBody?.instance?.qrcode }) ||
                 extractQrCode(connectRes.parsedBody)
-              if (qr) updateData.qrcode = qr
               if (connectRes.parsedBody?.instance?.state) {
                 updateData.status = connectRes.parsedBody.instance.state
               } else if (connectRes.parsedBody?.state) {
                 updateData.status = connectRes.parsedBody.state
               }
             }
+          }
+
+          if (statusQr) {
+            updateData.qrcode = statusQr
           }
         }
 
@@ -753,9 +516,10 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'delete') {
       try {
         const returnedToken = existingInstance?.instance_token
-        await fetchUazapi(`/instance/logout/${instanceName}`, {
+        const cleanName = sanitizeInstanceName(instanceName!)
+        await fetchUazapi(`/instance/logout/${cleanName}`, {
           method: 'DELETE',
-          headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
+          headers: getApiHeaders(returnedToken || uazapiKey, cleanName),
         })
       } catch (err: any) {
         console.error('Logout error:', err)
