@@ -89,10 +89,11 @@ export default function WhatsApp() {
               data.instance.status === 'qrcode' ||
               hasQrCode
             ) {
-              if (
-                !hasQrCode &&
-                (data.instance.status === 'connecting' || data.instance.status === 'qrcode')
-              ) {
+              if (data.instance.status === 'qrcode' || hasQrCode) {
+                // AC: Terminate the polling loop immediately upon receiving 'qrcode' status
+                pollCountRef.current = 0
+                setIsPolling(false)
+              } else if (!hasQrCode && data.instance.status === 'connecting') {
                 pollCountRef.current += 1
                 if (pollCountRef.current >= 5) {
                   setIsPolling(false)
@@ -101,10 +102,6 @@ export default function WhatsApp() {
                   return
                 }
                 setIsPolling(true)
-              } else if (hasQrCode) {
-                // AC: Terminate the polling loop immediately. No further status requests.
-                pollCountRef.current = 0
-                setIsPolling(false)
               } else {
                 pollCountRef.current = 0
                 setIsPolling(false)

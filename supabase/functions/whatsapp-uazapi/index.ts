@@ -97,9 +97,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!instanceName) {
-      if (action === 'check_or_create') {
-        instanceName = `user_${user.id.replace(/-/g, '')}`
-      } else {
+      if (action !== 'check_or_create') {
         return new Response(
           JSON.stringify({
             success: true,
@@ -180,57 +178,52 @@ Deno.serve(async (req: Request) => {
       let returnedToken = existingInstance?.instance_token
       let returnedId = existingInstance?.instance_external_id || instanceName
 
-      const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
-        method: 'GET',
-        headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-      })
       let instanceExistsInUazapi = false
       let uazapiState = 'not_found'
+      let needsInit = true
 
-      if (stateRes.ok) {
-        const stateData = stateRes.parsedBody
-        if (!stateData?.error && stateData?.message !== 'Instance not found') {
+      if (existingInstance && instanceName) {
+        const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
+          method: 'GET',
+          headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
+        })
+
+        if (
+          stateRes.ok &&
+          stateRes.parsedBody &&
+          !stateRes.parsedBody.error &&
+          stateRes.parsedBody.message !== 'Instance not found'
+        ) {
           instanceExistsInUazapi = true
           uazapiState =
-            stateData?.instance?.state ||
-            stateData?.state ||
-            stateData?.stateConnection ||
-            stateData?.status ||
+            stateRes.parsedBody?.instance?.state ||
+            stateRes.parsedBody?.state ||
+            stateRes.parsedBody?.stateConnection ||
+            stateRes.parsedBody?.status ||
             'connecting'
-        }
-      }
-
-      if (instanceExistsInUazapi) {
-        status = uazapiState
-        if (
-          status === 'disconnected' ||
-          status === 'qrcode' ||
-          status === 'connecting' ||
-          status === 'close'
-        ) {
+          needsInit = false
+        } else {
           let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
           })
-          if (!connectRes.ok || connectRes.status === 404) {
-            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, {
-              method: 'GET',
-              headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-            })
-          }
-          if (connectRes.ok && !connectRes.parsedBody?.error) {
+          if (
+            connectRes.ok &&
+            connectRes.parsedBody &&
+            !connectRes.parsedBody.error &&
+            connectRes.parsedBody.message !== 'Instance not found'
+          ) {
+            instanceExistsInUazapi = true
+            needsInit = false
             qrcode = extractQrCode(connectRes.parsedBody)
-            status =
-              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
+            uazapiState =
+              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
           }
         }
-      } else {
-        if (existingInstance?.status === 'not_found' || existingInstance) {
-          await fetchUazapi(`/instance/logout/${instanceName}`, {
-            method: 'DELETE',
-            headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
-          }).catch(() => {})
-        }
+      }
+
+      if (needsInit) {
+        instanceName = `user_${user.id.replace(/-/g, '')}_${Date.now()}`
 
         let createRes = await fetchUazapi('/instance/init', {
           method: 'POST',
@@ -352,58 +345,92 @@ Deno.serve(async (req: Request) => {
 
         qrcode = extractQrCode(resBody)
         status = 'connecting'
-
-        if (!qrcode) {
-          let loopCount = 0
-          const maxAttempts = 6
-
-          while (loopCount < maxAttempts) {
-            loopCount++
-            console.log(
-              `[INIT] Polling attempt ${loopCount} of ${maxAttempts} for instance: ${instanceName}`,
-            )
-
-            let connectRes = await fetchUazapi(`/instance/status/${instanceName}`, {
+      } else {
+        status = uazapiState
+        if (
+          status === 'disconnected' ||
+          status === 'qrcode' ||
+          status === 'connecting' ||
+          status === 'close'
+        ) {
+          let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
+            method: 'GET',
+            headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
+          })
+          if (!connectRes.ok || connectRes.status === 404) {
+            connectRes = await fetchUazapi(`/instance/qr/${instanceName}`, {
               method: 'GET',
-              headers: connectHeaders,
+              headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
             })
+          }
+          if (connectRes.ok && !connectRes.parsedBody?.error) {
+            qrcode = extractQrCode(connectRes.parsedBody)
+            status =
+              connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || status
+          }
+        }
+      }
 
-            const parsed = connectRes.parsedBody
-            const isNotFound =
-              connectRes.status === 404 ||
-              parsed?.message === 'Instance not found' ||
-              parsed?.error === 'Instance not found'
+      if (!qrcode) {
+        let loopCount = 0
+        const maxAttempts = 6
+        const connectHeaders = getApiHeaders(returnedToken || uazapiKey, instanceName)
 
-            qrcode = extractQrCode({ base64: parsed?.instance?.qrcode }) || extractQrCode(parsed)
+        while (loopCount < maxAttempts) {
+          loopCount++
+          console.log(
+            `[INIT] Polling attempt ${loopCount} of ${maxAttempts} for instance: ${instanceName}`,
+          )
 
-            if (qrcode) {
-              status = parsed?.instance?.state || parsed?.state || 'qrcode'
-              console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
-              break
-            } else if (isNotFound) {
-              status = 'connecting'
-              if (loopCount <= 5) {
-                console.log(
-                  `[INIT] Instance not found on attempt ${loopCount}. Treating as expected delay.`,
-                )
-              } else {
-                console.log(`[INIT] Instance still not found on attempt ${loopCount}. Proceeding.`)
-                break
-              }
-            } else {
-              status = parsed?.instance?.state || parsed?.state || 'connecting'
+          let connectRes = await fetchUazapi(`/instance/status/${instanceName}`, {
+            method: 'GET',
+            headers: connectHeaders,
+          })
+
+          const parsed = connectRes.parsedBody
+          const isNotFound =
+            connectRes.status === 404 ||
+            parsed?.message === 'Instance not found' ||
+            parsed?.error === 'Instance not found'
+
+          qrcode = extractQrCode({ base64: parsed?.instance?.qrcode }) || extractQrCode(parsed)
+          status = parsed?.instance?.state || parsed?.state || status
+
+          if (status === 'qrcode') {
+            console.log(
+              `[INIT] QR Code extracted successfully (status qrcode) on attempt ${loopCount}`,
+            )
+            break
+          } else if (qrcode) {
+            console.log(`[INIT] QR Code extracted successfully on attempt ${loopCount}`)
+            break
+          } else if (isNotFound) {
+            status = 'connecting'
+            if (loopCount <= 5) {
               console.log(
-                `[INIT] No QR code yet, status: ${status}. Response: ${JSON.stringify(parsed)}`,
+                `[INIT] Instance not found on attempt ${loopCount}. Treating as expected delay.`,
               )
-              if (status === 'open' || status === 'connected') {
-                break
-              }
+            } else {
+              console.log(`[INIT] Instance still not found on attempt ${loopCount}. Proceeding.`)
+              break
             }
+          } else {
+            console.log(
+              `[INIT] No QR code yet, status: ${status}. Response: ${JSON.stringify(parsed)}`,
+            )
+            if (status === 'open' || status === 'connected') {
+              break
+            }
+          }
 
-            if (loopCount < maxAttempts && !qrcode && status !== 'open' && status !== 'connected') {
-              console.log(`[INIT] Waiting 3s before next attempt...`)
-              await new Promise((resolve) => setTimeout(resolve, 3000))
-            }
+          if (
+            loopCount < maxAttempts &&
+            status !== 'qrcode' &&
+            status !== 'open' &&
+            status !== 'connected'
+          ) {
+            console.log(`[INIT] Waiting 3s before next attempt...`)
+            await new Promise((resolve) => setTimeout(resolve, 3000))
           }
         }
       }
