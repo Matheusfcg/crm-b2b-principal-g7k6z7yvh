@@ -103,9 +103,15 @@ export function ConnectionStatus({
     }
   }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token])
 
+  const directImageUrl =
+    shouldFetchDirect && instance?.instance_name
+      ? `https://uazapi.com/instance/qrcode?instance=${instance.instance_name}`
+      : null
+
   const qrcodeSrc = qrcodeSrcBase64 || blobUrl
 
-  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !imgError)
+  const isGeneratingQr =
+    actionLoading || (isConnecting && !qrcodeSrc && !directImageUrl && !imgError)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
