@@ -25,6 +25,35 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const bodyText = await req.text()
+    let body: any = {}
+    try {
+      body = bodyText ? JSON.parse(bodyText) : {}
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
+
+    if (
+      !body.action &&
+      (body.event ||
+        body.event_type ||
+        body.message ||
+        body.data ||
+        (body.instance && typeof body.instance === 'string'))
+    ) {
+      console.log(
+        '[WEBHOOK] Received from Uazapi:',
+        body.event || body.event_type || 'unknown_event',
+      )
+      return new Response(JSON.stringify({ success: true, received: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -55,17 +84,6 @@ Deno.serve(async (req: Request) => {
       supabaseUrl,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? supabaseKey,
     )
-
-    const bodyText = await req.text()
-    let body: any = {}
-    try {
-      body = bodyText ? JSON.parse(bodyText) : {}
-    } catch (e) {
-      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
-    }
 
     const action = body.action
 
@@ -188,9 +206,36 @@ Deno.serve(async (req: Request) => {
       return headers
     }
 
+    const setWebhook = async (instanceName: string, token: string) => {
+      const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
+      const cleanInstanceName = sanitizeInstanceName(instanceName)
+
+      const payload = {
+        url: webhookUrl,
+        webhookUrl: webhookUrl,
+        webhook: webhookUrl,
+        webhookByEvents: false,
+        events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED', 'SEND_MESSAGE'],
+      }
+
+      let res = await fetchUazapi(`/webhook/set/${cleanInstanceName}`, {
+        method: 'POST',
+        headers: getApiHeaders(token, cleanInstanceName),
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok || res.status === 404) {
+        res = await fetchUazapi(`/instance/webhook`, {
+          method: 'POST',
+          headers: getApiHeaders(token, cleanInstanceName),
+          body: JSON.stringify({ instance: cleanInstanceName, url: webhookUrl, webhookUrl }),
+        })
+      }
+      return res
+    }
+
     const connectInstance = async (targetInstanceName: string, token: string) => {
       const cleanInstanceName = sanitizeInstanceName(targetInstanceName)
-      const connectPath = `/instance/connect/${cleanInstanceName}`
       const connectHeaders = getApiHeaders(token, cleanInstanceName)
 
       let attempt = 0
@@ -199,19 +244,28 @@ Deno.serve(async (req: Request) => {
 
       while (attempt < maxAttempts) {
         attempt++
-        connectRes = await fetchUazapi(connectPath, {
+
+        connectRes = await fetchUazapi(`/instance/connect`, {
           method: 'POST',
           headers: connectHeaders,
-          body: JSON.stringify({ phone: '' }),
+          body: JSON.stringify({ instance: cleanInstanceName }),
         })
 
-        if (connectRes.status !== 404) {
+        if (connectRes.status === 404) {
+          connectRes = await fetchUazapi(`/instance/connect/${cleanInstanceName}`, {
+            method: 'POST',
+            headers: connectHeaders,
+            body: JSON.stringify({ instance: cleanInstanceName }),
+          })
+        }
+
+        if (connectRes.status !== 404 && connectRes.status !== 500) {
           break
         }
 
         if (attempt < maxAttempts) {
           console.log(
-            `[CONNECT] Attempt ${attempt} failed with 404 for instance ${cleanInstanceName}, retrying in 2s...`,
+            `[CONNECT] Attempt ${attempt} failed with ${connectRes.status} for instance ${cleanInstanceName}, retrying in 2s...`,
           )
           await new Promise((resolve) => setTimeout(resolve, 2000))
         }
@@ -247,6 +301,7 @@ Deno.serve(async (req: Request) => {
       if (needsInit) {
         instanceName = `user_${user.id.replace(/-/g, '')}_${Date.now()}`
 
+        const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
         let createRes = await fetchUazapi('/instance/init', {
           method: 'POST',
           headers: getApiHeaders(uazapiKey),
@@ -255,6 +310,10 @@ Deno.serve(async (req: Request) => {
             Name: instanceName,
             name: instanceName,
             qrcode: true,
+            webhook: webhookUrl,
+            webhookUrl: webhookUrl,
+            webhook_by_events: false,
+            events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'],
           }),
         })
 
@@ -314,14 +373,18 @@ Deno.serve(async (req: Request) => {
           instanceName = uazapiInstanceName
         }
 
-        console.log(`[INIT] Triggering connection POST for instance: ${instanceName}`)
+        console.log(`[INIT] Setting webhook for instance: ${instanceName}`)
+        await setWebhook(instanceName, returnedToken || uazapiKey)
 
+        console.log(`[INIT] Triggering connection POST for instance: ${instanceName}`)
         let connectRes = await connectInstance(instanceName, returnedToken || uazapiKey)
 
         qrcode = extractQrCode(connectRes?.parsedBody) || extractQrCode(resBody)
         status =
           connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'connecting'
       } else {
+        console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
+        await setWebhook(instanceName!, returnedToken || uazapiKey)
         let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
         if (connectRes?.ok && !connectRes?.parsedBody?.error) {
           qrcode = extractQrCode(connectRes.parsedBody)

@@ -173,7 +173,7 @@ export function ConnectionStatus({
               <img
                 src={qrcodeSrc}
                 alt="WhatsApp QR Code"
-                className="w-[200px] h-[200px]"
+                className="w-[200px] h-[200px] object-contain"
                 onError={(e) => {
                   ;(e.target as HTMLImageElement).src =
                     'https://img.usecurling.com/i?q=qr-code-error&color=gray'
