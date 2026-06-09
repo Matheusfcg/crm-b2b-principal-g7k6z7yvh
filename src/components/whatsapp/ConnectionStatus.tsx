@@ -53,6 +53,7 @@ export function ConnectionStatus({
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [imgError, setImgError] = useState(false)
   const [isFetchingBlob, setIsFetchingBlob] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   const shouldFetchDirect =
     !isValidBase64 && (status === 'connecting' || status === 'qrcode') && instance?.instance_name
@@ -66,18 +67,24 @@ export function ConnectionStatus({
       setImgError(false)
       try {
         const url = `https://uazapi.com/instance/qrcode?instance=${instance.instance_name}`
+        const token = instance.instance_token || '21e316ff-0990-46ed-8e24-e189051278fe'
+
         const res = await fetch(url, {
+          method: 'GET',
           headers: {
-            Authorization: `Bearer ${instance.instance_token || ''}`,
+            Authorization: `Bearer ${token}`,
           },
         })
-        if (!res.ok) throw new Error('Failed to fetch image')
+
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`)
+
         const blob = await res.blob()
         if (isMounted) {
           currentBlobUrl = URL.createObjectURL(blob)
           setBlobUrl(currentBlobUrl)
         }
       } catch (err) {
+        console.error('Failed to fetch QR code:', err)
         if (isMounted) {
           setImgError(true)
         }
@@ -101,17 +108,11 @@ export function ConnectionStatus({
         URL.revokeObjectURL(currentBlobUrl)
       }
     }
-  }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token])
-
-  const directImageUrl =
-    shouldFetchDirect && instance?.instance_name
-      ? `https://uazapi.com/instance/qrcode?instance=${instance.instance_name}`
-      : null
+  }, [shouldFetchDirect, instance?.instance_name, instance?.instance_token, retryCount])
 
   const qrcodeSrc = qrcodeSrcBase64 || blobUrl
 
-  const isGeneratingQr =
-    actionLoading || (isConnecting && !qrcodeSrc && !directImageUrl && !imgError)
+  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !imgError)
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -186,7 +187,7 @@ export function ConnectionStatus({
           )}
         </CardContent>
         <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-center p-4">
-          {isConnected || isGeneratingQr || !!qrcodeSrc || !!directImageUrl ? (
+          {isConnected || isGeneratingQr || !!qrcodeSrc ? (
             <Button
               variant="destructive"
               onClick={onDisconnect}
@@ -228,10 +229,10 @@ export function ConnectionStatus({
           <CardDescription>Escaneie o código para vincular.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center min-h-[250px] p-6">
-          {qrcodeSrc || directImageUrl ? (
+          {qrcodeSrc ? (
             <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300">
               <img
-                src={qrcodeSrc || directImageUrl!}
+                src={qrcodeSrc}
                 alt="WhatsApp QR Code"
                 className="w-[200px] h-[200px]"
                 onError={(e) => {
@@ -239,6 +240,22 @@ export function ConnectionStatus({
                     'https://img.usecurling.com/i?q=qr-code-error&color=gray'
                 }}
               />
+            </div>
+          ) : imgError ? (
+            <div className="text-center text-red-500 flex flex-col items-center gap-4 max-w-[250px]">
+              <WifiOff className="h-8 w-8" />
+              <p className="text-sm font-medium">
+                Falha ao carregar o QR Code. Ocorreu um erro de rede.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRetryCount((c) => c + 1)}
+                className="gap-2 text-slate-700"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Tentar Novamente
+              </Button>
             </div>
           ) : error ? (
             <div className="text-center text-red-500 flex flex-col items-center gap-3 max-w-[250px]">
