@@ -10,6 +10,7 @@ export default function WhatsApp() {
   const { user } = useAuth()
 
   const [instance, setInstance] = useState<any>(null)
+  const [uazapiUrl, setUazapiUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
@@ -64,6 +65,11 @@ export default function WhatsApp() {
           } else {
             addLog(`Status atualizado: ${data?.instance?.status}`)
           }
+
+          if (data?.uazapiUrl) {
+            setUazapiUrl(data.uazapiUrl)
+          }
+
           if (data?.instance) {
             // Ensure qrcode is null if it's not a valid string
             if (
@@ -83,7 +89,10 @@ export default function WhatsApp() {
               data.instance.status === 'qrcode' ||
               hasQrCode
             ) {
-              if (!hasQrCode && data.instance.status === 'connecting') {
+              if (
+                !hasQrCode &&
+                (data.instance.status === 'connecting' || data.instance.status === 'qrcode')
+              ) {
                 pollCountRef.current += 1
                 if (pollCountRef.current >= 5) {
                   setIsPolling(false)
@@ -91,10 +100,15 @@ export default function WhatsApp() {
                   setConnectError('Tempo limite atingido aguardando QR Code. Tente novamente.')
                   return
                 }
+                setIsPolling(true)
+              } else if (hasQrCode) {
+                // AC: Terminate the polling loop immediately. No further status requests.
+                pollCountRef.current = 0
+                setIsPolling(false)
               } else {
                 pollCountRef.current = 0
+                setIsPolling(false)
               }
-              setIsPolling(true)
             }
           }
         }
@@ -161,6 +175,10 @@ export default function WhatsApp() {
 
         addLog('Instância inicializada/recuperada.')
 
+        if (data?.uazapiUrl) {
+          setUazapiUrl(data.uazapiUrl)
+        }
+
         if (
           !data?.instance?.qrcode &&
           (data?.instance?.status === 'connecting' || data?.instance?.status === 'qrcode')
@@ -184,7 +202,7 @@ export default function WhatsApp() {
           setInstance(data.instance)
           const isConnectedInstance =
             data.instance.status === 'open' || data.instance.status === 'connected'
-          setIsPolling(!isConnectedInstance)
+          setIsPolling(!isConnectedInstance && !data.instance.qrcode)
         }
       } catch (error: any) {
         addLog(`Erro ao inicializar: ${error.message}`)
@@ -207,7 +225,9 @@ export default function WhatsApp() {
     try {
       const { data } = await supabase
         .from('whatsapp_instances')
-        .select('id, user_id, status, qrcode, last_connection, phone, instance_name')
+        .select(
+          'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token',
+        )
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -216,7 +236,7 @@ export default function WhatsApp() {
           data.qrcode = null
         }
         setInstance(data)
-        if (data.status === 'connecting' || data.status === 'qrcode' || !!data.qrcode) {
+        if ((data.status === 'connecting' || data.status === 'qrcode') && !data.qrcode) {
           setIsPolling(true)
         }
 
@@ -237,14 +257,38 @@ export default function WhatsApp() {
       hasInitialized.current = true
       fetchInstance()
     }
-  }, [fetchInstance])
+
+    if (user) {
+      const channel = supabase
+        .channel('whatsapp_instances_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'whatsapp_instances',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              setInstance((prev: any) => ({ ...prev, ...payload.new }))
+            }
+          },
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [fetchInstance, user])
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>
     const isConnecting = instance?.status === 'connecting' || instance?.status === 'qrcode'
     const hasQrCode = !!instance?.qrcode
 
-    if ((isConnecting || hasQrCode) && isPolling) {
+    if (isConnecting && !hasQrCode && isPolling) {
       timeoutId = setTimeout(() => {
         checkStatus(instance)
       }, 3000)
@@ -313,6 +357,7 @@ export default function WhatsApp() {
             <div className="space-y-4">
               <ConnectionStatus
                 instance={instance}
+                uazapiUrl={uazapiUrl}
                 actionLoading={actionLoading}
                 onConnect={() => handleCheckOrCreate()}
                 onDisconnect={handleDisconnect}

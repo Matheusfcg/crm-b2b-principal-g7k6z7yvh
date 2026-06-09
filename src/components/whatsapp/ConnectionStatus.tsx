@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 
 interface ConnectionStatusProps {
   instance: any
+  uazapiUrl?: string | null
   actionLoading: boolean
   onConnect: () => void
   onDisconnect: () => void
@@ -28,6 +29,7 @@ interface ConnectionStatusProps {
 
 export function ConnectionStatus({
   instance,
+  uazapiUrl,
   actionLoading,
   onConnect,
   onDisconnect,
@@ -46,7 +48,12 @@ export function ConnectionStatus({
       : `data:image/png;base64,${rawQr}`
     : null
 
-  const isGeneratingQr = (actionLoading || isConnecting) && !qrcodeSrc
+  const directImageUrl =
+    !isValidBase64 && status === 'qrcode' && uazapiUrl && instance?.instance_name
+      ? `${uazapiUrl}/instance/qrCode/${instance.instance_name}?apikey=${instance.instance_token || ''}`
+      : null
+
+  const isGeneratingQr = (actionLoading || isConnecting) && !qrcodeSrc && !directImageUrl
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -121,7 +128,7 @@ export function ConnectionStatus({
           )}
         </CardContent>
         <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-center p-4">
-          {isConnected || isGeneratingQr || !!qrcodeSrc ? (
+          {isConnected || isGeneratingQr || !!qrcodeSrc || !!directImageUrl ? (
             <Button
               variant="destructive"
               onClick={onDisconnect}
@@ -163,9 +170,17 @@ export function ConnectionStatus({
           <CardDescription>Escaneie o código para vincular.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center min-h-[250px] p-6">
-          {qrcodeSrc ? (
+          {qrcodeSrc || directImageUrl ? (
             <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300">
-              <img src={qrcodeSrc} alt="WhatsApp QR Code" className="w-[200px] h-[200px]" />
+              <img
+                src={qrcodeSrc || directImageUrl!}
+                alt="WhatsApp QR Code"
+                className="w-[200px] h-[200px]"
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).src =
+                    'https://img.usecurling.com/i?q=qr-code-error&color=gray'
+                }}
+              />
             </div>
           ) : error ? (
             <div className="text-center text-red-500 flex flex-col items-center gap-3 max-w-[250px]">

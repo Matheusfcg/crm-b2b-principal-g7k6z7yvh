@@ -152,6 +152,9 @@ Deno.serve(async (req: Request) => {
         null
       let qrcode = rawQrcode
       if (qrcode && typeof qrcode === 'string') {
+        if (qrcode.length <= 3 || qrcode === '404') {
+          return null
+        }
         if (!qrcode.startsWith('data:image')) {
           qrcode = `data:image/png;base64,${qrcode}`
         }
@@ -444,9 +447,10 @@ Deno.serve(async (req: Request) => {
         last_connection: resultInstance.last_connection,
         phone: resultInstance.phone,
         instance_name: resultInstance.instance_name,
+        instance_token: resultInstance.instance_token,
       }
 
-      return new Response(JSON.stringify({ success: true, instance: safeInstance }), {
+      return new Response(JSON.stringify({ success: true, instance: safeInstance, uazapiUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     } else if (action === 'get_status') {
@@ -477,12 +481,11 @@ Deno.serve(async (req: Request) => {
           updateData.qrcode = null
           updateData.last_connection = new Date().toISOString()
         } else if (state === 'connecting' || state === 'qrcode' || state === 'disconnected') {
-          const statusQr = stateData?.instance?.qrcode
+          const statusQr =
+            extractQrCode({ base64: stateData?.instance?.qrcode }) || extractQrCode(stateData)
 
           if (statusQr) {
-            updateData.qrcode = statusQr.startsWith('data:image')
-              ? statusQr
-              : `data:image/png;base64,${statusQr}`
+            updateData.qrcode = statusQr
           } else {
             let connectRes = await fetchUazapi(`/instance/connect/${instanceName}`, {
               method: 'GET',
@@ -529,11 +532,12 @@ Deno.serve(async (req: Request) => {
               last_connection: finalInstance.last_connection,
               phone: finalInstance.phone,
               instance_name: finalInstance.instance_name,
+              instance_token: finalInstance.instance_token,
             }
           : null
 
         return new Response(
-          JSON.stringify({ success: true, instance: safeInstance, phone: phone }),
+          JSON.stringify({ success: true, instance: safeInstance, phone: phone, uazapiUrl }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       } else if (
@@ -557,6 +561,7 @@ Deno.serve(async (req: Request) => {
             last_connection: data.last_connection,
             phone: data.phone,
             instance_name: data.instance_name,
+            instance_token: data.instance_token,
           }
           return new Response(
             JSON.stringify({
