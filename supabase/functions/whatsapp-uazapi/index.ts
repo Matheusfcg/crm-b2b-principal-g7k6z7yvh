@@ -201,8 +201,11 @@ Deno.serve(async (req: Request) => {
         parsedBody?.data?.qr ||
         null
       let qrcode = rawQrcode
+      if (qrcode === 404 || qrcode === 405 || qrcode === '404' || qrcode === '405') {
+        return null
+      }
       if (qrcode && typeof qrcode === 'string') {
-        if (qrcode.length <= 3 || qrcode === '404') {
+        if (qrcode.length <= 3) {
           return null
         }
         if (!qrcode.startsWith('data:image') && !qrcode.startsWith('http')) {
@@ -257,10 +260,12 @@ Deno.serve(async (req: Request) => {
       const connectHeaders = getApiHeaders(token, cleanInstanceName)
 
       let attempt = 0
-      const maxAttempts = 3
+      let totalWaitTime = 0
       let connectRes: any = null
+      let lastState = 'unknown'
+      let hasValidQr = false
 
-      while (attempt < maxAttempts) {
+      while (totalWaitTime < 15000) {
         attempt++
 
         connectRes = await fetchUazapi(`/instance/connect/${cleanInstanceName}`, {
@@ -269,15 +274,40 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({ instance: cleanInstanceName }),
         })
 
-        if (connectRes.status !== 404 && connectRes.status !== 500) {
+        const state =
+          connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'unknown'
+        const extractedQr = extractQrCode(connectRes?.parsedBody)
+
+        console.log(`[CONNECT] State transition: ${lastState} -> ${state}`)
+        lastState = state
+
+        if (extractedQr) {
+          hasValidQr = true
           break
         }
 
-        if (attempt < maxAttempts) {
+        if (state === 'open' || state === 'connected') {
+          break
+        }
+
+        if (state === 'connecting' || connectRes.status === 405 || !extractedQr) {
+          if (totalWaitTime + 3000 > 15000) break
           console.log(
-            `[CONNECT] Attempt ${attempt} failed with ${connectRes.status} for instance ${cleanInstanceName}, retrying in 2s...`,
+            `[CONNECT] Attempt ${attempt} returned state '${state}' or 405 or null QR, retrying in 3s...`,
           )
-          await new Promise((resolve) => setTimeout(resolve, 2000))
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+          totalWaitTime += 3000
+        } else {
+          if (connectRes.status === 404 || connectRes.status === 500) {
+            if (totalWaitTime + 3000 > 15000) break
+            console.log(
+              `[CONNECT] Attempt ${attempt} failed with ${connectRes.status}, retrying in 3s...`,
+            )
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+            totalWaitTime += 3000
+          } else {
+            break
+          }
         }
       }
 
@@ -447,9 +477,15 @@ Deno.serve(async (req: Request) => {
         instance_token: resultInstance.instance_token,
       }
 
-      return new Response(JSON.stringify({ success: true, instance: safeInstance, uazapiUrl }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          success: true,
+          instance: safeInstance,
+          uazapiUrl,
+          is_connecting: status === 'connecting',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     } else if (action === 'get_status') {
       const returnedToken = existingInstance?.instance_token
 
@@ -526,7 +562,13 @@ Deno.serve(async (req: Request) => {
           : null
 
         return new Response(
-          JSON.stringify({ success: true, instance: safeInstance, phone: phone, uazapiUrl }),
+          JSON.stringify({
+            success: true,
+            instance: safeInstance,
+            phone: phone,
+            uazapiUrl,
+            is_connecting: finalInstance?.status === 'connecting',
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       } else if (

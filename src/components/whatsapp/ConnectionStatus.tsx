@@ -36,7 +36,7 @@ export function ConnectionStatus({
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
-  const isConnecting = status === 'connecting' || status === 'qrcode'
+  const isConnecting = status === 'connecting' || status === 'qrcode' || instance?.is_connecting
   const isNotFound = status === 'not_found'
   const isTimeout = status === 'timeout'
 
@@ -113,9 +113,13 @@ export function ConnectionStatus({
             <div className="flex flex-col items-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
               <div>
-                <h3 className="text-lg font-medium text-slate-900">Criando instância...</h3>
+                <h3 className="text-lg font-medium text-slate-900">
+                  {instance?.is_connecting || status === 'connecting'
+                    ? 'Aguardando inicialização...'
+                    : 'Criando instância...'}
+                </h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Aguarde enquanto geramos seu QR Code.
+                  Aguarde enquanto preparamos a conexão e geramos seu QR Code.
                 </p>
               </div>
             </div>
@@ -194,7 +198,11 @@ export function ConnectionStatus({
           ) : isGeneratingQr ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-3">
               <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-              <p className="text-sm font-medium">Gerando QR Code...</p>
+              <p className="text-sm font-medium">
+                {instance?.is_connecting || status === 'connecting'
+                  ? 'Aguardando inicialização...'
+                  : 'Gerando QR Code...'}
+              </p>
             </div>
           ) : isConnected ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-2">

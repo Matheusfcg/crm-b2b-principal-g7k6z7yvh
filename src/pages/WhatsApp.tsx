@@ -78,6 +78,9 @@ export default function WhatsApp() {
             ) {
               data.instance.qrcode = null
             }
+            if (data.is_connecting !== undefined) {
+              data.instance.is_connecting = data.is_connecting
+            }
             setInstance(data.instance)
             const hasQrCode = !!data.instance.qrcode
 
@@ -178,9 +181,11 @@ export default function WhatsApp() {
 
         if (
           !data?.instance?.qrcode &&
-          (data?.instance?.status === 'connecting' || data?.instance?.status === 'qrcode')
+          (data?.instance?.status === 'connecting' ||
+            data?.instance?.status === 'qrcode' ||
+            data?.is_connecting)
         ) {
-          toast.info('Instância verificada. Aguardando QR Code...')
+          toast.info('Instância verificada. Aguardando inicialização...')
         } else if (
           data?.instance?.qrcode &&
           data?.instance?.status !== 'connected' &&
@@ -195,6 +200,9 @@ export default function WhatsApp() {
             (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
           ) {
             data.instance.qrcode = null
+          }
+          if (data.is_connecting !== undefined) {
+            data.instance.is_connecting = data.is_connecting
           }
           setInstance(data.instance)
           const isConnectedInstance =
