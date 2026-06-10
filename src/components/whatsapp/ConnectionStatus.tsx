@@ -88,6 +88,12 @@ export function ConnectionStatus({
                     {instance?.id?.split('-')[0] || 'N/A'}
                   </span>
                 </div>
+                <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2">
+                  <span className="text-sm font-medium text-slate-700">Nome da Instância</span>
+                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
+                    {instance?.instance_name || 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
           ) : isNotFound ? (

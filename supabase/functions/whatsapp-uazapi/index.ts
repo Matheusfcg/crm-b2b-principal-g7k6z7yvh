@@ -143,6 +143,25 @@ Deno.serve(async (req: Request) => {
       const url = `${uazapiUrl}${path}`
       const payload = options.body ? JSON.parse(options.body as string) : null
 
+      const headersObj = (options.headers as any) || {}
+      const tokenUsed = headersObj['apikey'] || headersObj['admintoken'] || 'none'
+      const instanceNameSent = headersObj['instance'] || 'none'
+      const maskedToken =
+        tokenUsed.length > 8
+          ? `${tokenUsed.substring(0, 4)}...${tokenUsed.substring(tokenUsed.length - 4)}`
+          : '***'
+
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          message: 'Uazapi API Request',
+          endpoint: url,
+          instance_name_sent: instanceNameSent,
+          token_used: maskedToken,
+          payload: payload,
+        }),
+      )
+
       const res = await fetch(url, options)
       const status = res.status
       const text = await res.text()
@@ -196,7 +215,6 @@ Deno.serve(async (req: Request) => {
     const getApiHeaders = (token: string, instance?: string) => {
       const headers: any = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${uazapiKey}`,
         apikey: token,
         admintoken: uazapiKey,
       }
@@ -245,19 +263,11 @@ Deno.serve(async (req: Request) => {
       while (attempt < maxAttempts) {
         attempt++
 
-        connectRes = await fetchUazapi(`/instance/connect`, {
+        connectRes = await fetchUazapi(`/instance/connect/${cleanInstanceName}`, {
           method: 'POST',
           headers: connectHeaders,
           body: JSON.stringify({ instance: cleanInstanceName }),
         })
-
-        if (connectRes.status === 404) {
-          connectRes = await fetchUazapi(`/instance/connect/${cleanInstanceName}`, {
-            method: 'POST',
-            headers: connectHeaders,
-            body: JSON.stringify({ instance: cleanInstanceName }),
-          })
-        }
 
         if (connectRes.status !== 404 && connectRes.status !== 500) {
           break
