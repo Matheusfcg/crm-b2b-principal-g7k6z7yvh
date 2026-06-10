@@ -10,13 +10,7 @@ const corsHeaders = {
 
 const sanitizeInstanceName = (name: string) => {
   if (!name) return name
-  let cleanName = name.split('?')[0].split('&')[0].trim()
-  const parts = cleanName.split('_')
-  if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
-    parts.pop()
-    cleanName = parts.join('_')
-  }
-  return cleanName
+  return name.split('?')[0].split('&')[0].trim()
 }
 
 Deno.serve(async (req: Request) => {
@@ -323,6 +317,9 @@ Deno.serve(async (req: Request) => {
       let needsInit = true
 
       if (existingInstance && instanceName) {
+        console.log(
+          `[CHECK_OR_CREATE] checking database -> found existing name -> calling status for ${instanceName}`,
+        )
         const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
           method: 'GET',
           headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
@@ -335,11 +332,21 @@ Deno.serve(async (req: Request) => {
           stateRes.parsedBody.message !== 'Instance not found'
         ) {
           needsInit = false
+        } else {
+          console.log(
+            `[CHECK_OR_CREATE] Uazapi returned not found/error for ${instanceName}. Will re-initialize with same name.`,
+          )
         }
+      } else {
+        console.log(`[CHECK_OR_CREATE] checking database -> no existing name found`)
       }
 
       if (needsInit) {
-        instanceName = `user_${user.id.replace(/-/g, '')}_${Date.now()}`
+        if (!instanceName) {
+          instanceName = `user_${user.id.replace(/-/g, '')}`
+        }
+
+        console.log(`[INIT] Initializing instance with name: ${instanceName}`)
 
         const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
         let createRes = await fetchUazapi('/instance/init', {
