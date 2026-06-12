@@ -77,31 +77,6 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   }
 
   useEffect(() => {
-      if (isInitial) setLoading(true)
-      try {
-        const { data, error } = await supabase
-          .from('conversations')
-          .select(`
-            id, last_message, updated_at, unread_count,
-            contact:contacts(id, push_name, remote_jid, profile_picture)
-          `)
-          .eq('instance_id', instanceId)
-          .order('updated_at', { ascending: false })
-
-        if (!error && data) {
-          const parsed = data.map((d: any) => ({
-            ...d,
-            contact: Array.isArray(d.contact) ? d.contact[0] : d.contact,
-          })) as Conversation[]
-          setConversations(parsed)
-        }
-      } catch (err) {
-        console.error(err)
-      } finally {
-        if (isInitial) setLoading(false)
-      }
-    }
-
     const syncFromUazapi = async () => {
       setSyncing(true)
       setSyncError(null)
@@ -210,9 +185,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     setSelectedConvId(convId)
     const conv = conversations.find((c) => c.id === convId)
     if (conv && conv.unread_count > 0) {
-      setConversations((prev) =>
-        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c))
-      )
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c)))
       await supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId)
     }
   }
@@ -241,10 +214,10 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             action: 'send_message',
             instanceName: instance.instance_name,
             remoteJid: selectedConv.contact.remote_jid,
-            text: textToSend
-          }
+            text: textToSend,
+          },
         })
-        
+
         if (error || data?.error) {
           toast.error(data?.error || error?.message || 'Erro ao enviar mensagem.')
           setReplyText(textToSend)
@@ -295,7 +268,10 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             </div>
           </div>
           <div className="flex items-center justify-between mt-1">
-            <Label htmlFor="unread-filter" className="text-xs text-slate-500 font-medium cursor-pointer">
+            <Label
+              htmlFor="unread-filter"
+              className="text-xs text-slate-500 font-medium cursor-pointer"
+            >
               Apenas não lidas
             </Label>
             <Switch
@@ -474,7 +450,11 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
                   disabled={!replyText.trim() || sending || messagesLoading}
                   className="bg-green-600 hover:bg-green-700 text-white shrink-0 disabled:opacity-50"
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {sending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               </form>
             </div>
