@@ -4,10 +4,13 @@ import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { format } from 'date-fns'
-import { MessageSquare, User, Loader2, Send } from 'lucide-react'
+import { MessageSquare, User, Loader2, Send, Search, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'
 
 interface Contact {
   id: string
@@ -42,10 +45,38 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   const [syncError, setSyncError] = useState<string | null>(null)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false)
+  const [sending, setSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const fetchConversations = async (isInitial = false) => {
+    if (isInitial) setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          id, last_message, updated_at, unread_count,
+          contact:contacts(id, push_name, remote_jid, profile_picture)
+        `)
+        .eq('instance_id', instanceId)
+        .order('updated_at', { ascending: false })
+
+      if (!error && data) {
+        const parsed = data.map((d: any) => ({
+          ...d,
+          contact: Array.isArray(d.contact) ? d.contact[0] : d.contact,
+        })) as Conversation[]
+        setConversations(parsed)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      if (isInitial) setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    const fetchConversations = async (isInitial = false) => {
       if (isInitial) setLoading(true)
       try {
         const { data, error } = await supabase
@@ -175,30 +206,105 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     }
   }, [messages])
 
+  const handleSelectConv = async (convId: string) => {
+    setSelectedConvId(convId)
+    const conv = conversations.find((c) => c.id === convId)
+    if (conv && conv.unread_count > 0) {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c))
+      )
+      await supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId)
+    }
+  }
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!replyText.trim() || !selectedConvId) return
 
-    // In a real app, this would call an Edge Function to send via Uazapi.
-    // We clear the text to simulate sending.
-    console.log('Sending message:', replyText)
+    const selectedConv = conversations.find((c) => c.id === selectedConvId)
+    if (!selectedConv?.contact?.remote_jid) return
+
+    const textToSend = replyText.trim()
     setReplyText('')
+    setSending(true)
+
+    try {
+      const { data: instance } = await supabase
+        .from('whatsapp_instances')
+        .select('instance_name')
+        .eq('id', instanceId)
+        .single()
+
+      if (instance?.instance_name) {
+        const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+          body: {
+            action: 'send_message',
+            instanceName: instance.instance_name,
+            remoteJid: selectedConv.contact.remote_jid,
+            text: textToSend
+          }
+        })
+        
+        if (error || data?.error) {
+          toast.error(data?.error || error?.message || 'Erro ao enviar mensagem.')
+          setReplyText(textToSend)
+        }
+      }
+    } catch (err: any) {
+      toast.error('Erro ao enviar mensagem: ' + err.message)
+      setReplyText(textToSend)
+    } finally {
+      setSending(false)
+    }
   }
 
   const selectedConv = conversations.find((c) => c.id === selectedConvId)
+
+  const filteredConversations = conversations.filter((c) => {
+    if (showUnreadOnly && c.unread_count === 0) return false
+    if (searchQuery) {
+      const name = c.contact?.push_name || c.contact?.remote_jid || ''
+      return name.toLowerCase().includes(searchQuery.toLowerCase())
+    }
+    return true
+  })
 
   return (
     <Card className="flex flex-col md:flex-row h-[600px] overflow-hidden border-slate-200 shadow-sm mt-6">
       {/* Sidebar: Conversations List */}
       <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50/50">
-        <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
-          <h2 className="font-semibold flex items-center gap-2 text-slate-800">
-            <MessageSquare className="h-5 w-5" />
-            Conversas
-          </h2>
-          {syncing && (
-            <Loader2 className="h-4 w-4 animate-spin text-slate-400" title="Sincronizando..." />
-          )}
+        <div className="p-4 border-b border-slate-200 bg-white flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <h2 className="font-semibold flex items-center gap-2 text-slate-800">
+              <MessageSquare className="h-5 w-5" />
+              Conversas
+            </h2>
+            {syncing && (
+              <Loader2 className="h-4 w-4 animate-spin text-slate-400" title="Sincronizando..." />
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Buscar conversa..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 bg-slate-50 border-slate-200 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <Label htmlFor="unread-filter" className="text-xs text-slate-500 font-medium cursor-pointer">
+              Apenas não lidas
+            </Label>
+            <Switch
+              id="unread-filter"
+              checked={showUnreadOnly}
+              onCheckedChange={setShowUnreadOnly}
+              className="scale-75 origin-right"
+            />
+          </div>
         </div>
 
         {syncError && (
@@ -213,16 +319,16 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
               <Loader2 className="h-6 w-6 animate-spin" />
               <span className="text-sm">Sincronizando conversas...</span>
             </div>
-          ) : conversations.length === 0 ? (
+          ) : filteredConversations.length === 0 ? (
             <div className="p-8 text-center text-slate-500 text-sm">
               Nenhuma conversa encontrada.
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {conversations.map((conv) => (
+              {filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
-                  onClick={() => setSelectedConvId(conv.id)}
+                  onClick={() => handleSelectConv(conv.id)}
                   className={cn(
                     'p-3 flex items-center gap-3 cursor-pointer hover:bg-slate-100 transition-colors',
                     selectedConvId === conv.id && 'bg-blue-50/50 hover:bg-blue-50/80',
@@ -359,14 +465,16 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
                   placeholder="Digite uma mensagem..."
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
+                  disabled={sending || messagesLoading}
                   className="flex-1 bg-slate-50 border-slate-200 focus-visible:ring-green-500"
                 />
                 <Button
                   type="submit"
                   size="icon"
-                  className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+                  disabled={!replyText.trim() || sending || messagesLoading}
+                  className="bg-green-600 hover:bg-green-700 text-white shrink-0 disabled:opacity-50"
                 >
-                  <Send className="h-4 w-4" />
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </form>
             </div>

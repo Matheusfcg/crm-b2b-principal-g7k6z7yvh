@@ -136,6 +136,18 @@ Deno.serve(async (req: Request) => {
               .single()
 
             if (contact) {
+              const { data: existingConv } = await supabaseAdmin
+                .from('conversations')
+                .select('id, unread_count')
+                .eq('instance_id', instanceId)
+                .eq('contact_id', contact.id)
+                .maybeSingle()
+
+              let unreadCount = existingConv?.unread_count || 0
+              if (!fromMe) {
+                unreadCount += 1
+              }
+
               const { data: conv } = await supabaseAdmin
                 .from('conversations')
                 .upsert(
@@ -144,6 +156,7 @@ Deno.serve(async (req: Request) => {
                     contact_id: contact.id,
                     last_message: text,
                     updated_at: new Date().toISOString(),
+                    unread_count: unreadCount,
                   },
                   { onConflict: 'instance_id, contact_id' },
                 )
@@ -911,6 +924,91 @@ Deno.serve(async (req: Request) => {
           },
         )
       }
+    } else if (action === 'send_message') {
+      const returnedToken = existingInstance?.instance_token
+      if (!returnedToken) {
+        return new Response(
+          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          },
+        )
+      }
+
+      const remoteJid = body.remoteJid
+      const text = body.text
+
+      if (!remoteJid || !text) {
+        return new Response(JSON.stringify({ error: 'Missing remoteJid or text' }), {
+          status: 400,
+          headers: corsHeaders,
+        })
+      }
+
+      const cleanName = sanitizeInstanceName(instanceName!)
+      const sendRes = await fetchUazapi(`/message/sendText/${cleanName}`, {
+        method: 'POST',
+        headers: getApiHeaders(returnedToken, cleanName),
+        body: JSON.stringify({
+          number: remoteJid,
+          options: {
+            delay: 1200,
+            presence: 'composing',
+            linkPreview: false,
+          },
+          textMessage: {
+            text: text,
+          },
+        }),
+      })
+
+      if (!sendRes.ok) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to send message', details: sendRes.parsedBody }),
+          { status: sendRes.status, headers: corsHeaders },
+        )
+      }
+
+      const { data: contact } = await supabaseAdmin
+        .from('contacts')
+        .select('id')
+        .eq('instance_id', existingInstance.id)
+        .eq('remote_jid', remoteJid)
+        .maybeSingle()
+
+      if (contact) {
+        const { data: conv } = await supabaseAdmin
+          .from('conversations')
+          .update({
+            last_message: text,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('instance_id', existingInstance.id)
+          .eq('contact_id', contact.id)
+          .select()
+          .single()
+
+        if (conv) {
+          await supabaseAdmin.from('messages').insert({
+            conversation_id: conv.id,
+            message_id:
+              sendRes.parsedBody?.key?.id ||
+              sendRes.parsedBody?.message?.key?.id ||
+              `msg_${Date.now()}`,
+            content: text,
+            from_me: true,
+            type: 'text',
+            timestamp: new Date().toISOString(),
+            status: 'sent',
+          })
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, data: sendRes.parsedBody }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     } else if (action === 'get_conversations') {
       const returnedToken = existingInstance?.instance_token
       if (!returnedToken) {

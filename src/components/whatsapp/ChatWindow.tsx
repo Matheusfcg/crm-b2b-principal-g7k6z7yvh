@@ -86,8 +86,19 @@ export function ChatWindow({
     setSending(true)
 
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-manage', {
-        body: { action: 'send', number: contact.remote_jid, text },
+      const { data: instanceData } = await supabase
+        .from('whatsapp_instances')
+        .select('instance_name')
+        .eq('id', instance.id)
+        .single()
+
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: {
+          action: 'send_message',
+          instanceName: instanceData?.instance_name,
+          remoteJid: contact.remote_jid,
+          text,
+        },
       })
       if (error) throw new Error(error.message || 'Erro ao comunicar com a API')
       if (data?.error) throw new Error(data.error)
