@@ -23,6 +23,9 @@ const sanitizeInstanceName = (name: string) => {
 }
 
 Deno.serve(async (req: Request) => {
+  const adminTokenCheck = Deno.env.get('UAZAPI_ADMIN_TOKEN')
+  console.log(adminTokenCheck ? 'Token carregado: Sim' : 'Token carregado: Não')
+
   const origin = req.headers.get('Origin')
   const corsHeaders = getCorsHeaders(origin)
 
@@ -472,13 +475,15 @@ Deno.serve(async (req: Request) => {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       }
-      if (apiKey) {
-        headers['apikey'] = apiKey
-        headers['Authorization'] = `Bearer ${apiKey}` // Kept as fallback, but apikey is correctly mapped
-      }
+
       if (adminToken) {
-        headers['adminToken'] = adminToken
+        headers['apikey'] = adminToken
+        headers['Authorization'] = `Bearer ${adminToken}`
+      } else if (apiKey) {
+        headers['apikey'] = apiKey
+        headers['Authorization'] = `Bearer ${apiKey}`
       }
+
       if (instance) {
         headers['instance'] = instance
         headers['instance_id'] = instance
