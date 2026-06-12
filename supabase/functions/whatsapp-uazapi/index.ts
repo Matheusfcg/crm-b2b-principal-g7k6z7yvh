@@ -566,124 +566,17 @@ Deno.serve(async (req: Request) => {
       }
 
       if (needsInit) {
-        if (!instanceName) {
-          instanceName = `user_${user.id.replace(/-/g, '')}`
-        }
-
-        console.log(`[INIT] Initializing instance with name: ${instanceName}`)
-
-        const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
-        let createRes = await fetchUazapi('/instance/init', {
-          method: 'POST',
-          headers: getApiHeaders(globalAdminToken),
-          body: JSON.stringify({
-            instanceName: instanceName,
-            Name: instanceName,
-            name: instanceName,
-            qrcode: true,
-            webhook: webhookUrl,
-            webhookUrl: webhookUrl,
-            webhook_by_events: false,
-            events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'],
+        return new Response(
+          JSON.stringify({
+            error:
+              'Instância não encontrada e a criação automática foi desabilitada. Use uma instância existente.',
+            code: 'INSTANCE_NOT_FOUND',
           }),
-        })
-
-        let resBody = createRes.parsedBody
-
-        if ((createRes as any).isNetworkError) {
-          return new Response(
-            JSON.stringify({
-              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
-              code: 'SERVER_UNREACHABLE',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 503,
-            },
-          )
-        }
-
-        if (
-          createRes.status === 401 ||
-          createRes.status === 403 ||
-          resBody?.message === 'Unauthorized' ||
-          resBody?.error === 'Unauthorized'
-        ) {
-          return new Response(
-            JSON.stringify({
-              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-              code: 'UNAUTHORIZED',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 401,
-            },
-          )
-        }
-
-        if (
-          !createRes.ok ||
-          !resBody ||
-          resBody?.error ||
-          resBody?.message === 'Instance not found' ||
-          resBody?.status === 'error' ||
-          resBody?.status === 'Fail'
-        ) {
-          const errorMsg =
-            resBody?.message || resBody?.error || 'Failed to create instance in Uazapi'
-          let customErrorMsg = `Uazapi: ${errorMsg}`
-
-          if (
-            typeof errorMsg === 'string' &&
-            (errorMsg.includes('Maximum number of instances reached') ||
-              errorMsg.includes('limit') ||
-              errorMsg.includes('Limit'))
-          ) {
-            customErrorMsg = 'LIMIT_REACHED'
-          } else if (typeof resBody?.message === 'string' && resBody.message.includes('reached')) {
-            customErrorMsg = 'LIMIT_REACHED'
-          }
-
-          return new Response(
-            JSON.stringify({ error: customErrorMsg, details: resBody || createRes.text }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200,
-            },
-          )
-        }
-
-        const uazapiInstanceName =
-          resBody?.instance?.instanceName ||
-          resBody?.instance?.name ||
-          resBody?.instanceName ||
-          resBody?.name ||
-          instanceName
-        returnedId =
-          resBody?.instance?.instanceId ||
-          resBody?.instance?.id ||
-          resBody?.id ||
-          uazapiInstanceName
-        returnedToken =
-          resBody?.hash?.apikey ||
-          resBody?.token ||
-          resBody?.apikey ||
-          resBody?.instance?.token ||
-          returnedToken
-
-        if (uazapiInstanceName && typeof uazapiInstanceName === 'string') {
-          instanceName = uazapiInstanceName
-        }
-
-        console.log(`[INIT] Setting webhook for instance: ${instanceName}`)
-        await setWebhook(instanceName, returnedToken || globalAdminToken)
-
-        console.log(`[INIT] Triggering connection POST for instance: ${instanceName}`)
-        let connectRes = await connectInstance(instanceName, returnedToken || globalAdminToken)
-
-        qrcode = extractQrCode(connectRes?.parsedBody) || extractQrCode(resBody)
-        status =
-          connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'connecting'
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        )
       } else {
         console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
         await setWebhook(instanceName!, returnedToken || globalAdminToken)

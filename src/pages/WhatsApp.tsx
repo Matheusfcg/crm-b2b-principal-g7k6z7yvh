@@ -263,7 +263,9 @@ export default function WhatsApp() {
     setActionLoading(true)
     setConnectError(null)
     pollCountRef.current = 0
-    addLog(`RECONECTANDO (Health Check)...`)
+    addLog(`RECONECTANDO (Health Check)... aguardando 5s`)
+
+    await new Promise((resolve) => setTimeout(resolve, 5000))
 
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
@@ -362,9 +364,12 @@ export default function WhatsApp() {
           }
         }
 
+        addLog(`Aguardando 5s para checagem...`)
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+
         const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
           body: {
-            action: 'check_or_create',
+            action: 'get_status',
             instanceName,
             instanceToken,
           },
@@ -405,7 +410,13 @@ export default function WhatsApp() {
 
         if (errorCode === 'TOKEN_MISSING') {
           throw new Error(
-            'Token da instância não configurado. Remova a instância atual e tente novamente.',
+            'Token da instância não configurado. Use a Configuração Manual para inserir os dados.',
+          )
+        }
+
+        if (errorCode === 'INSTANCE_NOT_FOUND') {
+          throw new Error(
+            'Instância não encontrada na Uazapi. Use a Configuração Manual para inserir os dados de uma instância existente.',
           )
         }
 
@@ -698,7 +709,7 @@ export default function WhatsApp() {
                           onChange={(e) =>
                             setConfigForm({ ...configForm, instance_token: e.target.value })
                           }
-                          placeholder="Token da Instância"
+                          placeholder="Ex: 8127b6a5-1564-40f3-bba1-a5540d44cd51"
                           required
                         />
                       </div>
@@ -741,7 +752,7 @@ export default function WhatsApp() {
                     disabled={actionLoading}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
-                    {actionLoading ? 'Processando...' : 'Reconectar'}
+                    {actionLoading ? 'Processando...' : 'Tentar Novamente'}
                   </Button>
                 </div>
               )}
