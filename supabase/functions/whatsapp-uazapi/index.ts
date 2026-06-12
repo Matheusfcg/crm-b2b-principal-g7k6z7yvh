@@ -235,8 +235,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('UAZAPI_URL') ||
       Deno.env.get('UAZAPI_BASE_URL') ||
       'https://apiwhatsvexaview.uazapi.com'
-    const uazapiKey =
-      existingInstance?.instance_token ||
+    const globalAdminToken =
       Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
       Deno.env.get('UAZAPI_TOKEN') ||
       Deno.env.get('UAZAPI_API_KEY') ||
@@ -347,11 +346,13 @@ Deno.serve(async (req: Request) => {
     const getApiHeaders = (token: string, instance?: string) => {
       const headers: any = {
         'Content-Type': 'application/json',
-        apikey: token,
-        admintoken: uazapiKey,
       }
       if (token) {
+        headers['apikey'] = token
         headers['Authorization'] = `Bearer ${token}`
+      }
+      if (globalAdminToken) {
+        headers['admintoken'] = globalAdminToken
       }
       if (instance) {
         headers['instance'] = instance
@@ -455,12 +456,21 @@ Deno.serve(async (req: Request) => {
       let needsInit = true
 
       if (existingInstance && instanceName) {
+        if (!returnedToken) {
+          return new Response(
+            JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            },
+          )
+        }
         console.log(
           `[CHECK_OR_CREATE] checking database -> found existing name -> calling status for ${instanceName}`,
         )
         const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
+          headers: getApiHeaders(returnedToken, instanceName),
         })
 
         if (
@@ -505,7 +515,7 @@ Deno.serve(async (req: Request) => {
         const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
         let createRes = await fetchUazapi('/instance/init', {
           method: 'POST',
-          headers: getApiHeaders(uazapiKey),
+          headers: getApiHeaders(globalAdminToken),
           body: JSON.stringify({
             instanceName: instanceName,
             Name: instanceName,
@@ -592,18 +602,18 @@ Deno.serve(async (req: Request) => {
         }
 
         console.log(`[INIT] Setting webhook for instance: ${instanceName}`)
-        await setWebhook(instanceName, returnedToken || uazapiKey)
+        await setWebhook(instanceName, returnedToken || globalAdminToken)
 
         console.log(`[INIT] Triggering connection POST for instance: ${instanceName}`)
-        let connectRes = await connectInstance(instanceName, returnedToken || uazapiKey)
+        let connectRes = await connectInstance(instanceName, returnedToken || globalAdminToken)
 
         qrcode = extractQrCode(connectRes?.parsedBody) || extractQrCode(resBody)
         status =
           connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'connecting'
       } else {
         console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
-        await setWebhook(instanceName!, returnedToken || uazapiKey)
-        let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
+        await setWebhook(instanceName!, returnedToken || globalAdminToken)
+        let connectRes = await connectInstance(instanceName!, returnedToken || globalAdminToken)
         if (connectRes?.status === 401) {
           return new Response(
             JSON.stringify({
@@ -681,9 +691,19 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'get_status') {
       const returnedToken = existingInstance?.instance_token
 
+      if (!returnedToken) {
+        return new Response(
+          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          },
+        )
+      }
+
       const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken || uazapiKey, instanceName),
+        headers: getApiHeaders(returnedToken, instanceName),
       })
 
       if (stateRes.ok && !stateRes.parsedBody?.error) {
@@ -710,7 +730,7 @@ Deno.serve(async (req: Request) => {
             extractQrCode({ base64: stateData?.instance?.qrcode }) || extractQrCode(stateData)
 
           if (!statusQr) {
-            let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
+            let connectRes = await connectInstance(instanceName!, returnedToken || globalAdminToken)
             if (connectRes?.ok && !connectRes?.parsedBody?.error) {
               statusQr =
                 extractQrCode({ base64: connectRes.parsedBody?.instance?.qrcode }) ||
@@ -874,11 +894,13 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'delete') {
       try {
         const returnedToken = existingInstance?.instance_token
-        const cleanName = sanitizeInstanceName(instanceName!)
-        await fetchUazapi(`/instance/logout/${cleanName}`, {
-          method: 'DELETE',
-          headers: getApiHeaders(returnedToken || uazapiKey, cleanName),
-        })
+        if (returnedToken || globalAdminToken) {
+          const cleanName = sanitizeInstanceName(instanceName!)
+          await fetchUazapi(`/instance/logout/${cleanName}`, {
+            method: 'DELETE',
+            headers: getApiHeaders(returnedToken || globalAdminToken, cleanName),
+          })
+        }
       } catch (err: any) {
         console.error('Logout error:', err)
       }

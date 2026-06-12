@@ -62,6 +62,12 @@ export default function WhatsApp() {
                 'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
               )
               setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+            } else if (data?.code === 'TOKEN_MISSING') {
+              setIsPolling(false)
+              setConnectError(
+                'Token da instância não configurado. Por favor, desconecte e conecte novamente.',
+              )
+              setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
             } else if (data?.code === 'INSTANCE_NOT_FOUND') {
               pollCountRef.current += 1
               if (pollCountRef.current >= 5) {
@@ -182,6 +188,12 @@ export default function WhatsApp() {
         if (errorCode === 'UNAUTHORIZED') {
           throw new Error(
             'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
+          )
+        }
+
+        if (errorCode === 'TOKEN_MISSING') {
+          throw new Error(
+            'Token da instância não configurado. Remova a instância atual e tente novamente.',
           )
         }
 
