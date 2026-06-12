@@ -114,8 +114,9 @@ export function ConnectionStatus({
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-orange-600">Instância Não Encontrada</h3>
-                <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  {instance?.last_error ||
+                <p className="text-sm text-slate-500 mt-1 max-w-[320px]">
+                  {error ||
+                    instance?.last_error ||
                     'A instância configurada não foi encontrada ou está inativa. Contate o administrador.'}
                 </p>
               </div>

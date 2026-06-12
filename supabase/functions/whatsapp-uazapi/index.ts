@@ -275,7 +275,7 @@ Deno.serve(async (req: Request) => {
     if (!existingInstance && action !== 'check_or_create') {
       return new Response(
         JSON.stringify({
-          success: true,
+          success: false,
           error: 'Instance not found in database',
           code: 'INSTANCE_NOT_FOUND',
         }),
@@ -294,7 +294,20 @@ Deno.serve(async (req: Request) => {
 
       // Debug Logging: The edge function must include a console.log statement that prints the full target URL and the headers object sent to Uazapi.
       console.log(`[DEBUG] Target URL: ${url}`)
-      console.log(`[DEBUG] Headers:`, JSON.stringify(headersObj, null, 2))
+      console.log(
+        `[DEBUG] Headers:`,
+        JSON.stringify(
+          {
+            ...headersObj,
+            apikey: headersObj['apikey'] ? `***${headersObj['apikey'].slice(-4)}` : undefined,
+            Authorization: headersObj['Authorization']
+              ? `Bearer ***${headersObj['Authorization'].slice(-4)}`
+              : undefined,
+          },
+          null,
+          2,
+        ),
+      )
 
       const tokenUsed = headersObj['apikey'] || headersObj['adminToken'] || 'none'
       const instanceNameSent = headersObj['instance'] || 'none'
@@ -433,7 +446,7 @@ Deno.serve(async (req: Request) => {
 
     // Enhanced Authentication Headers
     const getApiHeaders = (token: string, instance?: string) => {
-      const apiKey = Deno.env.get('UAZAPI_API_KEY') || token
+      const apiKey = Deno.env.get('UAZAPI_CLIENTE_TESTE') || Deno.env.get('UAZAPI_API_KEY') || token
       const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
 
       const headers: any = {
@@ -502,23 +515,23 @@ Deno.serve(async (req: Request) => {
     if (action === 'check_or_create') {
       return new Response(
         JSON.stringify({
+          success: false,
           error:
             'Criação ou inicialização de novas instâncias foi desabilitada. Use o modo de status.',
           code: 'CREATION_DISABLED',
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
+          status: 200,
         },
       )
     } else if (action === 'get_status' || action === 'connect' || action === 'force_sync') {
-      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+      const returnedToken =
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
+        existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_API_KEY')
 
-      if (
-        !returnedToken &&
-        !Deno.env.get('UAZAPI_API_KEY') &&
-        !Deno.env.get('UAZAPI_ADMIN_TOKEN')
-      ) {
+      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
           JSON.stringify({
             error: 'Tokens de autenticação não configurados.',
@@ -690,7 +703,8 @@ Deno.serve(async (req: Request) => {
             .update({
               status: 'not_found',
               qrcode: null,
-              last_error: stateRes.parsedBody?.error || 'Instance not found',
+              last_error:
+                stateRes.parsedBody?.error || stateRes.parsedBody?.message || 'Instance not found',
               updated_at: new Date().toISOString(),
             })
             .eq('id', existingInstance.id)
@@ -700,8 +714,9 @@ Deno.serve(async (req: Request) => {
           const safeInstance = { ...data }
           return new Response(
             JSON.stringify({
-              success: true,
-              error: stateRes.parsedBody?.error || 'Instance not found',
+              success: false,
+              error:
+                stateRes.parsedBody?.error || stateRes.parsedBody?.message || 'Instance not found',
               instance: safeInstance,
               code: 'INSTANCE_NOT_FOUND',
               details: stateRes.parsedBody,
@@ -714,7 +729,7 @@ Deno.serve(async (req: Request) => {
         }
         return new Response(
           JSON.stringify({
-            success: true,
+            success: false,
             error: 'Instance not found',
             code: 'INSTANCE_NOT_FOUND',
           }),
@@ -733,7 +748,10 @@ Deno.serve(async (req: Request) => {
         )
       }
     } else if (action === 'send_message') {
-      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+      const returnedToken =
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
+        existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_API_KEY')
       if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
           JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
@@ -818,7 +836,10 @@ Deno.serve(async (req: Request) => {
         status: 200,
       })
     } else if (action === 'get_conversations') {
-      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+      const returnedToken =
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
+        existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_API_KEY')
       if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
           JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
@@ -929,7 +950,10 @@ Deno.serve(async (req: Request) => {
       )
     } else if (action === 'delete') {
       try {
-        const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+        const returnedToken =
+          Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
+          existingInstance?.instance_token ||
+          Deno.env.get('UAZAPI_API_KEY')
         const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN')
         if (returnedToken || adminToken) {
           const cleanName = sanitizeInstanceName(uazapiInstanceId!)

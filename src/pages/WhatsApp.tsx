@@ -93,16 +93,20 @@ export default function WhatsApp() {
           data?.error ||
           data?.code === 'UNAUTHORIZED' ||
           data?.code === 'SERVER_UNREACHABLE' ||
-          data?.code === 'TIMEOUT'
+          data?.code === 'TIMEOUT' ||
+          data?.code === 'INSTANCE_NOT_FOUND'
         ) {
-          const errorMsg =
-            data?.code === 'UNAUTHORIZED'
-              ? 'Erro de Autenticação: Verifique com o administrador.'
-              : data?.code === 'SERVER_UNREACHABLE'
-                ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-                : data?.code === 'TIMEOUT'
-                  ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
-                  : data.error
+          let errorMsg = data.error || 'Erro desconhecido.'
+          if (data?.code === 'UNAUTHORIZED') {
+            errorMsg = 'Erro de Autenticação: Verifique com o administrador.'
+          } else if (data?.code === 'SERVER_UNREACHABLE') {
+            errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
+          } else if (data?.code === 'TIMEOUT') {
+            errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+          } else if (data?.code === 'INSTANCE_NOT_FOUND') {
+            errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
+          }
+
           setConnectError(errorMsg)
           toast.error(errorMsg)
           if (data?.code === 'UNAUTHORIZED') {
@@ -110,6 +114,9 @@ export default function WhatsApp() {
           }
           if (data?.code === 'TIMEOUT') {
             setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+          }
+          if (data?.code === 'INSTANCE_NOT_FOUND') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
           }
         } else {
           if (data?.uazapiUrl) {
