@@ -733,7 +733,7 @@ export const Constants = {
 //   Policy "Contacts_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Contacts_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Contacts_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = contacts.instance_id) AND (wi.user_id = auth.uid()))))
 // Table: conversations
@@ -742,7 +742,7 @@ export const Constants = {
 //   Policy "Conversations_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Conversations_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Conversations_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM whatsapp_instances wi   WHERE ((wi.id = conversations.instance_id) AND (wi.user_id = auth.uid()))))
 // Table: interactions
@@ -769,7 +769,7 @@ export const Constants = {
 //   Policy "Messages_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Messages_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND ((wi.user_id = auth.uid()) OR (EXISTS ( SELECT 1            FROM users u           WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))))))
+//     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
 //   Policy "Messages_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM (conversations c      JOIN whatsapp_instances wi ON ((wi.id = c.instance_id)))   WHERE ((c.id = messages.conversation_id) AND (wi.user_id = auth.uid()))))
 // Table: proposals

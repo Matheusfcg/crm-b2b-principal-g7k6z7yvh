@@ -203,28 +203,45 @@ export function ConnectionStatus({
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                  <Button
-                    onClick={onReconnect}
-                    disabled={actionLoading}
-                    className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {actionLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    {error || isTimeout || isNotFound || isUnauthorized
-                      ? 'Tentar Novamente'
-                      : 'Verificar Conexão'}
-                  </Button>
-                  <Button
-                    onClick={onForceSync}
-                    disabled={actionLoading}
-                    variant="outline"
-                    className="w-full sm:w-auto gap-2"
-                  >
-                    Sincronizar Conexão
-                  </Button>
+                  {isNotFound ? (
+                    <Button
+                      onClick={onForceSync}
+                      disabled={actionLoading}
+                      className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {actionLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Sincronizar Instância
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={onReconnect}
+                      disabled={actionLoading}
+                      className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {actionLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      {error || isTimeout || isUnauthorized
+                        ? 'Tentar Novamente'
+                        : 'Verificar Conexão'}
+                    </Button>
+                  )}
+                  {!isNotFound && (
+                    <Button
+                      onClick={onForceSync}
+                      disabled={actionLoading}
+                      variant="outline"
+                      className="w-full sm:w-auto gap-2"
+                    >
+                      Sincronizar Conexão
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     onClick={onConfig}

@@ -1,12 +1,19 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { corsHeaders as sharedCorsHeaders } from '../_shared/cors.ts'
 
 const getCorsHeaders = (origin: string | null) => {
+  const allowedOrigins = [
+    'https://crm-b2b-principal-462cb--preview.goskip.app',
+    'https://crm-vexa.goskip.app',
+    'http://localhost:5173',
+  ]
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : '*'
   return {
-    'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    ...sharedCorsHeaders,
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Headers':
-      'authorization, x-client-info, x-supabase-client-platform, apikey, content-type, instance, accept',
+      sharedCorsHeaders['Access-Control-Allow-Headers'] + ', instance, instance_id, accept',
   }
 }
 
@@ -445,6 +452,7 @@ Deno.serve(async (req: Request) => {
       }
       if (instance) {
         headers['instance'] = instance
+        headers['instance_id'] = instance
       }
       return headers
     }
@@ -1097,16 +1105,38 @@ Deno.serve(async (req: Request) => {
             .single()
 
           if (contact) {
-            await supabaseAdmin.from('conversations').upsert(
-              {
-                instance_id: existingInstance.id,
-                contact_id: contact.id,
-                last_message: lastMessage || 'Mídia/Outro',
-                unread_count: unreadCount,
-                updated_at: timestamp,
-              },
-              { onConflict: 'instance_id, contact_id' },
-            )
+            const { data: conv } = await supabaseAdmin
+              .from('conversations')
+              .upsert(
+                {
+                  instance_id: existingInstance.id,
+                  contact_id: contact.id,
+                  last_message: lastMessage || 'Mídia/Outro',
+                  unread_count: unreadCount,
+                  updated_at: timestamp,
+                },
+                { onConflict: 'instance_id, contact_id' },
+              )
+              .select()
+              .single()
+
+            if (conv && chat.lastMessage) {
+              const msgId = chat.lastMessage.key?.id || chat.lastMessage.id || `msg_${Date.now()}`
+              if (msgId) {
+                await supabaseAdmin.from('messages').upsert(
+                  {
+                    conversation_id: conv.id,
+                    message_id: msgId,
+                    content: lastMessage,
+                    from_me: chat.lastMessage.key?.fromMe || false,
+                    type: chat.lastMessage.messageType || 'text',
+                    timestamp: timestamp,
+                    status: 'sent',
+                  },
+                  { onConflict: 'message_id' },
+                )
+              }
+            }
           }
         }
       }
