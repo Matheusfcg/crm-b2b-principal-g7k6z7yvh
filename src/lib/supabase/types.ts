@@ -398,7 +398,7 @@ export type Database = {
           {
             foreignKeyName: 'whatsapp_instances_user_id_fkey'
             columns: ['user_id']
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: 'users'
             referencedColumns: ['id']
           },
@@ -721,6 +721,7 @@ export const Constants = {
 //   UNIQUE whatsapp_instances_instance_name_key: UNIQUE (instance_name)
 //   PRIMARY KEY whatsapp_instances_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY whatsapp_instances_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+//   UNIQUE whatsapp_instances_user_id_key: UNIQUE (user_id)
 // Table: whatsapp_logs
 //   PRIMARY KEY whatsapp_logs_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY whatsapp_logs_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -811,6 +812,9 @@ export const Constants = {
 //     WITH CHECK: (user_id = auth.uid())
 //   Policy "whatsapp_logs_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((user_id = auth.uid()) OR (EXISTS ( SELECT 1    FROM users u   WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))))
+//   Policy "whatsapp_logs_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (user_id = auth.uid())
+//     WITH CHECK: (user_id = auth.uid())
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION admin_create_user(text, text, text, text)

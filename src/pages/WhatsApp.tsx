@@ -62,7 +62,17 @@ export default function WhatsApp() {
         const res = (await Promise.race([apiCall, timeoutPromise])) as any
         const { data, error } = res
 
-        if (error) throw error
+        if (error) {
+          if (
+            error.name === 'FunctionsFetchError' ||
+            error.message?.includes('Failed to send a request')
+          ) {
+            throw new Error(
+              'Falha ao conectar com o servidor da Edge Function. Verifique sua conexão.',
+            )
+          }
+          throw error
+        }
 
         if (
           data?.error ||
@@ -115,6 +125,15 @@ export default function WhatsApp() {
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+        } else if (
+          e.name === 'FunctionsFetchError' ||
+          e.message?.includes('Failed to send a request') ||
+          e.message?.includes('Falha ao conectar com o servidor da Edge Function')
+        ) {
+          const msg =
+            'Falha ao conectar com a Edge Function. Verifique sua conexão ou tente novamente.'
+          setConnectError(msg)
+          toast.error(msg)
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
           toast.error(`Erro de comunicação: ${e.message}`)
@@ -214,7 +233,15 @@ export default function WhatsApp() {
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'delete', instanceName: instance?.instance_name },
       })
-      if (error) throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      if (error) {
+        if (
+          error.name === 'FunctionsFetchError' ||
+          error.message?.includes('Failed to send a request')
+        ) {
+          throw new Error('Falha ao conectar com a Edge Function. Verifique sua conexão.')
+        }
+        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      }
       if (data?.error) throw new Error(data.error)
       addLog('Instância desconectada e deletada com sucesso.')
       toast.success('WhatsApp desconectado.')

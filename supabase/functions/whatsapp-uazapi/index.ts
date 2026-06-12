@@ -1,11 +1,19 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type, instance',
+const allowedOrigins = [
+  'https://crm-b2b-principal-462cb--preview.goskip.app',
+  'https://crm-vexa.goskip.app',
+]
+
+const getCorsHeaders = (origin: string | null) => {
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : '*'
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, x-supabase-client-platform, apikey, content-type, instance',
+  }
 }
 
 const sanitizeInstanceName = (name: string) => {
@@ -14,6 +22,9 @@ const sanitizeInstanceName = (name: string) => {
 }
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('Origin')
+  const corsHeaders = getCorsHeaders(origin)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
