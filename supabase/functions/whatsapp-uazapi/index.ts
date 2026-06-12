@@ -50,6 +50,25 @@ Deno.serve(async (req: Request) => {
         body.data ||
         (body.instance && typeof body.instance === 'string'))
     ) {
+      const webhookSecret = Deno.env.get('UAZAPI_WEBHOOK_SECRET')
+      if (webhookSecret) {
+        const url = new URL(req.url)
+        const queryToken = url.searchParams.get('token')
+        const authHeaderWebhook =
+          req.headers.get('authorization') ||
+          req.headers.get('x-webhook-secret') ||
+          req.headers.get('apikey') ||
+          ''
+        const providedSecret = queryToken || authHeaderWebhook.replace(/^Bearer\s+/i, '').trim()
+        if (!providedSecret || providedSecret !== webhookSecret) {
+          console.error('[WEBHOOK] Unauthorized request')
+          return new Response(JSON.stringify({ error: 'Unauthorized webhook' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          })
+        }
+      }
+
       const eventName = body.event || body.event_type || 'unknown_event'
       console.log('[WEBHOOK] Received from Uazapi:', eventName)
 
@@ -468,7 +487,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const setWebhook = async (instanceName: string, token: string) => {
-      const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
+      let webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
+      const webhookSecret = Deno.env.get('UAZAPI_WEBHOOK_SECRET')
+      if (webhookSecret) {
+        webhookUrl += `?token=${webhookSecret}`
+      }
       const cleanInstanceName = sanitizeInstanceName(instanceName)
 
       const payload = {

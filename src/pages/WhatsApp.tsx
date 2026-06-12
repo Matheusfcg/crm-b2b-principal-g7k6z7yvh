@@ -223,11 +223,8 @@ export default function WhatsApp() {
           instance_token: data.instance_token || '',
         })
 
-        if (data.instance_name) {
-          if (data.status !== 'open' && data.status !== 'connected') {
-            checkStatusWithTimeout(data, 'connect')
-          }
-        }
+        // We now rely on webhooks for real-time status updates instead of polling on mount.
+        // Removed automatic checkStatusWithTimeout call to avoid 401/404 errors.
       } else {
         setInstance(null)
       }
@@ -471,6 +468,18 @@ export default function WhatsApp() {
                     setConfigData((prev) => ({ ...prev, instance_token: e.target.value }))
                   }
                 />
+              </div>
+              <div className="mt-4 p-4 bg-slate-50 border rounded-md">
+                <Label>Webhook URL (Global)</Label>
+                <Input
+                  readOnly
+                  value="https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi"
+                  className="bg-white mt-1 font-mono text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  Configure esta URL no painel da Uazapi (Global Webhook) para receber atualizações
+                  em tempo real via Webhook e evitar bloqueios de requisições GET recorrentes.
+                </p>
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
