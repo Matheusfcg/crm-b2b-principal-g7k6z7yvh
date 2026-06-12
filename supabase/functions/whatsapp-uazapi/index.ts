@@ -210,20 +210,6 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const rawUazapiUrl =
-      existingInstance?.server_url ||
-      Deno.env.get('UAZAPI_SERVER_URL') ||
-      Deno.env.get('UAZAPI_URL') ||
-      Deno.env.get('UAZAPI_BASE_URL') ||
-      'https://apiwhatsvexaview.uazapi.com'
-    const uazapiKey =
-      existingInstance?.instance_token ||
-      Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
-      Deno.env.get('UAZAPI_TOKEN') ||
-      Deno.env.get('UAZAPI_API_KEY') ||
-      ''
-    const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
-
     const providedId = body.instanceId || body.instanceName
     const isProvidedIdUuid =
       providedId &&
@@ -238,6 +224,20 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: existingInstance } = await query.maybeSingle()
+
+    const rawUazapiUrl =
+      existingInstance?.server_url ||
+      Deno.env.get('UAZAPI_SERVER_URL') ||
+      Deno.env.get('UAZAPI_URL') ||
+      Deno.env.get('UAZAPI_BASE_URL') ||
+      'https://apiwhatsvexaview.uazapi.com'
+    const uazapiKey =
+      existingInstance?.instance_token ||
+      Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
+      Deno.env.get('UAZAPI_TOKEN') ||
+      Deno.env.get('UAZAPI_API_KEY') ||
+      ''
+    const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
     let instanceName = existingInstance?.instance_name
 
