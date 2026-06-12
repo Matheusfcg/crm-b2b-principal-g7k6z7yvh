@@ -634,7 +634,7 @@ Deno.serve(async (req: Request) => {
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
-    } else if (action === 'get_status') {
+    } else if (action === 'get_status' || action === 'connect') {
       const returnedToken = existingInstance?.instance_token
 
       if (!returnedToken) {
@@ -645,6 +645,11 @@ Deno.serve(async (req: Request) => {
             status: 400,
           },
         )
+      }
+
+      if (action === 'connect') {
+        await connectInstance(uazapiInstanceId as string, returnedToken)
+        await setWebhook(uazapiInstanceId as string, returnedToken)
       }
 
       const stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
