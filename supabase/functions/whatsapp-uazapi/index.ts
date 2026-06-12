@@ -80,7 +80,12 @@ Deno.serve(async (req: Request) => {
       })
 
       if (instanceId) {
-        if (eventName === 'CONNECTION_UPDATE' || eventName === 'status' || eventName === 'state') {
+        if (
+          eventName === 'CONNECTION_UPDATE' ||
+          eventName === 'connection.update' ||
+          eventName === 'status' ||
+          eventName === 'state'
+        ) {
           const state = body.data?.state || body.state || body.status
           if (state) {
             const updateData: any = { status: state, updated_at: new Date().toISOString() }
@@ -107,13 +112,23 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        if (eventName === 'MESSAGES_UPSERT' || eventName === 'message') {
-          const messages = body.data?.messages || (body.message ? [body] : [])
+        if (
+          eventName === 'MESSAGES_UPSERT' ||
+          eventName === 'messages.upsert' ||
+          eventName === 'message' ||
+          eventName === 'messages'
+        ) {
+          let messages = []
+          if (Array.isArray(body.data?.messages)) messages = body.data.messages
+          else if (Array.isArray(body.data)) messages = body.data
+          else if (body.message) messages = [body]
+          else if (body.data) messages = [body.data]
+
           for (const msg of messages) {
             const remoteJid = msg.key?.remoteJid || msg.remoteJid
             if (!remoteJid || remoteJid === 'status@broadcast') continue
 
-            const fromMe = msg.key?.fromMe || msg.fromMe
+            const fromMe = msg.key?.fromMe ?? msg.fromMe ?? false
             const pushName = msg.pushName || null
             const messageId = msg.key?.id || msg.id
 
@@ -263,15 +278,6 @@ Deno.serve(async (req: Request) => {
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
     let instanceName = existingInstance?.instance_name || (!isProvidedIdUuid ? providedId : null)
-
-    if (
-      instanceName &&
-      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-        instanceName,
-      )
-    ) {
-      instanceName = null
-    }
 
     const uazapiInstanceId = existingInstance?.instance_external_id || instanceName
 
