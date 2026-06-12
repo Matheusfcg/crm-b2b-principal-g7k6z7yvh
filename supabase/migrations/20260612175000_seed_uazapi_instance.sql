@@ -34,16 +34,18 @@ BEGIN
   END IF;
 
   -- Ensure the whatsapp_instance exists for this user with cd51 id
-  INSERT INTO public.whatsapp_instances (
-    id, user_id, instance_name, instance_external_id, instance_token, server_url, status
-  ) VALUES (
-    instance_uuid,
-    new_user_id,
-    'Uazapi-cd51',
-    'cd51',
-    '87C6F5234AB271B4ED8E65D7B32F1A02',
-    'https://apiwhatsvexaview.uazapi.com',
-    'disconnected'
-  ) ON CONFLICT (instance_name) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM public.whatsapp_instances WHERE user_id = new_user_id OR id = instance_uuid OR instance_name = 'Uazapi-cd51') THEN
+    INSERT INTO public.whatsapp_instances (
+      id, user_id, instance_name, instance_external_id, instance_token, server_url, status
+    ) VALUES (
+      instance_uuid,
+      new_user_id,
+      'Uazapi-cd51',
+      'cd51',
+      '87C6F5234AB271B4ED8E65D7B32F1A02',
+      'https://apiwhatsvexaview.uazapi.com',
+      'disconnected'
+    );
+  END IF;
 
 END $$;
