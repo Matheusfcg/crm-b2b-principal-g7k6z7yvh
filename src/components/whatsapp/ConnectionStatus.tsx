@@ -67,32 +67,46 @@ export function ConnectionStatus({
         </CardHeader>
         <CardContent className="flex flex-col items-center justify-center p-6 space-y-4 min-h-[250px]">
           {isConnected ? (
-            <div className="flex flex-col items-center text-center space-y-2">
-              <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mb-2 animate-in zoom-in">
-                <Wifi className="h-8 w-8 text-green-600" />
+            <div className="w-full flex flex-col gap-4">
+              <div className="flex flex-col items-center text-center space-y-2">
+                <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mb-2 animate-in zoom-in">
+                  <Wifi className="h-8 w-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-green-600">Conectado</h3>
+                <p className="text-sm text-slate-500">
+                  Sua conta está ativa e sincronizando mensagens automaticamente.
+                </p>
               </div>
-              <h3 className="text-xl font-semibold text-green-600">Conectado</h3>
-              <p className="text-sm text-slate-500">
-                Sua conta está ativa e sincronizando mensagens automaticamente.
-              </p>
-              <div className="mt-4 px-4 py-2 bg-slate-50 rounded-lg border border-slate-100 w-full flex flex-col gap-2">
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-sm font-medium text-slate-700">Número</span>
-                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
-                    {instance?.phone || 'Desconhecido'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2">
-                  <span className="text-sm font-medium text-slate-700">ID da Conexão</span>
-                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
-                    {instance?.id?.split('-')[0] || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2">
-                  <span className="text-sm font-medium text-slate-700">Nome da Instância</span>
-                  <span className="text-sm text-slate-500 font-mono truncate max-w-[150px]">
-                    {instance?.instance_name || 'N/A'}
-                  </span>
+
+              <div className="bg-[#1d334a] text-white p-6 rounded-xl space-y-5 font-sans shadow-sm w-full text-left">
+                <h2 className="text-xl font-bold border-b border-[#2c4b69] pb-3">
+                  Dados da instância
+                </h2>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[#8ba3b8] text-sm mb-1">Server URL:</p>
+                    <p className="font-bold break-all text-[15px]">
+                      {instance?.server_url || uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[#8ba3b8] text-sm mb-1">Instance Token:</p>
+                    <p className="font-bold break-all text-[15px]">
+                      {instance?.instance_token || 'N/A'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[#8ba3b8] text-sm mb-1">Número conectado:</p>
+                    <p className="font-bold text-[15px]">{instance?.phone || 'N/A'}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[#8ba3b8] text-sm mb-1">Status:</p>
+                    <p className="font-bold text-[15px]">{instance?.status || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
             </div>

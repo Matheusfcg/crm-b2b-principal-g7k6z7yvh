@@ -211,11 +211,13 @@ Deno.serve(async (req: Request) => {
     const action = body.action
 
     const rawUazapiUrl =
+      existingInstance?.server_url ||
       Deno.env.get('UAZAPI_SERVER_URL') ||
       Deno.env.get('UAZAPI_URL') ||
       Deno.env.get('UAZAPI_BASE_URL') ||
       'https://apiwhatsvexaview.uazapi.com'
     const uazapiKey =
+      existingInstance?.instance_token ||
       Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
       Deno.env.get('UAZAPI_TOKEN') ||
       Deno.env.get('UAZAPI_API_KEY') ||
@@ -580,6 +582,7 @@ Deno.serve(async (req: Request) => {
           status === 'open' || status === 'connected' ? new Date().toISOString() : null,
         instance_token: returnedToken,
         instance_external_id: returnedId,
+        server_url: rawUazapiUrl,
         updated_at: new Date().toISOString(),
       }
 
@@ -611,6 +614,7 @@ Deno.serve(async (req: Request) => {
         phone: resultInstance.phone,
         instance_name: resultInstance.instance_name,
         instance_token: resultInstance.instance_token,
+        server_url: resultInstance.server_url,
       }
 
       return new Response(
@@ -694,6 +698,7 @@ Deno.serve(async (req: Request) => {
               phone: finalInstance.phone,
               instance_name: finalInstance.instance_name,
               instance_token: finalInstance.instance_token,
+              server_url: finalInstance.server_url,
             }
           : null
 
@@ -729,6 +734,7 @@ Deno.serve(async (req: Request) => {
             phone: data.phone,
             instance_name: data.instance_name,
             instance_token: data.instance_token,
+            server_url: data.server_url,
           }
           return new Response(
             JSON.stringify({

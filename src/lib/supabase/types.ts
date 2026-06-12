@@ -359,6 +359,7 @@ export type Database = {
           last_error: string | null
           phone: string | null
           qrcode: string | null
+          server_url: string | null
           status: string | null
           updated_at: string | null
           user_id: string
@@ -373,6 +374,7 @@ export type Database = {
           last_error?: string | null
           phone?: string | null
           qrcode?: string | null
+          server_url?: string | null
           status?: string | null
           updated_at?: string | null
           user_id: string
@@ -387,6 +389,7 @@ export type Database = {
           last_error?: string | null
           phone?: string | null
           qrcode?: string | null
+          server_url?: string | null
           status?: string | null
           updated_at?: string | null
           user_id?: string
@@ -672,6 +675,7 @@ export const Constants = {
 //   instance_external_id: text (nullable)
 //   updated_at: timestamp with time zone (nullable, default: now())
 //   last_error: text (nullable)
+//   server_url: text (nullable)
 // Table: whatsapp_logs
 //   id: uuid (not null, default: gen_random_uuid())
 //   instance_name: text (nullable)

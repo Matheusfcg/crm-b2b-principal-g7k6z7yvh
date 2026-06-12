@@ -242,7 +242,7 @@ export default function WhatsApp() {
       const { data } = await supabase
         .from('whatsapp_instances')
         .select(
-          'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token',
+          'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
         )
         .eq('user_id', user.id)
         .maybeSingle()
