@@ -25,14 +25,19 @@ interface ConnectionStatusProps {
   onConnect: () => void
   onDisconnect: () => void
   error?: string | null
+  onConfigure?: () => void
+  showConfigureButton?: boolean
 }
 
 export function ConnectionStatus({
   instance,
+  uazapiUrl,
   actionLoading,
   onConnect,
   onDisconnect,
   error,
+  onConfigure,
+  showConfigureButton,
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
@@ -79,8 +84,18 @@ export function ConnectionStatus({
                 </p>
               </div>
 
-              <div className="bg-[#1d334a] text-white p-6 rounded-xl space-y-5 font-sans shadow-sm w-full text-left">
-                <h2 className="text-xl font-bold border-b border-[#2c4b69] pb-3">
+              <div className="bg-[#1d334a] text-white p-6 rounded-xl space-y-5 font-sans shadow-sm w-full text-left relative">
+                {showConfigureButton && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onConfigure}
+                    className="absolute top-4 right-4 bg-transparent border-[#2c4b69] text-[#8ba3b8] hover:bg-[#2c4b69] hover:text-white"
+                  >
+                    Configurar
+                  </Button>
+                )}
+                <h2 className="text-xl font-bold border-b border-[#2c4b69] pb-3 pr-24">
                   Dados da instância
                 </h2>
 

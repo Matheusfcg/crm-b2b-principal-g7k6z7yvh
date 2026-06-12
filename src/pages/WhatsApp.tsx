@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { MessageCircle, Loader2, Copy, Check, Settings2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { cn } from '@/lib/utils'
 import {
   Card,
   CardContent,
@@ -28,6 +29,7 @@ export default function WhatsApp() {
   const [isPolling, setIsPolling] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showConfig, setShowConfig] = useState(false)
 
   const [configForm, setConfigForm] = useState({
     instance_name: '',
@@ -264,9 +266,59 @@ export default function WhatsApp() {
       setIsPolling(false)
       addLog(`CHECK OR CREATE INSTANCE...`)
       try {
-        const instanceName = forcedInstanceName || `user_${user?.id}`
+        let { data: existingInstance } = await supabase
+          .from('whatsapp_instances')
+          .select('*')
+          .eq('user_id', user?.id)
+          .maybeSingle()
+
+        const instanceName =
+          forcedInstanceName || existingInstance?.instance_name || `user_${user?.id}`
+        const instanceToken = existingInstance?.instance_token || ''
+
+        if (existingInstance) {
+          const { data: updated } = await supabase
+            .from('whatsapp_instances')
+            .update({
+              status: 'connecting',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingInstance.id)
+            .select()
+            .single()
+
+          if (updated) {
+            existingInstance = updated
+            setInstance(updated)
+          }
+        } else {
+          const { data: upserted, error: upsertErr } = await supabase
+            .from('whatsapp_instances')
+            .upsert(
+              {
+                user_id: user?.id,
+                instance_name: instanceName,
+                status: 'connecting',
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id' },
+            )
+            .select()
+            .single()
+
+          if (upsertErr) throw upsertErr
+          if (upserted) {
+            existingInstance = upserted
+            setInstance(upserted)
+          }
+        }
+
         const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-          body: { action: 'check_or_create', instanceName },
+          body: {
+            action: 'check_or_create',
+            instanceName,
+            instanceToken,
+          },
         })
 
         console.log('Complete JSON response from whatsapp-uazapi:', data)
@@ -543,15 +595,22 @@ export default function WhatsApp() {
         </div>
       ) : (
         <div className="space-y-6">
-          {!isConnected && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            {(!isConnected || showConfig) && (
               <div className="xl:col-span-1">
                 <Card className="border-slate-200 shadow-sm sticky top-6">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings2 className="h-5 w-5 text-slate-500" />
-                      Configuração Manual
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Settings2 className="h-5 w-5 text-slate-500" />
+                        Configuração Manual
+                      </CardTitle>
+                      {isConnected && (
+                        <Button variant="ghost" size="sm" onClick={() => setShowConfig(false)}>
+                          Fechar
+                        </Button>
+                      )}
+                    </div>
                     <CardDescription>
                       Insira as credenciais da sua instância Uazapi.
                     </CardDescription>
@@ -608,50 +667,56 @@ export default function WhatsApp() {
                   </form>
                 </Card>
               </div>
-              <div className="xl:col-span-2 space-y-4">
-                <ConnectionStatus
-                  instance={instance}
-                  uazapiUrl={uazapiUrl}
-                  actionLoading={actionLoading}
-                  onConnect={() => handleCheckOrCreate()}
-                  onDisconnect={handleDisconnect}
-                  error={connectError}
-                />
-                {connectError && (
-                  <div className="flex justify-center mt-4">
-                    <Button
-                      onClick={() => handleCheckOrCreate()}
-                      disabled={actionLoading}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      {actionLoading ? 'Processando...' : 'Reconectar'}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isConnected && instance?.id && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                <div>
-                  <h3 className="font-semibold text-slate-900">
-                    Conectado como {instance.phone || instance.instance_name}
-                  </h3>
-                  <p className="text-sm text-slate-500">Sincronizado e pronto para uso.</p>
+            )}
+            <div
+              className={cn(
+                'space-y-4',
+                !isConnected || showConfig ? 'xl:col-span-2' : 'xl:col-span-3',
+              )}
+            >
+              <ConnectionStatus
+                instance={instance}
+                uazapiUrl={uazapiUrl}
+                actionLoading={actionLoading}
+                onConnect={() => handleCheckOrCreate()}
+                onDisconnect={handleDisconnect}
+                error={connectError}
+                onConfigure={() => setShowConfig(true)}
+                showConfigureButton={isConnected && !showConfig}
+              />
+              {connectError && (
+                <div className="flex justify-center mt-4">
+                  <Button
+                    onClick={() => handleCheckOrCreate()}
+                    disabled={actionLoading}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {actionLoading ? 'Processando...' : 'Reconectar'}
+                  </Button>
                 </div>
-                <button
-                  onClick={handleDisconnect}
-                  disabled={actionLoading}
-                  className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
-                >
-                  {actionLoading ? 'Desconectando...' : 'Desconectar'}
-                </button>
-              </div>
-              <WhatsAppChat instanceId={instance.id} />
+              )}
+              {isConnected && instance?.id && (
+                <div className="mt-6 space-y-6">
+                  <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                    <div>
+                      <h3 className="font-semibold text-slate-900">
+                        Conectado como {instance.phone || instance.instance_name}
+                      </h3>
+                      <p className="text-sm text-slate-500">Sincronizado e pronto para uso.</p>
+                    </div>
+                    <button
+                      onClick={handleDisconnect}
+                      disabled={actionLoading}
+                      className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    >
+                      {actionLoading ? 'Desconectando...' : 'Desconectar'}
+                    </button>
+                  </div>
+                  <WhatsAppChat instanceId={instance.id} />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
