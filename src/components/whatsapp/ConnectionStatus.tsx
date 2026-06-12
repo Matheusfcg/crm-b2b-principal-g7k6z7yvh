@@ -133,9 +133,23 @@ export function ConnectionStatus({
                 )}
               </div>
               <div>
-                <h3 className="text-lg font-medium text-slate-900">Verificando Conexão...</h3>
+                <h3 className="text-lg font-medium text-slate-900">
+                  RECONECTANDO (Health Check)...
+                </h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
                   Aguarde enquanto tentamos alcançar a instância configurada.
+                </p>
+              </div>
+            </div>
+          ) : isTimeout ? (
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="h-16 w-16 bg-yellow-100 rounded-full flex items-center justify-center mb-2">
+                <WifiOff className="h-8 w-8 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-yellow-600">Tempo Limite Atingido</h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
+                  {error || 'A conexão com a Uazapi demorou mais que 5 segundos.'}
                 </p>
               </div>
             </div>

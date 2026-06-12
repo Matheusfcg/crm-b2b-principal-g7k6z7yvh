@@ -56,7 +56,9 @@ Deno.serve(async (req: Request) => {
         const { data: inst } = await supabaseAdmin
           .from('whatsapp_instances')
           .select('id, user_id')
-          .eq('instance_name', instanceNameReceived)
+          .or(
+            `instance_name.eq.${instanceNameReceived},instance_external_id.eq.${instanceNameReceived}`,
+          )
           .maybeSingle()
         if (inst) {
           userId = inst.user_id
@@ -266,7 +268,9 @@ Deno.serve(async (req: Request) => {
       instanceName = null
     }
 
-    if (!instanceName && action !== 'check_or_create') {
+    const uazapiInstanceId = existingInstance?.instance_external_id || instanceName
+
+    if (!uazapiInstanceId && action !== 'check_or_create') {
       return new Response(
         JSON.stringify({
           success: true,
@@ -314,7 +318,7 @@ Deno.serve(async (req: Request) => {
         } catch (e) {}
 
         await supabaseAdmin.from('whatsapp_logs').insert({
-          instance_name: instanceName,
+          instance_name: uazapiInstanceId,
           endpoint: url,
           payload: payload,
           response: { status, body: parsedBody },
@@ -323,7 +327,7 @@ Deno.serve(async (req: Request) => {
 
         if (!res.ok) {
           console.error(
-            `[ERROR] action: uazapi_fetch, instance: ${instanceName}, status: ${status}, path: ${path}, details: ${text}`,
+            `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, status: ${status}, path: ${path}, details: ${text}`,
           )
         }
 
@@ -331,7 +335,7 @@ Deno.serve(async (req: Request) => {
       } catch (err: any) {
         console.error(`[ERROR] Uazapi fetch failed:`, err)
         await supabaseAdmin.from('whatsapp_logs').insert({
-          instance_name: instanceName,
+          instance_name: uazapiInstanceId,
           endpoint: url,
           payload: payload,
           response: { status: 0, error: err.message },
@@ -486,7 +490,7 @@ Deno.serve(async (req: Request) => {
 
       let needsInit = true
 
-      if (existingInstance && instanceName) {
+      if (existingInstance && uazapiInstanceId) {
         if (!returnedToken) {
           return new Response(
             JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
@@ -497,11 +501,11 @@ Deno.serve(async (req: Request) => {
           )
         }
         console.log(
-          `[CHECK_OR_CREATE] checking database -> found existing name -> calling status for ${instanceName}`,
+          `[CHECK_OR_CREATE] checking database -> found existing name -> calling status for ${uazapiInstanceId}`,
         )
-        const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
+        const stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken, instanceName),
+          headers: getApiHeaders(returnedToken, uazapiInstanceId),
         })
 
         if ((stateRes as any).isNetworkError) {
@@ -544,7 +548,7 @@ Deno.serve(async (req: Request) => {
         } else {
           if (existingInstance.server_url && existingInstance.instance_token) {
             console.log(
-              `[CHECK_OR_CREATE] Uazapi returned not found/error for ${instanceName}. Manual config exists, skipping init.`,
+              `[CHECK_OR_CREATE] Uazapi returned not found/error for ${uazapiInstanceId}. Manual config exists, skipping init.`,
             )
             return new Response(
               JSON.stringify({
@@ -558,7 +562,7 @@ Deno.serve(async (req: Request) => {
             )
           }
           console.log(
-            `[CHECK_OR_CREATE] Uazapi returned not found/error for ${instanceName}. Will re-initialize with same name.`,
+            `[CHECK_OR_CREATE] Uazapi returned not found/error for ${uazapiInstanceId}. Will re-initialize with same name.`,
           )
         }
       } else {
@@ -643,9 +647,9 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const stateRes = await fetchUazapi(`/instance/status/${instanceName}`, {
+      const stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken, instanceName),
+        headers: getApiHeaders(returnedToken, uazapiInstanceId),
       })
 
       if ((stateRes as any).isNetworkError) {
@@ -858,7 +862,7 @@ Deno.serve(async (req: Request) => {
         })
       }
 
-      const cleanName = sanitizeInstanceName(instanceName!)
+      const cleanName = sanitizeInstanceName(uazapiInstanceId!)
       const sendRes = await fetchUazapi(`/message/sendText/${cleanName}`, {
         method: 'POST',
         headers: getApiHeaders(returnedToken, cleanName),
@@ -933,7 +937,7 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const cleanName = sanitizeInstanceName(instanceName!)
+      const cleanName = sanitizeInstanceName(uazapiInstanceId!)
       const chatsRes = await fetchUazapi(`/chat/findChats/${cleanName}`, {
         method: 'GET',
         headers: getApiHeaders(returnedToken, cleanName),
@@ -1013,7 +1017,7 @@ Deno.serve(async (req: Request) => {
       try {
         const returnedToken = existingInstance?.instance_token
         if (returnedToken || globalAdminToken) {
-          const cleanName = sanitizeInstanceName(instanceName!)
+          const cleanName = sanitizeInstanceName(uazapiInstanceId!)
           await fetchUazapi(`/instance/logout/${cleanName}`, {
             method: 'DELETE',
             headers: getApiHeaders(returnedToken || globalAdminToken, cleanName),
