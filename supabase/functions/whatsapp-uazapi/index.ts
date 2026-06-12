@@ -642,21 +642,20 @@ Deno.serve(async (req: Request) => {
           headers: getApiHeaders(returnedToken || '', externalIdStr),
         })
       } else {
-        stateRes = await fetchUazapi(`/instance/connectionState/${externalIdStr}`, {
+        stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
           method: 'GET',
           headers: getApiHeaders(returnedToken || '', externalIdStr),
         })
 
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/connectionStatus/${externalIdStr}`, {
+          stateRes = await fetchUazapi(`/instance/connectionState/${externalIdStr}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || '', externalIdStr),
           })
         }
 
-        // Additional fallback based on user story requirement
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
+          stateRes = await fetchUazapi(`/instance/connectionStatus/${externalIdStr}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || '', externalIdStr),
           })
