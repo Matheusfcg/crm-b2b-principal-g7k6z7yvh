@@ -252,22 +252,15 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const providedId = body.instanceId || body.instanceName || body.instance
-    const isProvidedIdUuid =
-      providedId &&
-      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-        providedId,
-      )
+    // Fixed Instance Targeting: Force the system to use the instance name "teste"
+    const instanceName = 'teste'
+    const uazapiInstanceId = 'teste'
 
-    let query = supabaseAdmin.from('whatsapp_instances').select('*').eq('user_id', user.id)
-
-    if (providedId) {
-      if (isProvidedIdUuid) {
-        query = query.eq('id', providedId)
-      } else {
-        query = query.eq('instance_name', providedId)
-      }
-    }
+    let query = supabaseAdmin
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('instance_name', 'teste')
 
     const { data: existingInstance } = await query.maybeSingle()
 
@@ -277,18 +270,9 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('UAZAPI_URL') ||
       Deno.env.get('UAZAPI_BASE_URL') ||
       'https://apiwhatsvexaview.uazapi.com'
-    const globalAdminToken =
-      Deno.env.get('UAZAPI_ADMIN_TOKEN') ||
-      Deno.env.get('UAZAPI_TOKEN') ||
-      Deno.env.get('UAZAPI_API_KEY') ||
-      ''
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
-    let instanceName = existingInstance?.instance_name || (!isProvidedIdUuid ? providedId : null)
-
-    const uazapiInstanceId = existingInstance?.instance_external_id || instanceName
-
-    if (!uazapiInstanceId && action !== 'check_or_create') {
+    if (!existingInstance && action !== 'check_or_create') {
       return new Response(
         JSON.stringify({
           success: true,
@@ -307,7 +291,12 @@ Deno.serve(async (req: Request) => {
       const payload = options.body ? JSON.parse(options.body as string) : null
 
       const headersObj = (options.headers as any) || {}
-      const tokenUsed = headersObj['apikey'] || headersObj['admintoken'] || 'none'
+
+      // Debug Logging: The edge function must include a console.log statement that prints the full target URL and the headers object sent to Uazapi.
+      console.log(`[DEBUG] Target URL: ${url}`)
+      console.log(`[DEBUG] Headers:`, JSON.stringify(headersObj, null, 2))
+
+      const tokenUsed = headersObj['apikey'] || headersObj['adminToken'] || 'none'
       const instanceNameSent = headersObj['instance'] || 'none'
       const maskedToken =
         tokenUsed.length > 8
@@ -359,6 +348,10 @@ Deno.serve(async (req: Request) => {
           console.error(
             `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, status: ${status}, path: ${path}, details: ${text}`,
           )
+          // Error Handling: If the Uazapi returns a 404 or "Instance not found", log full response body
+          if (status === 404 || text.toLowerCase().includes('not found')) {
+            console.log(`[DEBUG 404] Full response body for Instance not found: ${text}`)
+          }
         }
 
         return { ok: res.ok, status, text, parsedBody }
@@ -438,17 +431,21 @@ Deno.serve(async (req: Request) => {
       return qrcode
     }
 
+    // Enhanced Authentication Headers
     const getApiHeaders = (token: string, instance?: string) => {
+      const apiKey = Deno.env.get('UAZAPI_API_KEY') || token
+      const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
+
       const headers: any = {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       }
-      if (token) {
-        headers['apikey'] = token
-        headers['Authorization'] = `Bearer ${token}`
+      if (apiKey) {
+        headers['apikey'] = apiKey
+        headers['Authorization'] = `Bearer ${apiKey}` // Kept as fallback, but apikey is correctly mapped
       }
-      if (globalAdminToken) {
-        headers['admintoken'] = globalAdminToken
+      if (adminToken) {
+        headers['adminToken'] = adminToken
       }
       if (instance) {
         headers['instance'] = instance
@@ -485,7 +482,6 @@ Deno.serve(async (req: Request) => {
       })
 
       if (!res.ok || res.status === 404) {
-        // try alternative webhook endpoint format
         res = await fetchUazapi(`/instance/webhook`, {
           method: 'POST',
           headers: getApiHeaders(token, cleanInstanceName),
@@ -500,155 +496,10 @@ Deno.serve(async (req: Request) => {
       return res
     }
 
-    const connectInstance = async (targetInstanceName: string, token: string) => {
-      const cleanInstanceName = sanitizeInstanceName(targetInstanceName)
-      const connectHeaders = getApiHeaders(token, cleanInstanceName)
-
-      let attempt = 0
-      let totalWaitTime = 0
-      let connectRes: any = null
-      let lastState = 'unknown'
-      let hasValidQr = false
-
-      while (totalWaitTime < 15000) {
-        attempt++
-
-        connectRes = await fetchUazapi(`/instance/connect/${cleanInstanceName}`, {
-          method: 'POST',
-          headers: connectHeaders,
-          body: JSON.stringify({ instance: cleanInstanceName }),
-        })
-
-        const state =
-          connectRes?.parsedBody?.instance?.state || connectRes?.parsedBody?.state || 'unknown'
-        const extractedQr = extractQrCode(connectRes?.parsedBody)
-
-        console.log(`[CONNECT] State transition: ${lastState} -> ${state}`)
-        lastState = state
-
-        if (extractedQr) {
-          hasValidQr = true
-          break
-        }
-
-        if (state === 'open' || state === 'connected') {
-          break
-        }
-
-        if (state === 'connecting' || connectRes.status === 405 || !extractedQr) {
-          if (totalWaitTime + 3000 > 15000) break
-          console.log(
-            `[CONNECT] Attempt ${attempt} returned state '${state}' or 405 or null QR, retrying in 3s...`,
-          )
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-          totalWaitTime += 3000
-        } else {
-          if (connectRes.status === 404 || connectRes.status === 500) {
-            if (totalWaitTime + 3000 > 15000) break
-            console.log(
-              `[CONNECT] Attempt ${attempt} failed with ${connectRes.status}, retrying in 3s...`,
-            )
-            await new Promise((resolve) => setTimeout(resolve, 3000))
-            totalWaitTime += 3000
-          } else {
-            break
-          }
-        }
-      }
-
-      return connectRes
-    }
+    // Stop Instance Creation
+    // connectInstance logic removed completely per user requirements
 
     if (action === 'check_or_create') {
-      let qrcode = null
-      let status = 'connecting'
-      let returnedToken = existingInstance?.instance_token
-      let returnedId = existingInstance?.instance_external_id || instanceName
-
-      let needsInit = true
-
-      if (existingInstance && uazapiInstanceId) {
-        if (!returnedToken) {
-          return new Response(
-            JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 400,
-            },
-          )
-        }
-        console.log(
-          `[CHECK_OR_CREATE] checking database -> found existing name -> calling status for ${uazapiInstanceId}`,
-        )
-        const stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
-          method: 'GET',
-          headers: getApiHeaders(returnedToken, uazapiInstanceId),
-        })
-
-        if ((stateRes as any).isNetworkError) {
-          const errorMsg = (stateRes as any).isTimeout
-            ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
-            : 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-          return new Response(
-            JSON.stringify({
-              error: errorMsg,
-              code: (stateRes as any).isTimeout ? 'TIMEOUT' : 'SERVER_UNREACHABLE',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 503,
-            },
-          )
-        }
-
-        if (
-          stateRes.status === 401 ||
-          stateRes.status === 403 ||
-          stateRes.parsedBody?.message === 'Unauthorized' ||
-          stateRes.parsedBody?.error === 'Unauthorized'
-        ) {
-          return new Response(
-            JSON.stringify({
-              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-              code: 'UNAUTHORIZED',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 401,
-            },
-          )
-        }
-        if (
-          stateRes.ok &&
-          stateRes.parsedBody &&
-          !stateRes.parsedBody.error &&
-          stateRes.parsedBody.message !== 'Instance not found'
-        ) {
-          needsInit = false
-        } else {
-          if (existingInstance.server_url && existingInstance.instance_token) {
-            console.log(
-              `[CHECK_OR_CREATE] Uazapi returned not found/error for ${uazapiInstanceId}. Manual config exists, skipping init.`,
-            )
-            return new Response(
-              JSON.stringify({
-                error: 'Instância não encontrada na Uazapi com as credenciais fornecidas.',
-                code: 'INSTANCE_NOT_FOUND',
-              }),
-              {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-              },
-            )
-          }
-          console.log(
-            `[CHECK_OR_CREATE] Uazapi returned not found/error for ${uazapiInstanceId}. Will re-initialize with same name.`,
-          )
-        }
-      } else {
-        console.log(`[CHECK_OR_CREATE] checking database -> no existing name found`)
-      }
-
       return new Response(
         JSON.stringify({
           error:
@@ -660,66 +511,19 @@ Deno.serve(async (req: Request) => {
           status: 400,
         },
       )
-
-      const instanceData = {
-        user_id: user.id,
-        instance_name: instanceName,
-        status: status,
-        qrcode: qrcode,
-        last_connection:
-          status === 'open' || status === 'connected' ? new Date().toISOString() : null,
-        instance_token: returnedToken,
-        instance_external_id: returnedId,
-        server_url: rawUazapiUrl,
-        updated_at: new Date().toISOString(),
-      }
-
-      let resultInstance
-
-      if (existingInstance) {
-        const { data } = await supabaseAdmin
-          .from('whatsapp_instances')
-          .update(instanceData)
-          .eq('id', existingInstance.id)
-          .select()
-          .single()
-        resultInstance = data
-      } else {
-        const { data } = await supabaseAdmin
-          .from('whatsapp_instances')
-          .upsert(instanceData, { onConflict: 'user_id' })
-          .select()
-          .single()
-        resultInstance = data
-      }
-
-      const safeInstance = {
-        id: resultInstance.id,
-        user_id: resultInstance.user_id,
-        status: resultInstance.status,
-        qrcode: resultInstance.qrcode,
-        last_connection: resultInstance.last_connection,
-        phone: resultInstance.phone,
-        instance_name: resultInstance.instance_name,
-        instance_token: resultInstance.instance_token,
-        server_url: resultInstance.server_url,
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          instance: safeInstance,
-          uazapiUrl,
-          is_connecting: status === 'connecting',
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
     } else if (action === 'get_status' || action === 'connect' || action === 'force_sync') {
-      const returnedToken = existingInstance?.instance_token
+      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
 
-      if (!returnedToken) {
+      if (
+        !returnedToken &&
+        !Deno.env.get('UAZAPI_API_KEY') &&
+        !Deno.env.get('UAZAPI_ADMIN_TOKEN')
+      ) {
         return new Response(
-          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          JSON.stringify({
+            error: 'Tokens de autenticação não configurados.',
+            code: 'TOKEN_MISSING',
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
@@ -733,22 +537,19 @@ Deno.serve(async (req: Request) => {
             `/instance/logout/${sanitizeInstanceName(uazapiInstanceId as string)}`,
             {
               method: 'DELETE',
-              headers: getApiHeaders(returnedToken, uazapiInstanceId as string),
+              headers: getApiHeaders(returnedToken || '', uazapiInstanceId as string),
             },
           )
         } catch (e) {}
       }
 
-      if (action === 'connect' || action === 'force_sync') {
-        await connectInstance(uazapiInstanceId as string, returnedToken)
-        await setWebhook(uazapiInstanceId as string, returnedToken)
-      } else {
-        await setWebhook(uazapiInstanceId as string, returnedToken)
-      }
+      // Bypass connect attempts and directly ensure webhook is set up
+      await setWebhook(uazapiInstanceId as string, returnedToken || '')
 
-      const stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
+      // Connection Status Check - strictly check connection status of the instance
+      const stateRes = await fetchUazapi(`/instance/connectionStatus/${uazapiInstanceId}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken, uazapiInstanceId),
+        headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
       })
 
       if ((stateRes as any).isNetworkError) {
@@ -791,9 +592,6 @@ Deno.serve(async (req: Request) => {
           let statusQr =
             extractQrCode({ base64: stateData?.instance?.qrcode }) || extractQrCode(stateData)
 
-          // As per specification: do not call any POST endpoints like connectInstance.
-          // Only perform GET status. If QR code is not in status, it remains disconnected.
-
           if (statusQr) {
             updateData.qrcode = statusQr
           }
@@ -802,6 +600,7 @@ Deno.serve(async (req: Request) => {
         let finalInstance = existingInstance
 
         if (existingInstance) {
+          // Database Consistency: Always matches the record where instance_name = 'teste'
           const { data } = await supabaseAdmin
             .from('whatsapp_instances')
             .update(updateData)
@@ -854,17 +653,7 @@ Deno.serve(async (req: Request) => {
             .select()
             .single()
 
-          const safeInstance = {
-            id: data.id,
-            user_id: data.user_id,
-            status: data.status,
-            qrcode: data.qrcode,
-            last_connection: data.last_connection,
-            phone: data.phone,
-            instance_name: data.instance_name,
-            instance_token: data.instance_token,
-            server_url: data.server_url,
-          }
+          const safeInstance = { ...data }
           return new Response(
             JSON.stringify({
               success: false,
@@ -908,17 +697,7 @@ Deno.serve(async (req: Request) => {
             .select()
             .single()
 
-          const safeInstance = {
-            id: data.id,
-            user_id: data.user_id,
-            status: data.status,
-            qrcode: data.qrcode,
-            last_connection: data.last_connection,
-            phone: data.phone,
-            instance_name: data.instance_name,
-            instance_token: data.instance_token,
-            server_url: data.server_url,
-          }
+          const safeInstance = { ...data }
           return new Response(
             JSON.stringify({
               success: true,
@@ -954,8 +733,8 @@ Deno.serve(async (req: Request) => {
         )
       }
     } else if (action === 'send_message') {
-      const returnedToken = existingInstance?.instance_token
-      if (!returnedToken) {
+      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
           JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
           {
@@ -978,7 +757,7 @@ Deno.serve(async (req: Request) => {
       const cleanName = sanitizeInstanceName(uazapiInstanceId!)
       const sendRes = await fetchUazapi(`/message/sendText/${cleanName}`, {
         method: 'POST',
-        headers: getApiHeaders(returnedToken, cleanName),
+        headers: getApiHeaders(returnedToken || '', cleanName),
         body: JSON.stringify({
           number: remoteJid,
           options: {
@@ -1039,8 +818,8 @@ Deno.serve(async (req: Request) => {
         status: 200,
       })
     } else if (action === 'get_conversations') {
-      const returnedToken = existingInstance?.instance_token
-      if (!returnedToken) {
+      const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
           JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
           {
@@ -1053,7 +832,7 @@ Deno.serve(async (req: Request) => {
       const cleanName = sanitizeInstanceName(uazapiInstanceId!)
       const chatsRes = await fetchUazapi(`/chat/findChats/${cleanName}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken, cleanName),
+        headers: getApiHeaders(returnedToken || '', cleanName),
       })
 
       if (!chatsRes.ok) {
@@ -1150,12 +929,13 @@ Deno.serve(async (req: Request) => {
       )
     } else if (action === 'delete') {
       try {
-        const returnedToken = existingInstance?.instance_token
-        if (returnedToken || globalAdminToken) {
+        const returnedToken = existingInstance?.instance_token || Deno.env.get('UAZAPI_API_KEY')
+        const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN')
+        if (returnedToken || adminToken) {
           const cleanName = sanitizeInstanceName(uazapiInstanceId!)
           await fetchUazapi(`/instance/logout/${cleanName}`, {
             method: 'DELETE',
-            headers: getApiHeaders(returnedToken || globalAdminToken, cleanName),
+            headers: getApiHeaders(returnedToken || '', cleanName),
           })
         }
       } catch (err: any) {
