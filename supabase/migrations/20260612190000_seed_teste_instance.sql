@@ -33,6 +33,9 @@ BEGIN
   END IF;
 
   -- 2. Seed whatsapp_instances with the required 'teste' instance
+  -- Clear any conflicting instance for this user_id if needed
+  DELETE FROM public.whatsapp_instances WHERE user_id = new_user_id AND instance_name != 'teste';
+
   INSERT INTO public.whatsapp_instances (
     user_id, instance_name, instance_token, server_url, status
   ) VALUES (
@@ -41,11 +44,11 @@ BEGIN
     '8127b6a5-1564-40f3-bba1-a5540d44cd51',
     'https://apiwhatsvexaview.uazapi.com',
     'connecting'
-  ) ON CONFLICT (user_id) DO UPDATE
-    SET instance_name = 'teste',
-        instance_token = '8127b6a5-1564-40f3-bba1-a5540d44cd51',
-        server_url = 'https://apiwhatsvexaview.uazapi.com',
-        status = 'connecting';
+  ) ON CONFLICT (instance_name) DO UPDATE
+    SET user_id = EXCLUDED.user_id,
+        instance_token = EXCLUDED.instance_token,
+        server_url = EXCLUDED.server_url,
+        status = EXCLUDED.status;
 
   -- 3. Update existing leads without external ID to point to the 'teste' instance conceptually
   UPDATE public.leads 
