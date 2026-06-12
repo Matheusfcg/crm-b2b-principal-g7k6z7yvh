@@ -26,6 +26,7 @@ interface ConnectionStatusProps {
   onReconnect: () => void
   onDisconnect: () => void
   onForceSync: () => void
+  onConfig?: () => void
   error?: string | null
   countdown?: number | null
 }
@@ -38,6 +39,7 @@ export function ConnectionStatus({
   onReconnect,
   onDisconnect,
   onForceSync,
+  onConfig,
   error,
   countdown,
 }: ConnectionStatusProps) {
@@ -82,9 +84,13 @@ export function ConnectionStatus({
                   Nenhuma instância configurada
                 </h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  Por favor, contate um administrador para vincular e configurar seu WhatsApp no
-                  sistema.
+                  Configure os dados da sua instância para sincronizar seu WhatsApp no sistema.
                 </p>
+                <div className="mt-4 flex justify-center">
+                  <Button onClick={onConfig} className="bg-blue-600 text-white hover:bg-blue-700">
+                    Configurar Agora
+                  </Button>
+                </div>
               </div>
             </div>
           ) : isConnected ? (
@@ -172,19 +178,29 @@ export function ConnectionStatus({
           {instance && (
             <>
               {isConnected ? (
-                <Button
-                  variant="destructive"
-                  onClick={onDisconnect}
-                  disabled={actionLoading}
-                  className="w-full sm:w-auto gap-2"
-                >
-                  {actionLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <LogOut className="h-4 w-4" />
-                  )}
-                  Desconectar Conta
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    onClick={onConfig}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto gap-2"
+                  >
+                    Editar Configuração
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={onDisconnect}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto gap-2"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LogOut className="h-4 w-4" />
+                    )}
+                    Desconectar Conta
+                  </Button>
+                </div>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <Button
@@ -208,6 +224,14 @@ export function ConnectionStatus({
                     className="w-full sm:w-auto gap-2"
                   >
                     Sincronizar Conexão
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={onConfig}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto gap-2"
+                  >
+                    Editar Configuração
                   </Button>
                 </div>
               )}

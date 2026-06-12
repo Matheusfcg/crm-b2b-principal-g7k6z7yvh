@@ -428,6 +428,7 @@ Deno.serve(async (req: Request) => {
     const getApiHeaders = (token: string, instance?: string) => {
       const headers: any = {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       }
       if (token) {
         headers['apikey'] = token
@@ -451,7 +452,16 @@ Deno.serve(async (req: Request) => {
         webhookUrl: webhookUrl,
         webhook: webhookUrl,
         webhookByEvents: false,
-        events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED', 'SEND_MESSAGE'],
+        events: [
+          'MESSAGES_UPSERT',
+          'CONNECTION_UPDATE',
+          'QRCODE_UPDATED',
+          'SEND_MESSAGE',
+          'messages',
+          'messages.upsert',
+          'messages.update',
+          'connection.update',
+        ],
       }
 
       let res = await fetchUazapi(`/webhook/set/${cleanInstanceName}`, {
@@ -461,10 +471,16 @@ Deno.serve(async (req: Request) => {
       })
 
       if (!res.ok || res.status === 404) {
+        // try alternative webhook endpoint format
         res = await fetchUazapi(`/instance/webhook`, {
           method: 'POST',
           headers: getApiHeaders(token, cleanInstanceName),
-          body: JSON.stringify({ instance: cleanInstanceName, url: webhookUrl, webhookUrl }),
+          body: JSON.stringify({
+            instance: cleanInstanceName,
+            url: webhookUrl,
+            webhookUrl,
+            events: ['messages'],
+          }),
         })
       }
       return res

@@ -29,6 +29,14 @@ export default function WhatsApp() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
 
+  const [configOpen, setConfigOpen] = useState(false)
+  const [configData, setConfigData] = useState({
+    instance_name: '',
+    server_url: 'https://apiwhatsvexaview.uazapi.com',
+    instance_token: '8127b6a5-1564-40f3-bba1-a5540d44cd51',
+  })
+  const [savingConfig, setSavingConfig] = useState(false)
+
   const hasInitialized = useRef(false)
 
   const addLog = useCallback((msg: string) => {
@@ -202,6 +210,12 @@ export default function WhatsApp() {
         }
         setInstance(data)
 
+        setConfigData({
+          instance_name: data.instance_name || '',
+          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
+          instance_token: data.instance_token || '',
+        })
+
         if (data.instance_name) {
           if (data.status !== 'open' && data.status !== 'connected') {
             checkStatusWithTimeout(data, 'connect')
@@ -217,6 +231,48 @@ export default function WhatsApp() {
       setLoading(false)
     }
   }, [user, checkStatusWithTimeout])
+
+  const handleSaveConfig = async () => {
+    if (!user) return
+    if (!configData.instance_name || !configData.server_url || !configData.instance_token) {
+      toast.error('Preencha todos os campos.')
+      return
+    }
+
+    setSavingConfig(true)
+    try {
+      if (instance?.id) {
+        const { error } = await supabase
+          .from('whatsapp_instances')
+          .update({
+            instance_name: configData.instance_name,
+            server_url: configData.server_url,
+            instance_token: configData.instance_token,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', instance.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('whatsapp_instances').insert({
+          user_id: user.id,
+          instance_name: configData.instance_name,
+          server_url: configData.server_url,
+          instance_token: configData.instance_token,
+          status: 'connecting',
+          updated_at: new Date().toISOString(),
+        })
+        if (error) throw error
+      }
+
+      toast.success('Configurações salvas com sucesso!')
+      setConfigOpen(false)
+      fetchInstance()
+    } catch (error: any) {
+      toast.error(`Erro ao salvar configurações: ${error.message}`)
+    } finally {
+      setSavingConfig(false)
+    }
+  }
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -325,10 +381,11 @@ export default function WhatsApp() {
                 instance={instance}
                 uazapiUrl={uazapiUrl}
                 actionLoading={actionLoading}
-                onConnect={() => handleReconnect()}
+                onConnect={() => setConfigOpen(true)}
                 onReconnect={handleReconnect}
                 onDisconnect={handleDisconnect}
                 onForceSync={handleForceSync}
+                onConfig={() => setConfigOpen(true)}
                 error={connectError}
                 countdown={countdown}
               />
@@ -366,6 +423,65 @@ export default function WhatsApp() {
                 {log}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {configOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Configurar Instância</h2>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="instance_name">Nome / ID da Instância</Label>
+                <Input
+                  id="instance_name"
+                  placeholder="ex: rf082990e59c1b2"
+                  value={configData.instance_name}
+                  onChange={(e) =>
+                    setConfigData((prev) => ({ ...prev, instance_name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="server_url">Server URL</Label>
+                <Input
+                  id="server_url"
+                  placeholder="https://apiwhatsvexaview.uazapi.com"
+                  value={configData.server_url}
+                  onChange={(e) =>
+                    setConfigData((prev) => ({ ...prev, server_url: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="instance_token">Instance Token / API Key</Label>
+                <Input
+                  id="instance_token"
+                  placeholder="ex: 8127b6a5-1564-40f3-bba1-a5540d44cd51"
+                  value={configData.instance_token}
+                  onChange={(e) =>
+                    setConfigData((prev) => ({ ...prev, instance_token: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setConfigOpen(false)}
+                disabled={savingConfig}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveConfig}
+                disabled={savingConfig}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {savingConfig ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
