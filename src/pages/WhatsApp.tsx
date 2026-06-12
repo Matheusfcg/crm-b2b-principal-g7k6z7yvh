@@ -1,6 +1,17 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { MessageCircle, Loader2, Copy, Check } from 'lucide-react'
+import { MessageCircle, Loader2, Copy, Check, Settings2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { ConnectionStatus } from '@/components/whatsapp/ConnectionStatus'
@@ -17,6 +28,12 @@ export default function WhatsApp() {
   const [isPolling, setIsPolling] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const [configForm, setConfigForm] = useState({
+    instance_name: '',
+    server_url: 'https://apiwhatsvexaview.uazapi.com',
+    instance_token: '',
+  })
 
   const hasInitialized = useRef(false)
   const pollCountRef = useRef(0)
@@ -59,7 +76,7 @@ export default function WhatsApp() {
             if (data?.code === 'UNAUTHORIZED' || error?.message?.includes('401')) {
               setIsPolling(false)
               setConnectError(
-                'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
+                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
               )
               setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
             } else if (data?.code === 'TOKEN_MISSING') {
@@ -139,7 +156,9 @@ export default function WhatsApp() {
         addLog(`Exceção (status): ${e.message}`)
         setIsPolling(false)
         if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
-          setConnectError('Falha de Autenticação (401). Verifique as credenciais da API Uazapi.')
+          setConnectError(
+            'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+          )
           setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
@@ -148,6 +167,73 @@ export default function WhatsApp() {
     },
     [addLog],
   )
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!configForm.instance_name || !configForm.server_url || !configForm.instance_token) {
+      toast.error('Preencha todos os campos.')
+      return
+    }
+    setActionLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('whatsapp_instances')
+        .upsert(
+          {
+            user_id: user?.id,
+            instance_name: configForm.instance_name,
+            server_url: configForm.server_url,
+            instance_token: configForm.instance_token,
+            status: 'connecting',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        )
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setInstance(data)
+      toast.success('Configurações salvas.')
+
+      const fnRes = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'get_status', instanceName: configForm.instance_name },
+      })
+
+      if (fnRes.error) throw fnRes.error
+
+      if (fnRes.data?.error || fnRes.data?.code === 'UNAUTHORIZED') {
+        const errorMsg =
+          fnRes.data?.code === 'UNAUTHORIZED'
+            ? 'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.'
+            : fnRes.data.error
+        toast.error(errorMsg)
+        setConnectError(errorMsg)
+        setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+      } else {
+        toast.success('Instância verificada com sucesso.')
+        if (fnRes.data?.instance) {
+          setInstance(fnRes.data.instance)
+          if (fnRes.data.instance.status === 'qrcode' || fnRes.data.instance.qrcode) {
+            setIsPolling(false)
+          } else if (fnRes.data.instance.status === 'connecting') {
+            setIsPolling(true)
+          } else if (
+            fnRes.data.instance.status === 'open' ||
+            fnRes.data.instance.status === 'connected'
+          ) {
+            setIsPolling(false)
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Erro ao salvar configuração')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   const handleCheckOrCreate = useCallback(
     async (forcedInstanceName?: string) => {
@@ -187,7 +273,7 @@ export default function WhatsApp() {
 
         if (errorCode === 'UNAUTHORIZED') {
           throw new Error(
-            'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
+            'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
           )
         }
 
@@ -286,6 +372,11 @@ export default function WhatsApp() {
           data.qrcode = null
         }
         setInstance(data)
+        setConfigForm({
+          instance_name: data.instance_name || '',
+          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
+          instance_token: data.instance_token || '',
+        })
       } else {
         setInstance(null)
       }
@@ -424,26 +515,91 @@ export default function WhatsApp() {
       ) : (
         <div className="space-y-6">
           {!isConnected && (
-            <div className="space-y-4">
-              <ConnectionStatus
-                instance={instance}
-                uazapiUrl={uazapiUrl}
-                actionLoading={actionLoading}
-                onConnect={() => handleCheckOrCreate()}
-                onDisconnect={handleDisconnect}
-                error={connectError}
-              />
-              {connectError && (
-                <div className="flex justify-center mt-4">
-                  <button
-                    onClick={() => handleCheckOrCreate()}
-                    disabled={actionLoading}
-                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading ? 'Processando...' : 'Tentar Novamente'}
-                  </button>
-                </div>
-              )}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-1">
+                <Card className="border-slate-200 shadow-sm sticky top-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings2 className="h-5 w-5 text-slate-500" />
+                      Configuração Manual
+                    </CardTitle>
+                    <CardDescription>
+                      Insira as credenciais da sua instância Uazapi.
+                    </CardDescription>
+                  </CardHeader>
+                  <form onSubmit={handleSaveConfig}>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="instance_name">Nome da Instância</Label>
+                        <Input
+                          id="instance_name"
+                          value={configForm.instance_name}
+                          onChange={(e) =>
+                            setConfigForm({ ...configForm, instance_name: e.target.value })
+                          }
+                          placeholder="Ex: VexaView"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="server_url">Server URL</Label>
+                        <Input
+                          id="server_url"
+                          value={configForm.server_url}
+                          onChange={(e) =>
+                            setConfigForm({ ...configForm, server_url: e.target.value })
+                          }
+                          placeholder="https://apiwhatsvexaview.uazapi.com"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="instance_token">Instance Token</Label>
+                        <Input
+                          id="instance_token"
+                          value={configForm.instance_token}
+                          onChange={(e) =>
+                            setConfigForm({ ...configForm, instance_token: e.target.value })
+                          }
+                          placeholder="Token da Instância"
+                          required
+                        />
+                      </div>
+                    </CardContent>
+                    <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-end p-4">
+                      <Button
+                        type="submit"
+                        disabled={actionLoading}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Salvar e Verificar
+                      </Button>
+                    </CardFooter>
+                  </form>
+                </Card>
+              </div>
+              <div className="xl:col-span-2 space-y-4">
+                <ConnectionStatus
+                  instance={instance}
+                  uazapiUrl={uazapiUrl}
+                  actionLoading={actionLoading}
+                  onConnect={() => handleCheckOrCreate()}
+                  onDisconnect={handleDisconnect}
+                  error={connectError}
+                />
+                {connectError && (
+                  <div className="flex justify-center mt-4">
+                    <Button
+                      onClick={() => handleCheckOrCreate()}
+                      disabled={actionLoading}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {actionLoading ? 'Processando...' : 'Tentar Novamente'}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

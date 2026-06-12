@@ -480,7 +480,8 @@ Deno.serve(async (req: Request) => {
         ) {
           return new Response(
             JSON.stringify({
-              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              error:
+                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -497,6 +498,21 @@ Deno.serve(async (req: Request) => {
         ) {
           needsInit = false
         } else {
+          if (existingInstance.server_url && existingInstance.instance_token) {
+            console.log(
+              `[CHECK_OR_CREATE] Uazapi returned not found/error for ${instanceName}. Manual config exists, skipping init.`,
+            )
+            return new Response(
+              JSON.stringify({
+                error: 'Instância não encontrada na Uazapi com as credenciais fornecidas.',
+                code: 'INSTANCE_NOT_FOUND',
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              },
+            )
+          }
           console.log(
             `[CHECK_OR_CREATE] Uazapi returned not found/error for ${instanceName}. Will re-initialize with same name.`,
           )
@@ -537,7 +553,8 @@ Deno.serve(async (req: Request) => {
         ) {
           return new Response(
             JSON.stringify({
-              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              error:
+                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -617,7 +634,8 @@ Deno.serve(async (req: Request) => {
         if (connectRes?.status === 401) {
           return new Response(
             JSON.stringify({
-              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              error:
+                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -811,7 +829,8 @@ Deno.serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              error:
+                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
               instance: safeInstance,
               code: 'UNAUTHORIZED',
               details: stateRes.parsedBody,
@@ -825,7 +844,8 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+            error:
+              'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
             code: 'UNAUTHORIZED',
           }),
           {
