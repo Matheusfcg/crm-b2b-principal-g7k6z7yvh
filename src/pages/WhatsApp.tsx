@@ -69,7 +69,7 @@ export default function WhatsApp() {
         }
 
         const apiCall = supabase.functions.invoke('whatsapp-uazapi', {
-          body: { action, instanceName: inst.instance_name },
+          body: { action, instanceId: inst.id, instanceName: inst.instance_name },
         })
 
         const res = (await Promise.race([apiCall, timeoutPromise])) as any
@@ -255,15 +255,23 @@ export default function WhatsApp() {
         updated_at: new Date().toISOString(),
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('whatsapp_instances')
         .upsert(payload, { onConflict: 'instance_name' })
+        .select()
+        .single()
 
       if (error) throw error
 
       toast.success('Configurações salvas com sucesso!')
       setConfigOpen(false)
-      fetchInstance()
+
+      if (data) {
+        setInstance(data)
+        checkStatusWithTimeout(data, 'connect')
+      } else {
+        fetchInstance()
+      }
     } catch (error: any) {
       const errorMsg = error?.message || error?.details || ''
       const errorCode = error?.code || ''
@@ -321,7 +329,7 @@ export default function WhatsApp() {
       }
 
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'delete', instanceName: instance?.instance_name },
+        body: { action: 'delete', instanceId: instance?.id, instanceName: instance?.instance_name },
       })
       if (error) {
         console.error('[WhatsApp] Disconnect Error:', error)

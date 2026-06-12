@@ -281,51 +281,66 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
+    const targetInstanceId = body.instanceId || body.instance_id
     const targetInstanceName = body.instance_name || body.instance || body.instanceName
 
-    if (!targetInstanceName && action !== 'check_or_create' && action !== 'create') {
-      return new Response(JSON.stringify({ error: 'Missing instance name' }), {
+    if (
+      !targetInstanceId &&
+      !targetInstanceName &&
+      action !== 'check_or_create' &&
+      action !== 'create'
+    ) {
+      return new Response(JSON.stringify({ error: 'Missing instance id or name' }), {
         status: 400,
         headers: corsHeaders,
       })
     }
 
-    const uazapiInstanceId = sanitizeInstanceName(targetInstanceName || '')
-    const instanceName = uazapiInstanceId
+    let query = supabaseAdmin.from('whatsapp_instances').select('*').eq('user_id', user.id)
 
-    let query = supabaseAdmin
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('instance_name', uazapiInstanceId)
+    if (targetInstanceId) {
+      query = query.eq('id', targetInstanceId)
+    } else {
+      query = query.eq('instance_name', sanitizeInstanceName(targetInstanceName || ''))
+    }
 
     const { data: existingInstance } = await query.maybeSingle()
 
-    const rawUazapiUrl =
-      existingInstance?.server_url ||
-      Deno.env.get('UAZAPI_SERVER_URL') ||
-      Deno.env.get('UAZAPI_URL') ||
-      Deno.env.get('UAZAPI_BASE_URL') ||
-      'https://apiwhatsvexaview.uazapi.com'
-    const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
-
-    if (existingInstance?.server_url) {
-      console.log(`[ROUTING] Using instance specific server_url: ${existingInstance.server_url}`)
-    }
-
-    if (!existingInstance && action !== 'check_or_create') {
+    if (!existingInstance && action !== 'check_or_create' && action !== 'create') {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Instance not found in database',
+          error: 'Instance not found in database for the given ID/name',
           code: 'INSTANCE_NOT_FOUND',
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
+          status: 404,
         },
       )
     }
+
+    const dbServerUrl = existingInstance?.server_url
+    if (!dbServerUrl && action !== 'check_or_create' && action !== 'create') {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server URL not configured in database for this instance',
+          code: 'MISSING_SERVER_URL',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
+    }
+
+    const rawUazapiUrl = dbServerUrl || 'https://apiwhatsvexaview.uazapi.com'
+    const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
+
+    const uazapiInstanceId =
+      existingInstance?.instance_name || sanitizeInstanceName(targetInstanceName || '')
+    const instanceName = uazapiInstanceId
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
@@ -373,6 +388,8 @@ Deno.serve(async (req: Request) => {
         () => controller.abort(new Error('Uazapi Request Timeout')),
         45000,
       )
+
+      console.log(`Enviando para: [${url}] Body: [${options.body || ''}]`)
 
       const fetchOptions = {
         ...options,
@@ -485,18 +502,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const getApiHeaders = (token: string, instance?: string) => {
-      const apiKey = Deno.env.get('UAZAPI_CLIENTE_TESTE') || Deno.env.get('UAZAPI_API_KEY') || token
-      const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
+      const apiKey = token
 
       const headers: any = {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       }
 
-      if (adminToken) {
-        headers['apikey'] = adminToken
-        headers['Authorization'] = `Bearer ${adminToken}`
-      } else if (apiKey) {
+      if (apiKey) {
         headers['apikey'] = apiKey
         headers['Authorization'] = `Bearer ${apiKey}`
       }
@@ -592,15 +605,12 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const returnedToken =
-        existingInstance?.instance_token ||
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
-        Deno.env.get('UAZAPI_API_KEY')
+      const returnedToken = existingInstance?.instance_token
 
-      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
+      if (!returnedToken) {
         return new Response(
           JSON.stringify({
-            error: 'Tokens de autenticação não configurados.',
+            error: 'Token de autenticação não configurado no banco de dados para esta instância.',
             code: 'TOKEN_MISSING',
           }),
           {
@@ -835,13 +845,13 @@ Deno.serve(async (req: Request) => {
         )
       }
     } else if (action === 'send_message') {
-      const returnedToken =
-        existingInstance?.instance_token ||
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
-        Deno.env.get('UAZAPI_API_KEY')
-      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
+      const returnedToken = existingInstance?.instance_token
+      if (!returnedToken) {
         return new Response(
-          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          JSON.stringify({
+            error: 'Instance token not configured in database',
+            code: 'TOKEN_MISSING',
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
@@ -923,13 +933,13 @@ Deno.serve(async (req: Request) => {
         status: 200,
       })
     } else if (action === 'get_conversations') {
-      const returnedToken =
-        existingInstance?.instance_token ||
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
-        Deno.env.get('UAZAPI_API_KEY')
-      if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
+      const returnedToken = existingInstance?.instance_token
+      if (!returnedToken) {
         return new Response(
-          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          JSON.stringify({
+            error: 'Instance token not configured in database',
+            code: 'TOKEN_MISSING',
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
@@ -1037,12 +1047,8 @@ Deno.serve(async (req: Request) => {
       )
     } else if (action === 'delete') {
       try {
-        const returnedToken =
-          existingInstance?.instance_token ||
-          Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
-          Deno.env.get('UAZAPI_API_KEY')
-        const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN')
-        if (returnedToken || adminToken) {
+        const returnedToken = existingInstance?.instance_token
+        if (returnedToken) {
           const cleanName = sanitizeInstanceName(uazapiInstanceId!)
           await fetchUazapi(`/instance/logout/${cleanName}`, {
             method: 'DELETE',
