@@ -339,8 +339,11 @@ Deno.serve(async (req: Request) => {
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
     const uazapiInstanceId =
+      existingInstance?.instance_external_id ||
+      existingInstance?.instance_name ||
+      sanitizeInstanceName(targetInstanceName || '')
+    const internalInstanceName =
       existingInstance?.instance_name || sanitizeInstanceName(targetInstanceName || '')
-    const instanceName = uazapiInstanceId
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
@@ -408,7 +411,7 @@ Deno.serve(async (req: Request) => {
         } catch (e) {}
 
         await supabaseAdmin.from('whatsapp_logs').insert({
-          instance_name: uazapiInstanceId,
+          instance_name: internalInstanceName,
           endpoint: url,
           payload: payload,
           response: { status, body: parsedBody },
@@ -417,7 +420,7 @@ Deno.serve(async (req: Request) => {
 
         if (!res.ok) {
           console.error(
-            `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, status: ${status}, path: ${path}, details: ${text}`,
+            `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, internal_name: ${internalInstanceName}, status: ${status}, path: ${path}, details: ${text}`,
           )
           if (status === 404 || status === 405 || text.toLowerCase().includes('not found')) {
             console.log(`[DEBUG ${status}] Full response body: ${text}`)
@@ -432,7 +435,7 @@ Deno.serve(async (req: Request) => {
         const isTimeout = err.name === 'AbortError' || err.message === 'Uazapi Request Timeout'
 
         await supabaseAdmin.from('whatsapp_logs').insert({
-          instance_name: uazapiInstanceId,
+          instance_name: internalInstanceName,
           endpoint: url,
           payload: payload,
           response: { status: 0, error: err.message, timeout: isTimeout },
@@ -521,13 +524,13 @@ Deno.serve(async (req: Request) => {
       return headers
     }
 
-    const setWebhook = async (instanceName: string, token: string) => {
+    const setWebhook = async (externalId: string, token: string) => {
       let webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
       const webhookSecret = Deno.env.get('UAZAPI_WEBHOOK_SECRET')
       if (webhookSecret) {
         webhookUrl += `?token=${webhookSecret}`
       }
-      const cleanInstanceName = sanitizeInstanceName(instanceName)
+      const cleanExternalId = sanitizeInstanceName(externalId)
 
       const payload = {
         url: webhookUrl,
@@ -546,21 +549,19 @@ Deno.serve(async (req: Request) => {
         ],
       }
 
-      let res = await fetchUazapi(`/webhook/set/${cleanInstanceName}`, {
+      let res = await fetchUazapi(`/webhook/set/${cleanExternalId}`, {
         method: 'POST',
-        headers: getApiHeaders(token, cleanInstanceName),
+        headers: getApiHeaders(token, cleanExternalId),
         body: JSON.stringify(payload),
       })
 
       if (!res.ok || res.status === 404 || res.status === 405) {
-        console.log(
-          `[WEBHOOK] Falling back to alternative webhook endpoint for ${cleanInstanceName}`,
-        )
+        console.log(`[WEBHOOK] Falling back to alternative webhook endpoint for ${cleanExternalId}`)
         res = await fetchUazapi(`/webhook/set`, {
           method: 'POST',
-          headers: getApiHeaders(token, cleanInstanceName),
+          headers: getApiHeaders(token, cleanExternalId),
           body: JSON.stringify({
-            instance: cleanInstanceName,
+            instance: cleanExternalId,
             ...payload,
           }),
         })
@@ -590,7 +591,7 @@ Deno.serve(async (req: Request) => {
         const lastUpdate = new Date(existingInstance.updated_at).getTime()
         if (Date.now() - lastUpdate < 30000) {
           console.log(
-            `[ROUTING] Bypassing Uazapi status check, returning recent DB state for ${uazapiInstanceId}`,
+            `[ROUTING] Bypassing Uazapi status check, returning recent DB state for ${internalInstanceName}`,
           )
           return new Response(
             JSON.stringify({
@@ -620,45 +621,44 @@ Deno.serve(async (req: Request) => {
         )
       }
 
+      const externalIdStr = uazapiInstanceId as string
+
       if (action === 'force_sync') {
         try {
-          await fetchUazapi(
-            `/instance/logout/${sanitizeInstanceName(uazapiInstanceId as string)}`,
-            {
-              method: 'DELETE',
-              headers: getApiHeaders(returnedToken || '', uazapiInstanceId as string),
-            },
-          )
+          await fetchUazapi(`/instance/logout/${sanitizeInstanceName(externalIdStr)}`, {
+            method: 'DELETE',
+            headers: getApiHeaders(returnedToken || '', externalIdStr),
+          })
         } catch (e) {}
       }
 
-      await setWebhook(uazapiInstanceId as string, returnedToken || '')
+      await setWebhook(externalIdStr, returnedToken || '')
 
       let stateRes
 
       if (action === 'connect') {
-        stateRes = await fetchUazapi(`/instance/connect/${uazapiInstanceId}`, {
+        stateRes = await fetchUazapi(`/instance/connect/${externalIdStr}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+          headers: getApiHeaders(returnedToken || '', externalIdStr),
         })
       } else {
-        stateRes = await fetchUazapi(`/instance/connectionState/${uazapiInstanceId}`, {
+        stateRes = await fetchUazapi(`/instance/connectionState/${externalIdStr}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+          headers: getApiHeaders(returnedToken || '', externalIdStr),
         })
 
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/connectionStatus/${uazapiInstanceId}`, {
+          stateRes = await fetchUazapi(`/instance/connectionStatus/${externalIdStr}`, {
             method: 'GET',
-            headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+            headers: getApiHeaders(returnedToken || '', externalIdStr),
           })
         }
 
         // Additional fallback based on user story requirement
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
+          stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
             method: 'GET',
-            headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+            headers: getApiHeaders(returnedToken || '', externalIdStr),
           })
         }
       }
@@ -869,10 +869,10 @@ Deno.serve(async (req: Request) => {
         })
       }
 
-      const cleanName = sanitizeInstanceName(uazapiInstanceId!)
-      const sendRes = await fetchUazapi(`/message/sendText/${cleanName}`, {
+      const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
+      const sendRes = await fetchUazapi(`/message/sendText/${cleanExternalId}`, {
         method: 'POST',
-        headers: getApiHeaders(returnedToken || '', cleanName),
+        headers: getApiHeaders(returnedToken || '', cleanExternalId),
         body: JSON.stringify({
           number: remoteJid,
           options: {
@@ -947,10 +947,10 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const cleanName = sanitizeInstanceName(uazapiInstanceId!)
-      const chatsRes = await fetchUazapi(`/chat/findChats/${cleanName}`, {
+      const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
+      const chatsRes = await fetchUazapi(`/chat/findChats/${cleanExternalId}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken || '', cleanName),
+        headers: getApiHeaders(returnedToken || '', cleanExternalId),
       })
 
       if (!chatsRes.ok) {
@@ -1049,10 +1049,10 @@ Deno.serve(async (req: Request) => {
       try {
         const returnedToken = existingInstance?.instance_token
         if (returnedToken) {
-          const cleanName = sanitizeInstanceName(uazapiInstanceId!)
-          await fetchUazapi(`/instance/logout/${cleanName}`, {
+          const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
+          await fetchUazapi(`/instance/logout/${cleanExternalId}`, {
             method: 'DELETE',
-            headers: getApiHeaders(returnedToken || '', cleanName),
+            headers: getApiHeaders(returnedToken || '', cleanExternalId),
           })
         }
       } catch (err: any) {
