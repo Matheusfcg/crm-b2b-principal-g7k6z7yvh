@@ -55,6 +55,11 @@ export default function WhatsApp() {
 
       try {
         addLog(`${action.toUpperCase()} (Handshake & Webhook) via Edge Function`)
+
+        if (!navigator.onLine) {
+          throw new Error('Sem conexão com a internet. Verifique sua rede.')
+        }
+
         const apiCall = supabase.functions.invoke('whatsapp-uazapi', {
           body: { action, instanceName: inst.instance_name },
         })
@@ -63,15 +68,17 @@ export default function WhatsApp() {
         const { data, error } = res
 
         if (error) {
+          console.error('[WhatsApp] Edge Function Error:', error)
           if (
             error.name === 'FunctionsFetchError' ||
-            error.message?.includes('Failed to send a request')
+            error?.message?.includes('Failed to send a request') ||
+            error?.message?.includes('fetch failed')
           ) {
             throw new Error(
-              'Falha ao conectar com o servidor da Edge Function. Verifique sua conexão.',
+              `Falha ao conectar com a Edge Function (Network/CORS). Detalhe: ${error.message}`,
             )
           }
-          throw error
+          throw new Error(error.message || 'Erro desconhecido ao chamar a função.')
         }
 
         if (
@@ -119,7 +126,7 @@ export default function WhatsApp() {
           }
         }
       } catch (e: any) {
-        console.error(e)
+        console.error('[WhatsApp] Exception in checkStatusWithTimeout:', e)
         if (e.message === 'TIMEOUT') {
           const msg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
           setConnectError(msg)
@@ -127,16 +134,19 @@ export default function WhatsApp() {
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else if (
           e.name === 'FunctionsFetchError' ||
-          e.message?.includes('Failed to send a request') ||
-          e.message?.includes('Falha ao conectar com o servidor da Edge Function')
+          e?.message?.includes('Failed to send a request') ||
+          e?.message?.includes('fetch failed') ||
+          e?.message?.includes('Falha ao conectar com a Edge Function')
         ) {
           const msg =
+            e.message ||
             'Falha ao conectar com a Edge Function. Verifique sua conexão ou tente novamente.'
           setConnectError(msg)
           toast.error(msg)
         } else {
-          setConnectError(`Erro de comunicação: ${e.message}`)
-          toast.error(`Erro de comunicação: ${e.message}`)
+          const msg = `Erro de comunicação: ${e.message || 'Desconhecido'}`
+          setConnectError(msg)
+          toast.error(msg)
         }
       } finally {
         clearInterval(timer)
@@ -165,14 +175,26 @@ export default function WhatsApp() {
     if (!user) return
     setLoading(true)
 
+    if (!navigator.onLine) {
+      toast.error('Sem conexão com a internet. Verifique sua rede.')
+      setLoading(false)
+      return
+    }
+
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('whatsapp_instances')
         .select(
           'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
         )
         .eq('user_id', user.id)
         .maybeSingle()
+
+      if (error) {
+        console.error('[WhatsApp] Error fetching instance:', error)
+        toast.error('Falha ao conectar com o banco de dados. Tentando novamente em breve.')
+        return
+      }
 
       if (data) {
         if (data.qrcode && (typeof data.qrcode !== 'string' || data.qrcode.length < 10)) {
@@ -189,11 +211,12 @@ export default function WhatsApp() {
         setInstance(null)
       }
     } catch (e) {
-      console.error('Error fetching instance:', e)
+      console.error('[WhatsApp] Error in fetchInstance:', e)
+      toast.error('Erro ao buscar dados da instância.')
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, checkStatusWithTimeout])
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -230,15 +253,21 @@ export default function WhatsApp() {
     setActionLoading(true)
     addLog('Iniciando desconexão...')
     try {
+      if (!navigator.onLine) {
+        throw new Error('Sem conexão com a internet.')
+      }
+
       const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
         body: { action: 'delete', instanceName: instance?.instance_name },
       })
       if (error) {
+        console.error('[WhatsApp] Disconnect Error:', error)
         if (
           error.name === 'FunctionsFetchError' ||
-          error.message?.includes('Failed to send a request')
+          error?.message?.includes('Failed to send a request') ||
+          error?.message?.includes('fetch failed')
         ) {
-          throw new Error('Falha ao conectar com a Edge Function. Verifique sua conexão.')
+          throw new Error(`Falha ao conectar com a Edge Function. Detalhe: ${error.message}`)
         }
         throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
       }
