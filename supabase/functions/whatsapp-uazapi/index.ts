@@ -153,6 +153,7 @@ Deno.serve(async (req: Request) => {
           eventName === 'message' ||
           eventName === 'messages'
         ) {
+          console.log(`[WEBHOOK] Processing messages event for instance ${instanceId}`)
           let messages = []
           if (Array.isArray(body.data?.messages)) messages = body.data.messages
           else if (Array.isArray(body.data)) messages = body.data
@@ -280,15 +281,23 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    // Fixed Instance Targeting: Force the system to use the instance name "teste"
-    const instanceName = 'teste'
-    const uazapiInstanceId = 'teste'
+    const targetInstanceName = body.instance_name || body.instance || body.instanceName
+
+    if (!targetInstanceName && action !== 'check_or_create' && action !== 'create') {
+      return new Response(JSON.stringify({ error: 'Missing instance name' }), {
+        status: 400,
+        headers: corsHeaders,
+      })
+    }
+
+    const uazapiInstanceId = sanitizeInstanceName(targetInstanceName || '')
+    const instanceName = uazapiInstanceId
 
     let query = supabaseAdmin
       .from('whatsapp_instances')
       .select('*')
       .eq('user_id', user.id)
-      .eq('instance_name', 'teste')
+      .eq('instance_name', uazapiInstanceId)
 
     const { data: existingInstance } = await query.maybeSingle()
 
@@ -299,6 +308,10 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('UAZAPI_BASE_URL') ||
       'https://apiwhatsvexaview.uazapi.com'
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
+
+    if (existingInstance?.server_url) {
+      console.log(`[ROUTING] Using instance specific server_url: ${existingInstance.server_url}`)
+    }
 
     if (!existingInstance && action !== 'check_or_create') {
       return new Response(
@@ -389,9 +402,9 @@ Deno.serve(async (req: Request) => {
           console.error(
             `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, status: ${status}, path: ${path}, details: ${text}`,
           )
-          // Error Handling: If the Uazapi returns a 404 or "Instance not found", log full response body
-          if (status === 404 || text.toLowerCase().includes('not found')) {
-            console.log(`[DEBUG 404] Full response body for Instance not found: ${text}`)
+          // Error Handling: If the Uazapi returns a 404 or 405 or "Instance not found", log full response body
+          if (status === 404 || status === 405 || text.toLowerCase().includes('not found')) {
+            console.log(`[DEBUG ${status}] Full response body: ${text}`)
           }
         }
 
@@ -528,15 +541,16 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(payload),
       })
 
-      if (!res.ok || res.status === 404) {
-        res = await fetchUazapi(`/instance/webhook`, {
+      if (!res.ok || res.status === 404 || res.status === 405) {
+        console.log(
+          `[WEBHOOK] Falling back to alternative webhook endpoint for ${cleanInstanceName}`,
+        )
+        res = await fetchUazapi(`/webhook/set`, {
           method: 'POST',
           headers: getApiHeaders(token, cleanInstanceName),
           body: JSON.stringify({
             instance: cleanInstanceName,
-            url: webhookUrl,
-            webhookUrl,
-            events: ['messages'],
+            ...payload,
           }),
         })
       }
@@ -560,6 +574,30 @@ Deno.serve(async (req: Request) => {
         },
       )
     } else if (action === 'get_status' || action === 'connect' || action === 'force_sync') {
+      // Reduce redundancy: If action is just get_status and instance is already open and recently updated via webhook
+      if (
+        action === 'get_status' &&
+        existingInstance?.status === 'open' &&
+        existingInstance?.updated_at
+      ) {
+        const lastUpdate = new Date(existingInstance.updated_at).getTime()
+        if (Date.now() - lastUpdate < 30000) {
+          console.log(
+            `[ROUTING] Bypassing Uazapi status check, returning recent DB state for ${uazapiInstanceId}`,
+          )
+          return new Response(
+            JSON.stringify({
+              success: true,
+              instance: existingInstance,
+              phone: existingInstance.phone,
+              uazapiUrl,
+              is_connecting: false,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          )
+        }
+      }
+
       const returnedToken =
         Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         existingInstance?.instance_token ||
@@ -590,14 +628,32 @@ Deno.serve(async (req: Request) => {
         } catch (e) {}
       }
 
-      // Bypass connect attempts and directly ensure webhook is set up
+      // Ensure webhook is set up
       await setWebhook(uazapiInstanceId as string, returnedToken || '')
 
-      // Connection Status Check - strictly check connection status of the instance
-      const stateRes = await fetchUazapi(`/instance/connectionStatus/${uazapiInstanceId}`, {
-        method: 'GET',
-        headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
-      })
+      let stateRes
+
+      if (action === 'connect') {
+        // Use GET /instance/connect to initiate connection and get QR
+        stateRes = await fetchUazapi(`/instance/connect/${uazapiInstanceId}`, {
+          method: 'GET',
+          headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+        })
+      } else {
+        // Connection Status Check
+        stateRes = await fetchUazapi(`/instance/connectionState/${uazapiInstanceId}`, {
+          method: 'GET',
+          headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+        })
+
+        // Fallback to connectionStatus if connectionState fails with 404 or 405
+        if (stateRes.status === 404 || stateRes.status === 405) {
+          stateRes = await fetchUazapi(`/instance/connectionStatus/${uazapiInstanceId}`, {
+            method: 'GET',
+            headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+          })
+        }
+      }
 
       if ((stateRes as any).isNetworkError) {
         const errorMsg = (stateRes as any).isTimeout
@@ -647,7 +703,6 @@ Deno.serve(async (req: Request) => {
         let finalInstance = existingInstance
 
         if (existingInstance) {
-          // Database Consistency: Always matches the record where instance_name = 'teste'
           const { data } = await supabaseAdmin
             .from('whatsapp_instances')
             .update(updateData)
