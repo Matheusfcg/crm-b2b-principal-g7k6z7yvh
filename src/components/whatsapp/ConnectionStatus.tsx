@@ -132,8 +132,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-red-600">Falha de Autenticação</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  As credenciais (token) da Uazapi são inválidas ou expiraram. Clique em "Conectar
-                  WhatsApp" para tentar reautenticar.
+                  Erro de Autenticação: Verifique seu Token e Instance ID nas configurações. Clique
+                  em "Reconectar" para tentar novamente.
                 </p>
               </div>
             </div>
@@ -186,12 +186,20 @@ export function ConnectionStatus({
             >
               {actionLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : error || isTimeout ? (
+              ) : instance?.id &&
+                (error ||
+                  isTimeout ||
+                  isUnauthorized ||
+                  isNotFound ||
+                  status === 'disconnected') ? (
                 <RefreshCw className="h-4 w-4" />
               ) : (
                 <QrCode className="h-4 w-4" />
               )}
-              {error || isTimeout ? 'Tentar Novamente' : 'Conectar WhatsApp'}
+              {instance?.id &&
+              (error || isTimeout || isUnauthorized || isNotFound || status === 'disconnected')
+                ? 'Reconectar'
+                : 'Conectar WhatsApp'}
             </Button>
           )}
         </CardFooter>

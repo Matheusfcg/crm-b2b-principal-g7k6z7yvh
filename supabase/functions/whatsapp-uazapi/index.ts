@@ -303,30 +303,48 @@ Deno.serve(async (req: Request) => {
         }),
       )
 
-      const res = await fetch(url, options)
-      const status = res.status
-      const text = await res.text()
-
-      let parsedBody: any = text
       try {
-        if (text) parsedBody = JSON.parse(text)
-      } catch (e) {}
+        const res = await fetch(url, options)
+        const status = res.status
+        const text = await res.text()
 
-      await supabaseAdmin.from('whatsapp_logs').insert({
-        instance_name: instanceName,
-        endpoint: url,
-        payload: payload,
-        response: { status, body: parsedBody },
-        user_id: user.id,
-      })
+        let parsedBody: any = text
+        try {
+          if (text) parsedBody = JSON.parse(text)
+        } catch (e) {}
 
-      if (!res.ok) {
-        console.error(
-          `[ERROR] action: uazapi_fetch, instance: ${instanceName}, status: ${status}, path: ${path}, details: ${text}`,
-        )
+        await supabaseAdmin.from('whatsapp_logs').insert({
+          instance_name: instanceName,
+          endpoint: url,
+          payload: payload,
+          response: { status, body: parsedBody },
+          user_id: user.id,
+        })
+
+        if (!res.ok) {
+          console.error(
+            `[ERROR] action: uazapi_fetch, instance: ${instanceName}, status: ${status}, path: ${path}, details: ${text}`,
+          )
+        }
+
+        return { ok: res.ok, status, text, parsedBody }
+      } catch (err: any) {
+        console.error(`[ERROR] Uazapi fetch failed:`, err)
+        await supabaseAdmin.from('whatsapp_logs').insert({
+          instance_name: instanceName,
+          endpoint: url,
+          payload: payload,
+          response: { status: 0, error: err.message },
+          user_id: user.id,
+        })
+        return {
+          ok: false,
+          status: 0,
+          text: '',
+          parsedBody: { error: 'Server Unreachable' },
+          isNetworkError: true,
+        }
       }
-
-      return { ok: res.ok, status, text, parsedBody }
     }
 
     const extractQrCode = (parsedBody: any) => {
@@ -486,15 +504,28 @@ Deno.serve(async (req: Request) => {
           headers: getApiHeaders(returnedToken, instanceName),
         })
 
+        if ((stateRes as any).isNetworkError) {
+          return new Response(
+            JSON.stringify({
+              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
+              code: 'SERVER_UNREACHABLE',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 503,
+            },
+          )
+        }
+
         if (
           stateRes.status === 401 ||
+          stateRes.status === 403 ||
           stateRes.parsedBody?.message === 'Unauthorized' ||
           stateRes.parsedBody?.error === 'Unauthorized'
         ) {
           return new Response(
             JSON.stringify({
-              error:
-                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -559,15 +590,28 @@ Deno.serve(async (req: Request) => {
 
         let resBody = createRes.parsedBody
 
+        if ((createRes as any).isNetworkError) {
+          return new Response(
+            JSON.stringify({
+              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
+              code: 'SERVER_UNREACHABLE',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 503,
+            },
+          )
+        }
+
         if (
           createRes.status === 401 ||
+          createRes.status === 403 ||
           resBody?.message === 'Unauthorized' ||
           resBody?.error === 'Unauthorized'
         ) {
           return new Response(
             JSON.stringify({
-              error:
-                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -644,11 +688,22 @@ Deno.serve(async (req: Request) => {
         console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
         await setWebhook(instanceName!, returnedToken || globalAdminToken)
         let connectRes = await connectInstance(instanceName!, returnedToken || globalAdminToken)
-        if (connectRes?.status === 401) {
+        if ((connectRes as any)?.isNetworkError) {
           return new Response(
             JSON.stringify({
-              error:
-                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
+              code: 'SERVER_UNREACHABLE',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 503,
+            },
+          )
+        }
+        if (connectRes?.status === 401 || connectRes?.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
               code: 'UNAUTHORIZED',
             }),
             {
@@ -737,6 +792,19 @@ Deno.serve(async (req: Request) => {
         headers: getApiHeaders(returnedToken, instanceName),
       })
 
+      if ((stateRes as any).isNetworkError) {
+        return new Response(
+          JSON.stringify({
+            error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
+            code: 'SERVER_UNREACHABLE',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 503,
+          },
+        )
+      }
+
       if (stateRes.ok && !stateRes.parsedBody?.error) {
         const stateData = stateRes.parsedBody
         const state =
@@ -817,6 +885,7 @@ Deno.serve(async (req: Request) => {
         )
       } else if (
         stateRes.status === 401 ||
+        stateRes.status === 403 ||
         stateRes.parsedBody?.message === 'Unauthorized' ||
         stateRes.parsedBody?.error === 'Unauthorized'
       ) {
@@ -842,8 +911,7 @@ Deno.serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error:
-                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
               instance: safeInstance,
               code: 'UNAUTHORIZED',
               details: stateRes.parsedBody,
@@ -857,8 +925,7 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             success: false,
-            error:
-              'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+            error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
             code: 'UNAUTHORIZED',
           }),
           {

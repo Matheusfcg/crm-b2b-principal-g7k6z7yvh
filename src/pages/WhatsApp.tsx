@@ -70,15 +70,22 @@ export default function WhatsApp() {
         if (error) {
           console.error('Failed to check status:', error)
           addLog(`Erro ao verificar status: ${error.message}`)
+          if (error.message?.includes('503') || error.message?.includes('fetch')) {
+            setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
+            setIsPolling(false)
+          }
         } else {
-          if (data?.error || data?.code === 'UNAUTHORIZED') {
-            addLog(`Resposta API erro (status): ${data.error || 'UNAUTHORIZED'}`)
+          if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
+            addLog(`Resposta API erro (status): ${data.error || data.code}`)
             if (data?.code === 'UNAUTHORIZED' || error?.message?.includes('401')) {
               setIsPolling(false)
               setConnectError(
-                'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+                'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
               )
               setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+            } else if (data?.code === 'SERVER_UNREACHABLE') {
+              setIsPolling(false)
+              setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
             } else if (data?.code === 'TOKEN_MISSING') {
               setIsPolling(false)
               setConnectError(
@@ -157,9 +164,15 @@ export default function WhatsApp() {
         setIsPolling(false)
         if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
           setConnectError(
-            'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+            'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
           )
           setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+        } else if (
+          e.message?.includes('503') ||
+          e.message?.includes('fetch') ||
+          e.message?.includes('Network')
+        ) {
+          setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
         }
@@ -203,14 +216,22 @@ export default function WhatsApp() {
 
       if (fnRes.error) throw fnRes.error
 
-      if (fnRes.data?.error || fnRes.data?.code === 'UNAUTHORIZED') {
+      if (
+        fnRes.data?.error ||
+        fnRes.data?.code === 'UNAUTHORIZED' ||
+        fnRes.data?.code === 'SERVER_UNREACHABLE'
+      ) {
         const errorMsg =
           fnRes.data?.code === 'UNAUTHORIZED'
-            ? 'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.'
-            : fnRes.data.error
+            ? 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.'
+            : fnRes.data?.code === 'SERVER_UNREACHABLE'
+              ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
+              : fnRes.data.error
         toast.error(errorMsg)
         setConnectError(errorMsg)
-        setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+        if (fnRes.data?.code === 'UNAUTHORIZED') {
+          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+        }
       } else {
         toast.success('Instância verificada com sucesso.')
         if (fnRes.data?.instance) {
@@ -273,8 +294,12 @@ export default function WhatsApp() {
 
         if (errorCode === 'UNAUTHORIZED') {
           throw new Error(
-            'Erro de Autenticação: Verifique se o Instance Token e a Server URL estão corretos no painel da Uazapi.',
+            'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
           )
+        }
+
+        if (errorCode === 'SERVER_UNREACHABLE') {
+          throw new Error('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
         }
 
         if (errorCode === 'TOKEN_MISSING') {
@@ -377,6 +402,10 @@ export default function WhatsApp() {
           server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
           instance_token: data.instance_token || '',
         })
+
+        if (data.instance_name) {
+          checkStatus(data)
+        }
       } else {
         setInstance(null)
       }
@@ -385,7 +414,7 @@ export default function WhatsApp() {
     } finally {
       setLoading(false)
     }
-  }, [user, handleCheckOrCreate])
+  }, [user, checkStatus])
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -595,7 +624,7 @@ export default function WhatsApp() {
                       disabled={actionLoading}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
                     >
-                      {actionLoading ? 'Processando...' : 'Tentar Novamente'}
+                      {actionLoading ? 'Processando...' : 'Reconectar'}
                     </Button>
                   </div>
                 )}
