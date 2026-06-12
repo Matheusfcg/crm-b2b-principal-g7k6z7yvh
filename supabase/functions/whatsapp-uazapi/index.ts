@@ -38,10 +38,139 @@ Deno.serve(async (req: Request) => {
         body.data ||
         (body.instance && typeof body.instance === 'string'))
     ) {
-      console.log(
-        '[WEBHOOK] Received from Uazapi:',
-        body.event || body.event_type || 'unknown_event',
+      const eventName = body.event || body.event_type || 'unknown_event'
+      console.log('[WEBHOOK] Received from Uazapi:', eventName)
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+      const supabaseAdmin = createClient(
+        supabaseUrl,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       )
+
+      const instanceNameReceived = body.instance || body.instanceName || body.data?.instance
+
+      let userId = null
+      let instanceId = null
+
+      if (instanceNameReceived) {
+        const { data: inst } = await supabaseAdmin
+          .from('whatsapp_instances')
+          .select('id, user_id')
+          .eq('instance_name', instanceNameReceived)
+          .maybeSingle()
+        if (inst) {
+          userId = inst.user_id
+          instanceId = inst.id
+        }
+      }
+
+      await supabaseAdmin.from('whatsapp_logs').insert({
+        instance_name: instanceNameReceived || 'unknown',
+        endpoint: 'webhook',
+        payload: body,
+        response: { event: eventName },
+        user_id: userId,
+      })
+
+      if (instanceId) {
+        if (eventName === 'CONNECTION_UPDATE' || eventName === 'status' || eventName === 'state') {
+          const state = body.data?.state || body.state || body.status
+          if (state) {
+            const updateData: any = { status: state, updated_at: new Date().toISOString() }
+            if (state === 'open' || state === 'connected') {
+              updateData.last_connection = new Date().toISOString()
+              updateData.qrcode = null
+            } else if (state === 'close' || state === 'disconnected') {
+              updateData.qrcode = null
+            }
+            await supabaseAdmin.from('whatsapp_instances').update(updateData).eq('id', instanceId)
+          }
+        } else if (eventName === 'QRCODE_UPDATED') {
+          const qr =
+            body.data?.qrcode?.base64 || body.qrcode?.base64 || body.qrcode || body.data?.qrcode
+          if (qr) {
+            await supabaseAdmin
+              .from('whatsapp_instances')
+              .update({
+                qrcode: qr,
+                status: 'qrcode',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', instanceId)
+          }
+        }
+
+        if (eventName === 'MESSAGES_UPSERT' || eventName === 'message') {
+          const messages = body.data?.messages || (body.message ? [body] : [])
+          for (const msg of messages) {
+            const remoteJid = msg.key?.remoteJid || msg.remoteJid
+            if (!remoteJid || remoteJid === 'status@broadcast') continue
+
+            const fromMe = msg.key?.fromMe || msg.fromMe
+            const pushName = msg.pushName || null
+            const messageId = msg.key?.id || msg.id
+
+            let text =
+              msg.message?.conversation ||
+              msg.message?.extendedTextMessage?.text ||
+              msg.text ||
+              msg.content ||
+              ''
+
+            if (!text && msg.message?.imageMessage) text = '📷 Imagem'
+            if (!text && msg.message?.videoMessage) text = '🎥 Vídeo'
+            if (!text && msg.message?.audioMessage) text = '🎵 Áudio'
+            if (!text && msg.message?.documentMessage) text = '📄 Documento'
+
+            const { data: contact } = await supabaseAdmin
+              .from('contacts')
+              .upsert(
+                {
+                  instance_id: instanceId,
+                  remote_jid: remoteJid,
+                  push_name: pushName || undefined,
+                },
+                { onConflict: 'instance_id, remote_jid' },
+              )
+              .select()
+              .single()
+
+            if (contact) {
+              const { data: conv } = await supabaseAdmin
+                .from('conversations')
+                .upsert(
+                  {
+                    instance_id: instanceId,
+                    contact_id: contact.id,
+                    last_message: text,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: 'instance_id, contact_id' },
+                )
+                .select()
+                .single()
+
+              if (conv) {
+                await supabaseAdmin.from('messages').upsert(
+                  {
+                    conversation_id: conv.id,
+                    message_id: messageId,
+                    content: text,
+                    from_me: fromMe,
+                    type: msg.messageType || 'text',
+                    timestamp: new Date(
+                      msg.messageTimestamp ? msg.messageTimestamp * 1000 : Date.now(),
+                    ).toISOString(),
+                    status: 'sent',
+                  },
+                  { onConflict: 'message_id' },
+                )
+              }
+            }
+          }
+        }
+      }
+
       return new Response(JSON.stringify({ success: true, received: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,

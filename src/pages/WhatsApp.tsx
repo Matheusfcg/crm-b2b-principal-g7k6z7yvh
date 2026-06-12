@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { MessageCircle, Loader2 } from 'lucide-react'
+import { MessageCircle, Loader2, Copy, Check } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
@@ -16,9 +16,19 @@ export default function WhatsApp() {
   const [logs, setLogs] = useState<string[]>([])
   const [isPolling, setIsPolling] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const hasInitialized = useRef(false)
   const pollCountRef = useRef(0)
+
+  const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
+
+  const copyWebhook = () => {
+    navigator.clipboard.writeText(webhookUrl)
+    setCopied(true)
+    toast.success('Webhook URL copiada!')
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const addLog = useCallback((msg: string) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
@@ -242,14 +252,8 @@ export default function WhatsApp() {
           data.qrcode = null
         }
         setInstance(data)
-        if (data.status === 'connecting' && !data.qrcode) {
-          setIsPolling(true)
-        }
-
-        await handleCheckOrCreate(data.instance_name)
       } else {
         setInstance(null)
-        await handleCheckOrCreate(`user_${user.id}`)
       }
     } catch (e) {
       console.error('Error fetching instance:', e)
@@ -346,6 +350,32 @@ export default function WhatsApp() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp Integration</h1>
           <p className="text-slate-500 text-sm">Vincule seu WhatsApp para futuras automações.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+            Webhook URL{' '}
+            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-medium">
+              Uazapi
+            </span>
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Configure esta URL no painel da Uazapi para receber eventos no CRM.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <code className="text-xs bg-slate-50 border border-slate-200 px-3 py-2 rounded text-slate-600 truncate flex-1 md:w-[350px]">
+            {webhookUrl}
+          </code>
+          <button
+            onClick={copyWebhook}
+            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-md transition-colors bg-white shadow-sm flex-shrink-0"
+            title="Copiar URL"
+          >
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </button>
         </div>
       </div>
 
