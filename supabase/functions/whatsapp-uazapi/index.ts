@@ -565,54 +565,17 @@ Deno.serve(async (req: Request) => {
         console.log(`[CHECK_OR_CREATE] checking database -> no existing name found`)
       }
 
-      if (needsInit) {
-        return new Response(
-          JSON.stringify({
-            error:
-              'Instância não encontrada e a criação automática foi desabilitada. Use uma instância existente.',
-            code: 'INSTANCE_NOT_FOUND',
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          },
-        )
-      } else {
-        console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
-        await setWebhook(instanceName!, returnedToken || globalAdminToken)
-        let connectRes = await connectInstance(instanceName!, returnedToken || globalAdminToken)
-        if ((connectRes as any)?.isNetworkError) {
-          return new Response(
-            JSON.stringify({
-              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
-              code: 'SERVER_UNREACHABLE',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 503,
-            },
-          )
-        }
-        if (connectRes?.status === 401 || connectRes?.status === 403) {
-          return new Response(
-            JSON.stringify({
-              error: 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-              code: 'UNAUTHORIZED',
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 401,
-            },
-          )
-        }
-        if (connectRes?.ok && !connectRes?.parsedBody?.error) {
-          qrcode = extractQrCode(connectRes.parsedBody)
-          status =
-            connectRes.parsedBody?.instance?.state || connectRes.parsedBody?.state || 'connecting'
-        } else {
-          status = existingInstance?.status || 'disconnected'
-        }
-      }
+      return new Response(
+        JSON.stringify({
+          error:
+            'Criação ou inicialização de novas instâncias foi desabilitada. Use o modo de status.',
+          code: 'CREATION_DISABLED',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
 
       const instanceData = {
         user_id: user.id,
@@ -721,19 +684,8 @@ Deno.serve(async (req: Request) => {
           let statusQr =
             extractQrCode({ base64: stateData?.instance?.qrcode }) || extractQrCode(stateData)
 
-          if (!statusQr) {
-            let connectRes = await connectInstance(instanceName!, returnedToken || globalAdminToken)
-            if (connectRes?.ok && !connectRes?.parsedBody?.error) {
-              statusQr =
-                extractQrCode({ base64: connectRes.parsedBody?.instance?.qrcode }) ||
-                extractQrCode(connectRes.parsedBody)
-              if (connectRes.parsedBody?.instance?.state) {
-                updateData.status = connectRes.parsedBody.instance.state
-              } else if (connectRes.parsedBody?.state) {
-                updateData.status = connectRes.parsedBody.state
-              }
-            }
-          }
+          // As per specification: do not call any POST endpoints like connectInstance.
+          // Only perform GET status. If QR code is not in status, it remains disconnected.
 
           if (statusQr) {
             updateData.qrcode = statusQr

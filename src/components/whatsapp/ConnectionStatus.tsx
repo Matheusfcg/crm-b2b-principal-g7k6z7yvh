@@ -26,8 +26,7 @@ interface ConnectionStatusProps {
   onReconnect: () => void
   onDisconnect: () => void
   error?: string | null
-  onConfigure?: () => void
-  showConfigureButton?: boolean
+  countdown?: number | null
 }
 
 export function ConnectionStatus({
@@ -38,8 +37,7 @@ export function ConnectionStatus({
   onReconnect,
   onDisconnect,
   error,
-  onConfigure,
-  showConfigureButton,
+  countdown,
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
@@ -59,8 +57,6 @@ export function ConnectionStatus({
         : `data:image/png;base64,${rawQr}`
   }
 
-  const isGeneratingQr = actionLoading || (isConnecting && !qrcodeSrc && !error)
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <Card className="border-slate-200 shadow-sm">
@@ -74,7 +70,22 @@ export function ConnectionStatus({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center justify-center p-6 space-y-4 min-h-[250px]">
-          {isConnected ? (
+          {!instance ? (
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <WifiOff className="h-8 w-8 text-slate-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-slate-700">
+                  Nenhuma instância configurada
+                </h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
+                  Por favor, contate um administrador para vincular e configurar seu WhatsApp no
+                  sistema.
+                </p>
+              </div>
+            </div>
+          ) : isConnected ? (
             <div className="w-full flex flex-col gap-4">
               <div className="flex flex-col items-center text-center space-y-2">
                 <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mb-2 animate-in zoom-in">
@@ -82,7 +93,9 @@ export function ConnectionStatus({
                 </div>
                 <h3 className="text-xl font-semibold text-green-600">Conectado</h3>
                 <p className="text-sm text-slate-500">
-                  Sua conta está ativa e sincronizando mensagens automaticamente.
+                  {instance.instance_name
+                    ? `Instância: ${instance.instance_name}`
+                    : 'Sua conta está ativa e sincronizando.'}
                 </p>
               </div>
             </div>
@@ -94,8 +107,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-orange-600">Instância Não Encontrada</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  A instância não foi encontrada ou foi desconectada. Clique em "Conectar WhatsApp"
-                  para inicializar uma nova.
+                  A instância configurada não foi encontrada ou está inativa. Contate o
+                  administrador.
                 </p>
               </div>
             </div>
@@ -107,22 +120,22 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-red-600">Falha de Autenticação</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  Erro de Autenticação: Verifique seu Token e Instance ID nas configurações. Clique
-                  em "Reconectar" para tentar novamente.
+                  As credenciais da instância estão incorretas. Contate o administrador.
                 </p>
               </div>
             </div>
-          ) : isGeneratingQr ? (
+          ) : actionLoading ? (
             <div className="flex flex-col items-center text-center space-y-4">
-              <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+              <div className="relative h-16 w-16 flex items-center justify-center">
+                <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                {countdown !== null && (
+                  <span className="absolute text-blue-600 font-bold text-lg">{countdown}</span>
+                )}
+              </div>
               <div>
-                <h3 className="text-lg font-medium text-slate-900">
-                  {instance?.is_connecting || status === 'connecting'
-                    ? 'Aguardando inicialização...'
-                    : 'Criando instância...'}
-                </h3>
+                <h3 className="text-lg font-medium text-slate-900">Verificando Conexão...</h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Aguarde enquanto preparamos a conexão e geramos seu QR Code.
+                  Aguarde enquanto tentamos alcançar a instância configurada.
                 </p>
               </div>
             </div>
@@ -133,64 +146,45 @@ export function ConnectionStatus({
               </div>
               <h3 className="text-xl font-semibold text-slate-700">Desconectado</h3>
               <p className="text-sm text-slate-500">
-                Nenhuma conta vinculada no momento. Conecte para iniciar a automação.
+                A conexão com a instância está inativa ou falhou.
               </p>
             </div>
           )}
         </CardContent>
         <CardFooter className="bg-slate-50 border-t border-slate-100 flex flex-wrap gap-4 justify-center p-4">
-          {showConfigureButton && (
-            <Button
-              variant="outline"
-              onClick={onConfigure}
-              disabled={actionLoading}
-              className="w-full sm:w-auto"
-            >
-              Configurar
-            </Button>
-          )}
-          {isConnected || isGeneratingQr || !!qrcodeSrc ? (
-            <Button
-              variant="destructive"
-              onClick={onDisconnect}
-              disabled={actionLoading}
-              className="w-full sm:w-auto gap-2"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+          {instance && (
+            <>
+              {isConnected ? (
+                <Button
+                  variant="destructive"
+                  onClick={onDisconnect}
+                  disabled={actionLoading}
+                  className="w-full sm:w-auto gap-2"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4" />
+                  )}
+                  Desconectar Conta
+                </Button>
               ) : (
-                <LogOut className="h-4 w-4" />
+                <Button
+                  onClick={onReconnect}
+                  disabled={actionLoading}
+                  className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {error || isTimeout || isNotFound || isUnauthorized
+                    ? 'Tentar Novamente'
+                    : 'Verificar Conexão'}
+                </Button>
               )}
-              Desconectar Conta
-            </Button>
-          ) : (
-            <Button
-              onClick={
-                instance?.id &&
-                (error || isTimeout || isUnauthorized || isNotFound || status === 'disconnected')
-                  ? onReconnect
-                  : onConnect
-              }
-              disabled={actionLoading}
-              className="w-full sm:w-auto gap-2 bg-green-600 hover:bg-green-700 text-white"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : instance?.id &&
-                (error ||
-                  isTimeout ||
-                  isUnauthorized ||
-                  isNotFound ||
-                  status === 'disconnected') ? (
-                <RefreshCw className="h-4 w-4" />
-              ) : (
-                <QrCode className="h-4 w-4" />
-              )}
-              {instance?.id &&
-              (error || isTimeout || isUnauthorized || isNotFound || status === 'disconnected')
-                ? 'Tentar Novamente'
-                : 'Conectar WhatsApp'}
-            </Button>
+            </>
           )}
         </CardFooter>
       </Card>
@@ -221,14 +215,10 @@ export function ConnectionStatus({
               <WifiOff className="h-8 w-8" />
               <p className="text-sm font-medium">{error}</p>
             </div>
-          ) : isGeneratingQr ? (
+          ) : actionLoading ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-3">
               <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-              <p className="text-sm font-medium">
-                {instance?.is_connecting || status === 'connecting'
-                  ? 'Aguardando inicialização...'
-                  : 'Gerando QR Code...'}
-              </p>
+              <p className="text-sm font-medium">Obtendo QR Code...</p>
             </div>
           ) : isConnected ? (
             <div className="text-center text-slate-500 flex flex-col items-center gap-2">
@@ -245,10 +235,15 @@ export function ConnectionStatus({
               <WifiOff className="h-12 w-12 opacity-50 text-red-500" />
               <p className="text-sm">Não autorizado (401).</p>
             </div>
+          ) : !instance ? (
+            <div className="text-center text-slate-400 flex flex-col items-center gap-2">
+              <QrCode className="h-12 w-12 opacity-50" />
+              <p className="text-sm">Configuração pendente.</p>
+            </div>
           ) : (
             <div className="text-center text-slate-400 flex flex-col items-center gap-2">
               <QrCode className="h-12 w-12 opacity-50" />
-              <p className="text-sm">Clique em "Conectar WhatsApp" para começar.</p>
+              <p className="text-sm">Clique em "Verificar Conexão" ou "Tentar Novamente".</p>
             </div>
           )}
         </CardContent>

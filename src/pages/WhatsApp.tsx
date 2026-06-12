@@ -26,19 +26,11 @@ export default function WhatsApp() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
-  const [isPolling, setIsPolling] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [showConfig, setShowConfig] = useState(false)
-
-  const [configForm, setConfigForm] = useState({
-    instance_name: '',
-    server_url: 'https://apiwhatsvexaview.uazapi.com',
-    instance_token: '',
-  })
+  const [countdown, setCountdown] = useState<number | null>(null)
 
   const hasInitialized = useRef(false)
-  const pollCountRef = useRef(0)
 
   const webhookUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
 
@@ -53,443 +45,90 @@ export default function WhatsApp() {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
   }, [])
 
-  const checkStatus = useCallback(
+  const checkStatusWithTimeout = useCallback(
     async (inst: any) => {
-      if (!inst) return
+      if (!inst || !inst.instance_name) return
+
+      setActionLoading(true)
+      setConnectError(null)
+      setCountdown(5)
+
+      const timer = setInterval(() => {
+        setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
+      }, 1000)
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('TIMEOUT'))
+        }, 5000)
+      })
+
       try {
-        addLog(`GET STATUS via Edge Function`)
-        const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        addLog(`GET STATUS (Health Check) via Edge Function`)
+        const apiCall = supabase.functions.invoke('whatsapp-uazapi', {
           body: { action: 'get_status', instanceName: inst.instance_name },
         })
 
-        console.log('Complete JSON response from whatsapp-uazapi:', data)
-        console.log('Specific value of qrcode field:', data?.instance?.qrcode)
-        if (data?.instance?.qrcode) {
-          console.log('Length of base64 string received:', data.instance.qrcode.length)
-        }
-        console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
+        const res = (await Promise.race([apiCall, timeoutPromise])) as any
+        const { data, error } = res
 
-        if (error) {
-          console.error('Failed to check status:', error)
-          addLog(`Erro ao verificar status: ${error.message}`)
-          if (error.message?.includes('503') || error.message?.includes('fetch')) {
-            setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
-            setIsPolling(false)
+        if (error) throw error
+
+        if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
+          const errorMsg =
+            data?.code === 'UNAUTHORIZED'
+              ? 'Erro de Autenticação: Verifique com o administrador.'
+              : data?.code === 'SERVER_UNREACHABLE'
+                ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
+                : data.error
+          setConnectError(errorMsg)
+          if (data?.code === 'UNAUTHORIZED') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
           }
         } else {
-          if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
-            addLog(`Resposta API erro (status): ${data.error || data.code}`)
-            if (data?.code === 'UNAUTHORIZED' || error?.message?.includes('401')) {
-              setIsPolling(false)
-              setConnectError(
-                'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-              )
-              setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-            } else if (data?.code === 'SERVER_UNREACHABLE') {
-              setIsPolling(false)
-              setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
-            } else if (data?.code === 'TOKEN_MISSING') {
-              setIsPolling(false)
-              setConnectError(
-                'Token da instância não configurado. Por favor, desconecte e conecte novamente.',
-              )
-              setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-            } else if (data?.code === 'INSTANCE_NOT_FOUND') {
-              pollCountRef.current += 1
-              if (pollCountRef.current >= 5) {
-                setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-                setIsPolling(false)
-                setConnectError('Instância não encontrada na API. Tente conectar novamente.')
-              } else {
-                addLog(
-                  `Ignorando erro 'Instance not found' (tentativa ${pollCountRef.current} de 5).`,
-                )
-                setIsPolling(true)
-              }
-            } else {
-              setIsPolling(false)
-              setConnectError(`Erro na API: ${data.error}`)
-            }
-          } else {
-            addLog(`Status atualizado: ${data?.instance?.status}`)
-          }
-
           if (data?.uazapiUrl) {
             setUazapiUrl(data.uazapiUrl)
           }
-
           if (data?.instance) {
-            // Ensure qrcode is null if it's not a valid string
             if (
               data.instance.qrcode &&
               (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
             ) {
               data.instance.qrcode = null
             }
-            if (data.is_connecting !== undefined) {
-              data.instance.is_connecting = data.is_connecting
-            }
             setInstance(data.instance)
-            const hasQrCode = !!data.instance.qrcode
-
             if (data.instance.status === 'open' || data.instance.status === 'connected') {
-              setIsPolling(false)
-              pollCountRef.current = 0
-            } else if (
-              data.instance.status === 'connecting' ||
-              data.instance.status === 'qrcode' ||
-              hasQrCode
-            ) {
-              if (data.instance.status === 'qrcode' || hasQrCode) {
-                // AC: Terminate the polling loop immediately upon receiving 'qrcode' status
-                pollCountRef.current = 0
-                setIsPolling(false)
-              } else if (!hasQrCode && data.instance.status === 'connecting') {
-                pollCountRef.current += 1
-                if (pollCountRef.current >= 5) {
-                  setIsPolling(false)
-                  setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-                  setConnectError('Tempo limite atingido aguardando QR Code. Tente novamente.')
-                  return
-                }
-                setIsPolling(true)
-              } else {
-                pollCountRef.current = 0
-                setIsPolling(false)
-              }
+              toast.success('WhatsApp Conectado.')
+            } else if (data.instance.status === 'qrcode' || data.instance.qrcode) {
+              toast.info('QR Code aguardando leitura.')
+            } else {
+              setConnectError('Status desconhecido ou falha na conexão.')
+              setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
             }
           }
         }
       } catch (e: any) {
         console.error(e)
-        addLog(`Exceção (status): ${e.message}`)
-        setIsPolling(false)
-        if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
-          setConnectError(
-            'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-          )
-          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-        } else if (
-          e.message?.includes('503') ||
-          e.message?.includes('fetch') ||
-          e.message?.includes('Network')
-        ) {
-          setConnectError('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
+        if (e.message === 'TIMEOUT') {
+          setConnectError('Tempo limite atingido aguardando conexão. Tente novamente.')
+          setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
         }
+      } finally {
+        clearInterval(timer)
+        setCountdown(null)
+        setActionLoading(false)
       }
     },
     [addLog],
   )
 
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!configForm.instance_name || !configForm.server_url || !configForm.instance_token) {
-      toast.error('Preencha todos os campos.')
-      return
+  const handleReconnect = useCallback(() => {
+    if (instance) {
+      checkStatusWithTimeout(instance)
     }
-    setActionLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('whatsapp_instances')
-        .upsert(
-          {
-            user_id: user?.id,
-            instance_name: configForm.instance_name,
-            server_url: configForm.server_url,
-            instance_token: configForm.instance_token,
-            status: 'connecting',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' },
-        )
-        .select()
-        .single()
-
-      if (error) throw error
-
-      setInstance(data)
-      toast.success('Configurações salvas.')
-
-      const fnRes = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'get_status', instanceName: configForm.instance_name },
-      })
-
-      if (fnRes.error) throw fnRes.error
-
-      if (
-        fnRes.data?.error ||
-        fnRes.data?.code === 'UNAUTHORIZED' ||
-        fnRes.data?.code === 'SERVER_UNREACHABLE'
-      ) {
-        const errorMsg =
-          fnRes.data?.code === 'UNAUTHORIZED'
-            ? 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.'
-            : fnRes.data?.code === 'SERVER_UNREACHABLE'
-              ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-              : fnRes.data.error
-        toast.error(errorMsg)
-        setConnectError(errorMsg)
-        if (fnRes.data?.code === 'UNAUTHORIZED') {
-          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-        }
-      } else {
-        toast.success('Instância verificada com sucesso.')
-        if (fnRes.data?.instance) {
-          setInstance(fnRes.data.instance)
-          if (fnRes.data.instance.status === 'qrcode' || fnRes.data.instance.qrcode) {
-            setIsPolling(false)
-          } else if (fnRes.data.instance.status === 'connecting') {
-            setIsPolling(true)
-          } else if (
-            fnRes.data.instance.status === 'open' ||
-            fnRes.data.instance.status === 'connected'
-          ) {
-            setIsPolling(false)
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error(err)
-      toast.error(err.message || 'Erro ao salvar configuração')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handleReconnect = useCallback(async () => {
-    if (!instance?.instance_name) return
-    setActionLoading(true)
-    setConnectError(null)
-    pollCountRef.current = 0
-    addLog(`RECONECTANDO (Health Check)... aguardando 5s`)
-
-    await new Promise((resolve) => setTimeout(resolve, 5000))
-
-    try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'get_status', instanceName: instance.instance_name },
-      })
-
-      if (error) throw error
-
-      if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
-        const errorMsg =
-          data?.code === 'UNAUTHORIZED'
-            ? 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.'
-            : data?.code === 'SERVER_UNREACHABLE'
-              ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-              : data.error
-        setConnectError(errorMsg)
-        setIsPolling(false)
-        if (data?.code === 'UNAUTHORIZED') {
-          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-        }
-      } else {
-        if (data?.instance) {
-          setInstance(data.instance)
-          if (data.instance.status === 'open' || data.instance.status === 'connected') {
-            setIsPolling(false)
-            toast.success('Status da instância: Conectado.')
-          } else if (data.instance.status === 'qrcode' || data.instance.qrcode) {
-            setIsPolling(false)
-            toast.info('QR Code aguardando leitura.')
-          } else {
-            setIsPolling(true)
-          }
-        }
-      }
-    } catch (e: any) {
-      console.error(e)
-      setConnectError(`Erro ao reconectar: ${e.message}`)
-      setIsPolling(false)
-    } finally {
-      setActionLoading(false)
-    }
-  }, [instance, addLog])
-
-  const handleCheckOrCreate = useCallback(
-    async (forcedInstanceName?: string) => {
-      setActionLoading(true)
-      setConnectError(null)
-      pollCountRef.current = 0
-      setIsPolling(false)
-      addLog(`CHECK OR CREATE INSTANCE...`)
-      try {
-        let { data: existingInstance } = await supabase
-          .from('whatsapp_instances')
-          .select('*')
-          .eq('user_id', user?.id)
-          .maybeSingle()
-
-        const instanceName =
-          forcedInstanceName || existingInstance?.instance_name || `user_${user?.id}`
-        const instanceToken = existingInstance?.instance_token || ''
-
-        if (existingInstance) {
-          const { data: updated } = await supabase
-            .from('whatsapp_instances')
-            .update({
-              status: 'connecting',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingInstance.id)
-            .select()
-            .single()
-
-          if (updated) {
-            existingInstance = updated
-            setInstance(updated)
-          }
-        } else {
-          const { data: upserted, error: upsertErr } = await supabase
-            .from('whatsapp_instances')
-            .upsert(
-              {
-                user_id: user?.id,
-                instance_name: instanceName,
-                status: 'connecting',
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'user_id' },
-            )
-            .select()
-            .single()
-
-          if (upsertErr) throw upsertErr
-          if (upserted) {
-            existingInstance = upserted
-            setInstance(upserted)
-          }
-        }
-
-        addLog(`Aguardando 5s para checagem...`)
-        await new Promise((resolve) => setTimeout(resolve, 5000))
-
-        const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-          body: {
-            action: 'get_status',
-            instanceName,
-            instanceToken,
-          },
-        })
-
-        console.log('Complete JSON response from whatsapp-uazapi:', data)
-        console.log('Specific value of qrcode field:', data?.instance?.qrcode)
-        if (data?.instance?.qrcode) {
-          console.log('Length of base64 string received:', data.instance.qrcode.length)
-        }
-        console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
-
-        let functionError = data?.error
-        let errorCode = data?.code
-
-        if (error) {
-          try {
-            if ((error as any).context?.error) {
-              functionError = (error as any).context.error
-              errorCode = (error as any).context.code || errorCode
-            } else if ((error as any).message?.includes('401')) {
-              errorCode = 'UNAUTHORIZED'
-            }
-          } catch {
-            /* intentionally ignored */
-          }
-        }
-
-        if (errorCode === 'UNAUTHORIZED') {
-          throw new Error(
-            'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.',
-          )
-        }
-
-        if (errorCode === 'SERVER_UNREACHABLE') {
-          throw new Error('Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.')
-        }
-
-        if (errorCode === 'TOKEN_MISSING') {
-          throw new Error(
-            'Token da instância não configurado. Use a Configuração Manual para inserir os dados.',
-          )
-        }
-
-        if (errorCode === 'INSTANCE_NOT_FOUND') {
-          throw new Error(
-            'Instância não encontrada na Uazapi. Use a Configuração Manual para inserir os dados de uma instância existente.',
-          )
-        }
-
-        if (
-          functionError === 'LIMIT_REACHED' ||
-          (error && error.message.includes('LIMIT_REACHED'))
-        ) {
-          throw new Error(
-            'Limite de instâncias atingido no seu plano Uazapi. Por favor, remova uma instância antiga no painel da Uazapi.',
-          )
-        }
-
-        if (error && !functionError) {
-          throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
-        }
-
-        if (functionError) {
-          const detailsStr =
-            typeof data?.details === 'object' ? JSON.stringify(data.details) : data?.details
-          const errorMessage = functionError || 'Erro desconhecido ao criar instância'
-          throw new Error(detailsStr ? `${errorMessage} - Detalhes: ${detailsStr}` : errorMessage)
-        }
-
-        addLog('Instância inicializada/recuperada.')
-
-        if (data?.uazapiUrl) {
-          setUazapiUrl(data.uazapiUrl)
-        }
-
-        if (
-          !data?.instance?.qrcode &&
-          (data?.instance?.status === 'connecting' ||
-            data?.instance?.status === 'qrcode' ||
-            data?.is_connecting)
-        ) {
-          toast.info('Instância verificada. Aguardando inicialização...')
-        } else if (
-          data?.instance?.qrcode &&
-          data?.instance?.status !== 'connected' &&
-          data?.instance?.status !== 'open'
-        ) {
-          toast.success('Instância conectada ao servidor. QR Code gerado.')
-        }
-
-        if (data?.instance) {
-          if (
-            data.instance.qrcode &&
-            (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
-          ) {
-            data.instance.qrcode = null
-          }
-          if (data.is_connecting !== undefined) {
-            data.instance.is_connecting = data.is_connecting
-          }
-          setInstance(data.instance)
-          const isConnectedInstance =
-            data.instance.status === 'open' || data.instance.status === 'connected'
-          const isQrCodeStatus = data.instance.status === 'qrcode'
-          setIsPolling(!isConnectedInstance && !isQrCodeStatus && !data.instance.qrcode)
-        }
-      } catch (error: any) {
-        addLog(`Erro ao inicializar: ${error.message}`)
-        const errMsg = error.message.includes('Limite de instâncias atingido')
-          ? error.message
-          : `Erro ao inicializar: ${error.message}`
-        toast.error(errMsg)
-        setConnectError(errMsg)
-      } finally {
-        setActionLoading(false)
-      }
-    },
-    [user, addLog],
-  )
+  }, [instance, checkStatusWithTimeout])
 
   const fetchInstance = useCallback(async () => {
     if (!user) return
@@ -509,14 +148,11 @@ export default function WhatsApp() {
           data.qrcode = null
         }
         setInstance(data)
-        setConfigForm({
-          instance_name: data.instance_name || '',
-          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
-          instance_token: data.instance_token || '',
-        })
 
         if (data.instance_name) {
-          checkStatus(data)
+          if (data.status !== 'open' && data.status !== 'connected') {
+            checkStatusWithTimeout(data)
+          }
         }
       } else {
         setInstance(null)
@@ -526,7 +162,7 @@ export default function WhatsApp() {
     } finally {
       setLoading(false)
     }
-  }, [user, checkStatus])
+  }, [user])
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -559,21 +195,6 @@ export default function WhatsApp() {
     }
   }, [fetchInstance, user])
 
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>
-    const isConnecting = instance?.status === 'connecting' || instance?.status === 'qrcode'
-    const hasQrCode = !!instance?.qrcode
-
-    if (isConnecting && !hasQrCode && isPolling) {
-      timeoutId = setTimeout(() => {
-        checkStatus(instance)
-      }, 3000)
-    }
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [instance, isPolling, checkStatus])
-
   const handleDisconnect = async () => {
     setActionLoading(true)
     addLog('Iniciando desconexão...')
@@ -586,7 +207,6 @@ export default function WhatsApp() {
       addLog('Instância desconectada e deletada com sucesso.')
       toast.success('WhatsApp desconectado.')
       setInstance(null)
-      setIsPolling(false)
     } catch (error: any) {
       addLog(`Erro ao desconectar: ${error.message}`)
       toast.error(`Erro ao desconectar: ${error.message}`)
@@ -656,106 +276,17 @@ export default function WhatsApp() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {(!isConnected || showConfig) && (
-              <div className="xl:col-span-1">
-                <Card className="border-slate-200 shadow-sm sticky top-6">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Settings2 className="h-5 w-5 text-slate-500" />
-                        Configuração Manual
-                      </CardTitle>
-                      {isConnected && (
-                        <Button variant="ghost" size="sm" onClick={() => setShowConfig(false)}>
-                          Fechar
-                        </Button>
-                      )}
-                    </div>
-                    <CardDescription>
-                      Insira as credenciais da sua instância Uazapi.
-                    </CardDescription>
-                  </CardHeader>
-                  <form onSubmit={handleSaveConfig}>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="instance_name">Nome da Instância</Label>
-                        <Input
-                          id="instance_name"
-                          value={configForm.instance_name}
-                          onChange={(e) =>
-                            setConfigForm({ ...configForm, instance_name: e.target.value })
-                          }
-                          placeholder="Ex: VexaView"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="server_url">Server URL</Label>
-                        <Input
-                          id="server_url"
-                          value={configForm.server_url}
-                          onChange={(e) =>
-                            setConfigForm({ ...configForm, server_url: e.target.value })
-                          }
-                          placeholder="https://apiwhatsvexaview.uazapi.com"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="instance_token">Instance Token</Label>
-                        <Input
-                          id="instance_token"
-                          value={configForm.instance_token}
-                          onChange={(e) =>
-                            setConfigForm({ ...configForm, instance_token: e.target.value })
-                          }
-                          placeholder="Ex: 8127b6a5-1564-40f3-bba1-a5540d44cd51"
-                          required
-                        />
-                      </div>
-                    </CardContent>
-                    <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-end p-4">
-                      <Button
-                        type="submit"
-                        disabled={actionLoading}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Salvar e Verificar
-                      </Button>
-                    </CardFooter>
-                  </form>
-                </Card>
-              </div>
-            )}
-            <div
-              className={cn(
-                'space-y-4',
-                !isConnected || showConfig ? 'xl:col-span-2' : 'xl:col-span-3',
-              )}
-            >
+            <div className="xl:col-span-3 space-y-4">
               <ConnectionStatus
                 instance={instance}
                 uazapiUrl={uazapiUrl}
                 actionLoading={actionLoading}
-                onConnect={() => handleCheckOrCreate()}
+                onConnect={() => handleReconnect()}
                 onReconnect={handleReconnect}
                 onDisconnect={handleDisconnect}
                 error={connectError}
-                onConfigure={() => setShowConfig(true)}
-                showConfigureButton={isConnected && !showConfig}
+                countdown={countdown}
               />
-              {connectError && (
-                <div className="flex justify-center mt-4">
-                  <Button
-                    onClick={instance?.id ? handleReconnect : () => handleCheckOrCreate()}
-                    disabled={actionLoading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {actionLoading ? 'Processando...' : 'Tentar Novamente'}
-                  </Button>
-                </div>
-              )}
               {isConnected && instance?.id && (
                 <div className="mt-6 space-y-6">
                   <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
