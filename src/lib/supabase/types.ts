@@ -398,7 +398,7 @@ export type Database = {
           {
             foreignKeyName: 'whatsapp_instances_user_id_fkey'
             columns: ['user_id']
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: 'users'
             referencedColumns: ['id']
           },
@@ -721,7 +721,6 @@ export const Constants = {
 //   UNIQUE whatsapp_instances_instance_name_key: UNIQUE (instance_name)
 //   PRIMARY KEY whatsapp_instances_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY whatsapp_instances_user_id_fkey: FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-//   UNIQUE whatsapp_instances_user_id_key: UNIQUE (user_id)
 // Table: whatsapp_logs
 //   PRIMARY KEY whatsapp_logs_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY whatsapp_logs_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -928,4 +927,3 @@ export const Constants = {
 // Table: whatsapp_instances
 //   CREATE INDEX idx_whatsapp_instances_instance_name ON public.whatsapp_instances USING btree (instance_name)
 //   CREATE UNIQUE INDEX whatsapp_instances_instance_name_key ON public.whatsapp_instances USING btree (instance_name)
-//   CREATE UNIQUE INDEX whatsapp_instances_user_id_key ON public.whatsapp_instances USING btree (user_id)
