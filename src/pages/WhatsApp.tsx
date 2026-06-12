@@ -266,11 +266,13 @@ export default function WhatsApp() {
       fetchInstance()
     } catch (error: any) {
       const errorMsg = error?.message || error?.details || ''
+      const errorCode = error?.code || ''
       if (
+        errorCode === '23505' ||
         errorMsg.includes('whatsapp_instances_instance_name_key') ||
         errorMsg.includes('duplicate key value')
       ) {
-        toast.error('Este nome de instância já está em uso por outro usuário.')
+        toast.error('Este nome de instância já está em uso. Por favor, escolha um nome diferente.')
       } else {
         toast.error(`Erro ao salvar configurações: ${error.message}`)
       }
