@@ -38,13 +38,15 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [replyText, setReplyText] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const fetchConversations = async () => {
-      setLoading(true)
+    const fetchConversations = async (isInitial = false) => {
+      if (isInitial) setLoading(true)
       try {
         const { data, error } = await supabase
           .from('conversations')
@@ -65,12 +67,43 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
       } catch (err) {
         console.error(err)
       } finally {
-        setLoading(false)
+        if (isInitial) setLoading(false)
+      }
+    }
+
+    const syncFromUazapi = async () => {
+      setSyncing(true)
+      setSyncError(null)
+      try {
+        const { data: instance } = await supabase
+          .from('whatsapp_instances')
+          .select('instance_name')
+          .eq('id', instanceId)
+          .single()
+
+        if (instance?.instance_name) {
+          const res = await supabase.functions.invoke('whatsapp-uazapi', {
+            body: { action: 'get_conversations', instanceName: instance.instance_name },
+          })
+          if (res.error || res.data?.error) {
+            setSyncError(
+              'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
+            )
+          } else {
+            await fetchConversations()
+          }
+        }
+      } catch (err) {
+        setSyncError(
+          'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
+        )
+      } finally {
+        setSyncing(false)
       }
     }
 
     if (instanceId) {
-      fetchConversations()
+      fetchConversations(true).then(() => syncFromUazapi())
     }
 
     const channel = supabase
@@ -83,7 +116,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
           table: 'conversations',
           filter: `instance_id=eq.${instanceId}`,
         },
-        fetchConversations,
+        () => fetchConversations(false),
       )
       .subscribe()
 
@@ -158,16 +191,27 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     <Card className="flex flex-col md:flex-row h-[600px] overflow-hidden border-slate-200 shadow-sm mt-6">
       {/* Sidebar: Conversations List */}
       <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50/50">
-        <div className="p-4 border-b border-slate-200 bg-white">
+        <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
           <h2 className="font-semibold flex items-center gap-2 text-slate-800">
             <MessageSquare className="h-5 w-5" />
             Conversas
           </h2>
+          {syncing && (
+            <Loader2 className="h-4 w-4 animate-spin text-slate-400" title="Sincronizando..." />
+          )}
         </div>
+
+        {syncError && (
+          <div className="bg-red-50 p-3 text-xs text-red-600 border-b border-red-100">
+            {syncError}
+          </div>
+        )}
+
         <ScrollArea className="flex-1">
-          {loading ? (
-            <div className="p-8 flex justify-center text-slate-400">
+          {loading || (syncing && conversations.length === 0) ? (
+            <div className="p-8 flex flex-col items-center justify-center space-y-3 text-slate-400">
               <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="text-sm">Sincronizando conversas...</span>
             </div>
           ) : conversations.length === 0 ? (
             <div className="p-8 text-center text-slate-500 text-sm">
@@ -184,36 +228,55 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
                     selectedConvId === conv.id && 'bg-blue-50/50 hover:bg-blue-50/80',
                   )}
                 >
-                  <Avatar className="h-10 w-10 border border-slate-200">
-                    <AvatarImage src={conv.contact?.profile_picture || undefined} />
-                    <AvatarFallback className="bg-slate-200 text-slate-600">
-                      {conv.contact?.push_name?.charAt(0)?.toUpperCase() || (
-                        <User className="h-5 w-5" />
-                      )}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-10 w-10 border border-slate-200">
+                      <AvatarImage src={conv.contact?.profile_picture || undefined} />
+                      <AvatarFallback className="bg-slate-200 text-slate-600">
+                        {conv.contact?.push_name?.charAt(0)?.toUpperCase() || (
+                          <User className="h-5 w-5" />
+                        )}
+                      </AvatarFallback>
+                    </Avatar>
+                    {conv.unread_count > 0 && (
+                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white">
+                        {conv.unread_count}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-0.5">
-                      <p className="text-sm font-medium text-slate-900 truncate">
+                      <p
+                        className={cn(
+                          'text-sm truncate',
+                          conv.unread_count > 0
+                            ? 'font-bold text-slate-900'
+                            : 'font-medium text-slate-900',
+                        )}
+                      >
                         {conv.contact?.push_name ||
                           conv.contact?.remote_jid?.split('@')[0] ||
                           'Desconhecido'}
                       </p>
                       {conv.updated_at && (
-                        <span className="text-xs text-slate-400">
+                        <span
+                          className={cn(
+                            'text-xs',
+                            conv.unread_count > 0 ? 'text-green-600 font-medium' : 'text-slate-400',
+                          )}
+                        >
                           {format(new Date(conv.updated_at), 'HH:mm')}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 truncate">
+                    <p
+                      className={cn(
+                        'text-xs truncate',
+                        conv.unread_count > 0 ? 'text-slate-700 font-medium' : 'text-slate-500',
+                      )}
+                    >
                       {conv.last_message || 'Nenhuma mensagem'}
                     </p>
                   </div>
-                  {conv.unread_count > 0 && (
-                    <div className="h-5 w-5 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
-                      {conv.unread_count}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

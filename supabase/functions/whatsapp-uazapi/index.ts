@@ -911,6 +911,94 @@ Deno.serve(async (req: Request) => {
           },
         )
       }
+    } else if (action === 'get_conversations') {
+      const returnedToken = existingInstance?.instance_token
+      if (!returnedToken) {
+        return new Response(
+          JSON.stringify({ error: 'Instance token not configured', code: 'TOKEN_MISSING' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          },
+        )
+      }
+
+      const cleanName = sanitizeInstanceName(instanceName!)
+      const chatsRes = await fetchUazapi(`/chat/findChats/${cleanName}`, {
+        method: 'GET',
+        headers: getApiHeaders(returnedToken, cleanName),
+      })
+
+      if (!chatsRes.ok) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch chats', details: chatsRes.parsedBody }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: chatsRes.status,
+          },
+        )
+      }
+
+      const chats = chatsRes.parsedBody
+      if (Array.isArray(chats)) {
+        for (const chat of chats) {
+          const remoteJid = chat.id || chat.remoteJid
+          if (!remoteJid || remoteJid === 'status@broadcast') continue
+
+          const pushName = chat.name || chat.pushName || null
+          const profilePicUrl = chat.profilePictureUrl || chat.profilePicUrl || null
+          const unreadCount = chat.unreadCount || 0
+
+          let lastMessage = ''
+          if (chat.lastMessage?.message?.conversation) {
+            lastMessage = chat.lastMessage.message.conversation
+          } else if (chat.lastMessage?.message?.extendedTextMessage?.text) {
+            lastMessage = chat.lastMessage.message.extendedTextMessage.text
+          } else if (chat.lastMessage?.text) {
+            lastMessage = chat.lastMessage.text
+          }
+
+          const timestamp =
+            chat.timestamp || chat.conversationTimestamp
+              ? new Date((chat.timestamp || chat.conversationTimestamp) * 1000).toISOString()
+              : new Date().toISOString()
+
+          const { data: contact } = await supabaseAdmin
+            .from('contacts')
+            .upsert(
+              {
+                instance_id: existingInstance.id,
+                remote_jid: remoteJid,
+                push_name: pushName,
+                profile_picture: profilePicUrl,
+              },
+              { onConflict: 'instance_id, remote_jid' },
+            )
+            .select()
+            .single()
+
+          if (contact) {
+            await supabaseAdmin.from('conversations').upsert(
+              {
+                instance_id: existingInstance.id,
+                contact_id: contact.id,
+                last_message: lastMessage || 'Mídia/Outro',
+                unread_count: unreadCount,
+                updated_at: timestamp,
+              },
+              { onConflict: 'instance_id, contact_id' },
+            )
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, count: Array.isArray(chats) ? chats.length : 0 }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        },
+      )
     } else if (action === 'delete') {
       try {
         const returnedToken = existingInstance?.instance_token
