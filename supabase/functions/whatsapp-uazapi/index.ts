@@ -342,12 +342,41 @@ Deno.serve(async (req: Request) => {
       existingInstance?.instance_external_id ||
       existingInstance?.instance_name ||
       sanitizeInstanceName(targetInstanceName || '')
+
+    if (
+      !existingInstance?.instance_external_id &&
+      action !== 'check_or_create' &&
+      action !== 'create' &&
+      action !== 'delete'
+    ) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Instance External ID not configured in database for this instance',
+          code: 'MISSING_EXTERNAL_ID',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
+    }
+
     const internalInstanceName =
       existingInstance?.instance_name || sanitizeInstanceName(targetInstanceName || '')
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
-      const payload = options.body ? JSON.parse(options.body as string) : null
+      let payload = options.body ? JSON.parse(options.body as string) : null
+
+      if (payload && typeof payload === 'object') {
+        delete payload.instanceId
+        delete payload.instanceName
+        delete payload.instance_name
+        delete payload.instance_id
+        delete payload.instance
+        options.body = JSON.stringify(payload)
+      }
 
       const headersObj = (options.headers as any) || {}
 
@@ -504,7 +533,7 @@ Deno.serve(async (req: Request) => {
       return qrcode
     }
 
-    const getApiHeaders = (token: string, instance?: string) => {
+    const getApiHeaders = (token: string) => {
       const apiKey = token
 
       const headers: any = {
@@ -517,10 +546,6 @@ Deno.serve(async (req: Request) => {
         headers['Authorization'] = `Bearer ${apiKey}`
       }
 
-      if (instance) {
-        headers['instance'] = instance
-        headers['instance_id'] = instance
-      }
       return headers
     }
 
@@ -551,7 +576,7 @@ Deno.serve(async (req: Request) => {
 
       let res = await fetchUazapi(`/webhook/set/${cleanExternalId}`, {
         method: 'POST',
-        headers: getApiHeaders(token, cleanExternalId),
+        headers: getApiHeaders(token),
         body: JSON.stringify(payload),
       })
 
@@ -559,11 +584,8 @@ Deno.serve(async (req: Request) => {
         console.log(`[WEBHOOK] Falling back to alternative webhook endpoint for ${cleanExternalId}`)
         res = await fetchUazapi(`/webhook/set`, {
           method: 'POST',
-          headers: getApiHeaders(token, cleanExternalId),
-          body: JSON.stringify({
-            instance: cleanExternalId,
-            ...payload,
-          }),
+          headers: getApiHeaders(token),
+          body: JSON.stringify(payload),
         })
       }
       return res
@@ -627,7 +649,7 @@ Deno.serve(async (req: Request) => {
         try {
           await fetchUazapi(`/instance/logout/${sanitizeInstanceName(externalIdStr)}`, {
             method: 'DELETE',
-            headers: getApiHeaders(returnedToken || '', externalIdStr),
+            headers: getApiHeaders(returnedToken || ''),
           })
         } catch (e) {}
       }
@@ -639,25 +661,25 @@ Deno.serve(async (req: Request) => {
       if (action === 'connect') {
         stateRes = await fetchUazapi(`/instance/connect/${externalIdStr}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken || '', externalIdStr),
+          headers: getApiHeaders(returnedToken || ''),
         })
       } else {
         stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
           method: 'GET',
-          headers: getApiHeaders(returnedToken || '', externalIdStr),
+          headers: getApiHeaders(returnedToken || ''),
         })
 
         if (stateRes.status === 404 || stateRes.status === 405) {
           stateRes = await fetchUazapi(`/instance/connectionState/${externalIdStr}`, {
             method: 'GET',
-            headers: getApiHeaders(returnedToken || '', externalIdStr),
+            headers: getApiHeaders(returnedToken || ''),
           })
         }
 
         if (stateRes.status === 404 || stateRes.status === 405) {
           stateRes = await fetchUazapi(`/instance/connectionStatus/${externalIdStr}`, {
             method: 'GET',
-            headers: getApiHeaders(returnedToken || '', externalIdStr),
+            headers: getApiHeaders(returnedToken || ''),
           })
         }
       }
@@ -871,7 +893,7 @@ Deno.serve(async (req: Request) => {
       const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
       const sendRes = await fetchUazapi(`/message/sendText/${cleanExternalId}`, {
         method: 'POST',
-        headers: getApiHeaders(returnedToken || '', cleanExternalId),
+        headers: getApiHeaders(returnedToken || ''),
         body: JSON.stringify({
           number: remoteJid,
           options: {
@@ -949,7 +971,7 @@ Deno.serve(async (req: Request) => {
       const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
       const chatsRes = await fetchUazapi(`/chat/findChats/${cleanExternalId}`, {
         method: 'GET',
-        headers: getApiHeaders(returnedToken || '', cleanExternalId),
+        headers: getApiHeaders(returnedToken || ''),
       })
 
       if (!chatsRes.ok) {
@@ -1047,11 +1069,11 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'delete') {
       try {
         const returnedToken = existingInstance?.instance_token
-        if (returnedToken) {
-          const cleanExternalId = sanitizeInstanceName(uazapiInstanceId!)
+        if (returnedToken && existingInstance?.instance_external_id) {
+          const cleanExternalId = sanitizeInstanceName(existingInstance.instance_external_id)
           await fetchUazapi(`/instance/logout/${cleanExternalId}`, {
             method: 'DELETE',
-            headers: getApiHeaders(returnedToken || '', cleanExternalId),
+            headers: getApiHeaders(returnedToken || ''),
           })
         }
       } catch (err: any) {
