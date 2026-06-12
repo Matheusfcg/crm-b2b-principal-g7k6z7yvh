@@ -54,9 +54,15 @@ export default function WhatsApp() {
           console.error('Failed to check status:', error)
           addLog(`Erro ao verificar status: ${error.message}`)
         } else {
-          if (data?.error) {
-            addLog(`Resposta API erro (status): ${data.error}`)
-            if (data?.code === 'INSTANCE_NOT_FOUND') {
+          if (data?.error || data?.code === 'UNAUTHORIZED') {
+            addLog(`Resposta API erro (status): ${data.error || 'UNAUTHORIZED'}`)
+            if (data?.code === 'UNAUTHORIZED' || error?.message?.includes('401')) {
+              setIsPolling(false)
+              setConnectError(
+                'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
+              )
+              setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+            } else if (data?.code === 'INSTANCE_NOT_FOUND') {
               pollCountRef.current += 1
               if (pollCountRef.current >= 5) {
                 setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
@@ -126,7 +132,12 @@ export default function WhatsApp() {
         console.error(e)
         addLog(`Exceção (status): ${e.message}`)
         setIsPolling(false)
-        setConnectError(`Erro de comunicação: ${e.message}`)
+        if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
+          setConnectError('Falha de Autenticação (401). Verifique as credenciais da API Uazapi.')
+          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+        } else {
+          setConnectError(`Erro de comunicação: ${e.message}`)
+        }
       }
     },
     [addLog],
@@ -153,14 +164,25 @@ export default function WhatsApp() {
         console.log('isQRCodeAvailable:', !!data?.instance?.qrcode)
 
         let functionError = data?.error
+        let errorCode = data?.code
+
         if (error) {
           try {
             if ((error as any).context?.error) {
               functionError = (error as any).context.error
+              errorCode = (error as any).context.code || errorCode
+            } else if ((error as any).message?.includes('401')) {
+              errorCode = 'UNAUTHORIZED'
             }
           } catch {
             /* intentionally ignored */
           }
+        }
+
+        if (errorCode === 'UNAUTHORIZED') {
+          throw new Error(
+            'Falha de Autenticação (401). As credenciais da Uazapi podem ser inválidas ou estar expiradas.',
+          )
         }
 
         if (

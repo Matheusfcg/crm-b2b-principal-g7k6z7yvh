@@ -346,6 +346,9 @@ Deno.serve(async (req: Request) => {
         apikey: token,
         admintoken: uazapiKey,
       }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       if (instance) {
         headers['instance'] = instance
       }
@@ -457,6 +460,22 @@ Deno.serve(async (req: Request) => {
         })
 
         if (
+          stateRes.status === 401 ||
+          stateRes.parsedBody?.message === 'Unauthorized' ||
+          stateRes.parsedBody?.error === 'Unauthorized'
+        ) {
+          return new Response(
+            JSON.stringify({
+              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              code: 'UNAUTHORIZED',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401,
+            },
+          )
+        }
+        if (
           stateRes.ok &&
           stateRes.parsedBody &&
           !stateRes.parsedBody.error &&
@@ -496,6 +515,23 @@ Deno.serve(async (req: Request) => {
         })
 
         let resBody = createRes.parsedBody
+
+        if (
+          createRes.status === 401 ||
+          resBody?.message === 'Unauthorized' ||
+          resBody?.error === 'Unauthorized'
+        ) {
+          return new Response(
+            JSON.stringify({
+              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              code: 'UNAUTHORIZED',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401,
+            },
+          )
+        }
 
         if (
           !createRes.ok ||
@@ -564,6 +600,18 @@ Deno.serve(async (req: Request) => {
         console.log(`[RECONNECT] Setting webhook and connecting existing instance: ${instanceName}`)
         await setWebhook(instanceName!, returnedToken || uazapiKey)
         let connectRes = await connectInstance(instanceName!, returnedToken || uazapiKey)
+        if (connectRes?.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+              code: 'UNAUTHORIZED',
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401,
+            },
+          )
+        }
         if (connectRes?.ok && !connectRes?.parsedBody?.error) {
           qrcode = extractQrCode(connectRes.parsedBody)
           status =
@@ -711,6 +759,51 @@ Deno.serve(async (req: Request) => {
             is_connecting: finalInstance?.status === 'connecting',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      } else if (
+        stateRes.status === 401 ||
+        stateRes.parsedBody?.message === 'Unauthorized' ||
+        stateRes.parsedBody?.error === 'Unauthorized'
+      ) {
+        if (existingInstance) {
+          const { data } = await supabaseAdmin
+            .from('whatsapp_instances')
+            .update({ status: 'unauthorized', qrcode: null, updated_at: new Date().toISOString() })
+            .eq('id', existingInstance.id)
+            .select()
+            .single()
+
+          const safeInstance = {
+            id: data.id,
+            user_id: data.user_id,
+            status: data.status,
+            qrcode: data.qrcode,
+            last_connection: data.last_connection,
+            phone: data.phone,
+            instance_name: data.instance_name,
+            instance_token: data.instance_token,
+            server_url: data.server_url,
+          }
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Unauthorized',
+              instance: safeInstance,
+              code: 'UNAUTHORIZED',
+              details: stateRes.parsedBody,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401,
+            },
+          )
+        }
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          },
         )
       } else if (
         stateRes.status === 404 ||

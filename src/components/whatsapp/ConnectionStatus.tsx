@@ -39,6 +39,7 @@ export function ConnectionStatus({
   const isConnecting = status === 'connecting' || status === 'qrcode' || instance?.is_connecting
   const isNotFound = status === 'not_found'
   const isTimeout = status === 'timeout'
+  const isUnauthorized = status === 'unauthorized'
 
   const rawQr = instance?.qrcode
   const isValidBase64 = rawQr && typeof rawQr === 'string' && rawQr.length > 20
@@ -120,6 +121,19 @@ export function ConnectionStatus({
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
                   A instância não foi encontrada ou foi desconectada. Clique em "Conectar WhatsApp"
                   para inicializar uma nova.
+                </p>
+              </div>
+            </div>
+          ) : isUnauthorized ? (
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
+                <WifiOff className="h-8 w-8 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-red-600">Falha de Autenticação</h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
+                  As credenciais (token) da Uazapi são inválidas ou expiraram. Clique em "Conectar
+                  WhatsApp" para tentar reautenticar.
                 </p>
               </div>
             </div>
@@ -227,6 +241,11 @@ export function ConnectionStatus({
             <div className="text-center text-slate-400 flex flex-col items-center gap-2">
               <WifiOff className="h-12 w-12 opacity-50 text-red-500" />
               <p className="text-sm">Instância não sincronizada.</p>
+            </div>
+          ) : isUnauthorized ? (
+            <div className="text-center text-red-400 flex flex-col items-center gap-2">
+              <WifiOff className="h-12 w-12 opacity-50 text-red-500" />
+              <p className="text-sm">Não autorizado (401).</p>
             </div>
           ) : (
             <div className="text-center text-slate-400 flex flex-col items-center gap-2">
