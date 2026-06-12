@@ -210,7 +210,7 @@ Deno.serve(async (req: Request) => {
 
     const action = body.action
 
-    const providedId = body.instanceId || body.instanceName
+    const providedId = body.instanceId || body.instanceName || body.instance
     const isProvidedIdUuid =
       providedId &&
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
@@ -219,8 +219,12 @@ Deno.serve(async (req: Request) => {
 
     let query = supabaseAdmin.from('whatsapp_instances').select('*').eq('user_id', user.id)
 
-    if (isProvidedIdUuid) {
-      query = query.eq('id', providedId)
+    if (providedId) {
+      if (isProvidedIdUuid) {
+        query = query.eq('id', providedId)
+      } else {
+        query = query.eq('instance_name', providedId)
+      }
     }
 
     const { data: existingInstance } = await query.maybeSingle()
@@ -239,7 +243,7 @@ Deno.serve(async (req: Request) => {
       ''
     const uazapiUrl = rawUazapiUrl.trim().replace(/\/$/, '')
 
-    let instanceName = existingInstance?.instance_name
+    let instanceName = existingInstance?.instance_name || (!isProvidedIdUuid ? providedId : null)
 
     if (
       instanceName &&
@@ -787,7 +791,7 @@ Deno.serve(async (req: Request) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: 'Unauthorized',
+              error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
               instance: safeInstance,
               code: 'UNAUTHORIZED',
               details: stateRes.parsedBody,
@@ -799,7 +803,11 @@ Deno.serve(async (req: Request) => {
           )
         }
         return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' }),
+          JSON.stringify({
+            success: false,
+            error: 'Uazapi Unauthorized (401). Please check your API keys or instance token.',
+            code: 'UNAUTHORIZED',
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 401,
