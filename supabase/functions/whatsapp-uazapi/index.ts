@@ -402,7 +402,6 @@ Deno.serve(async (req: Request) => {
           console.error(
             `[ERROR] action: uazapi_fetch, instance: ${uazapiInstanceId}, status: ${status}, path: ${path}, details: ${text}`,
           )
-          // Error Handling: If the Uazapi returns a 404 or 405 or "Instance not found", log full response body
           if (status === 404 || status === 405 || text.toLowerCase().includes('not found')) {
             console.log(`[DEBUG ${status}] Full response body: ${text}`)
           }
@@ -485,7 +484,6 @@ Deno.serve(async (req: Request) => {
       return qrcode
     }
 
-    // Enhanced Authentication Headers
     const getApiHeaders = (token: string, instance?: string) => {
       const apiKey = Deno.env.get('UAZAPI_CLIENTE_TESTE') || Deno.env.get('UAZAPI_API_KEY') || token
       const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN') || ''
@@ -557,9 +555,6 @@ Deno.serve(async (req: Request) => {
       return res
     }
 
-    // Stop Instance Creation
-    // connectInstance logic removed completely per user requirements
-
     if (action === 'check_or_create') {
       return new Response(
         JSON.stringify({
@@ -574,7 +569,6 @@ Deno.serve(async (req: Request) => {
         },
       )
     } else if (action === 'get_status' || action === 'connect' || action === 'force_sync') {
-      // Reduce redundancy: If action is just get_status and instance is already open and recently updated via webhook
       if (
         action === 'get_status' &&
         existingInstance?.status === 'open' &&
@@ -599,8 +593,8 @@ Deno.serve(async (req: Request) => {
       }
 
       const returnedToken =
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         Deno.env.get('UAZAPI_API_KEY')
 
       if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
@@ -628,27 +622,31 @@ Deno.serve(async (req: Request) => {
         } catch (e) {}
       }
 
-      // Ensure webhook is set up
       await setWebhook(uazapiInstanceId as string, returnedToken || '')
 
       let stateRes
 
       if (action === 'connect') {
-        // Use GET /instance/connect to initiate connection and get QR
         stateRes = await fetchUazapi(`/instance/connect/${uazapiInstanceId}`, {
           method: 'GET',
           headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
         })
       } else {
-        // Connection Status Check
         stateRes = await fetchUazapi(`/instance/connectionState/${uazapiInstanceId}`, {
           method: 'GET',
           headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
         })
 
-        // Fallback to connectionStatus if connectionState fails with 404 or 405
         if (stateRes.status === 404 || stateRes.status === 405) {
           stateRes = await fetchUazapi(`/instance/connectionStatus/${uazapiInstanceId}`, {
+            method: 'GET',
+            headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
+          })
+        }
+
+        // Additional fallback based on user story requirement
+        if (stateRes.status === 404 || stateRes.status === 405) {
+          stateRes = await fetchUazapi(`/instance/status/${uazapiInstanceId}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || '', uazapiInstanceId),
           })
@@ -838,8 +836,8 @@ Deno.serve(async (req: Request) => {
       }
     } else if (action === 'send_message') {
       const returnedToken =
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         Deno.env.get('UAZAPI_API_KEY')
       if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
@@ -926,8 +924,8 @@ Deno.serve(async (req: Request) => {
       })
     } else if (action === 'get_conversations') {
       const returnedToken =
-        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         existingInstance?.instance_token ||
+        Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
         Deno.env.get('UAZAPI_API_KEY')
       if (!returnedToken && !Deno.env.get('UAZAPI_ADMIN_TOKEN')) {
         return new Response(
@@ -1040,8 +1038,8 @@ Deno.serve(async (req: Request) => {
     } else if (action === 'delete') {
       try {
         const returnedToken =
-          Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
           existingInstance?.instance_token ||
+          Deno.env.get('UAZAPI_CLIENTE_TESTE') ||
           Deno.env.get('UAZAPI_API_KEY')
         const adminToken = Deno.env.get('UAZAPI_ADMIN_TOKEN')
         if (returnedToken || adminToken) {

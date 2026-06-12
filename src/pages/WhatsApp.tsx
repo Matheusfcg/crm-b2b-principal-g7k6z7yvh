@@ -257,7 +257,7 @@ export default function WhatsApp() {
 
       const { error } = await supabase
         .from('whatsapp_instances')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(payload, { onConflict: 'instance_name' })
 
       if (error) throw error
 

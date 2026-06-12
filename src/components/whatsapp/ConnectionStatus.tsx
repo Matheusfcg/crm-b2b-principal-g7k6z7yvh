@@ -106,6 +106,36 @@ export function ConnectionStatus({
                     : 'Sua conta está ativa e sincronizando.'}
                 </p>
               </div>
+
+              <div className="mt-4 bg-[#1E3A5F] text-slate-100 p-6 rounded-lg text-left shadow-inner space-y-4">
+                <h4 className="text-xl font-bold text-white mb-2">Dados da instância</h4>
+
+                <div>
+                  <div className="text-sm text-slate-300">Server URL:</div>
+                  <div className="font-semibold text-white break-all">
+                    {instance.server_url || uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm text-slate-300">Instance Token:</div>
+                  <div className="font-semibold text-white break-all">
+                    {instance.instance_token || 'Token não configurado'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm text-slate-300">Número conectado:</div>
+                  <div className="font-semibold text-white break-all">
+                    {instance.phone || 'Carregando...'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm text-slate-300">Status:</div>
+                  <div className="font-semibold text-white break-all">{instance.status}</div>
+                </div>
+              </div>
             </div>
           ) : isNotFound ? (
             <div className="flex flex-col items-center text-center space-y-4">
