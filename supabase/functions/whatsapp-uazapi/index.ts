@@ -382,6 +382,7 @@ Deno.serve(async (req: Request) => {
 
       // Debug Logging: The edge function must include a console.log statement that prints the full target URL and the headers object sent to Uazapi.
       console.log(`[DEBUG] Target URL: ${url}`)
+      console.log('DEBUG_URL_FINAL:', url)
       console.log(
         `[DEBUG] Headers:`,
         JSON.stringify(
@@ -660,8 +661,9 @@ Deno.serve(async (req: Request) => {
 
       if (action === 'connect') {
         stateRes = await fetchUazapi(`/instance/connect/${externalIdStr}`, {
-          method: 'GET',
+          method: 'POST',
           headers: getApiHeaders(returnedToken || ''),
+          body: JSON.stringify({}),
         })
       } else {
         stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
