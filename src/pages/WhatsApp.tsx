@@ -36,12 +36,12 @@ export default function WhatsApp() {
   }, [])
 
   const checkStatusWithTimeout = useCallback(
-    async (inst: any) => {
+    async (inst: any, action: 'connect' | 'force_sync' = 'connect') => {
       if (!inst || !inst.instance_name) return
 
       setActionLoading(true)
       setConnectError(null)
-      setCountdown(25)
+      setCountdown(45)
 
       const timer = setInterval(() => {
         setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
@@ -50,13 +50,13 @@ export default function WhatsApp() {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('TIMEOUT'))
-        }, 25000)
+        }, 45000)
       })
 
       try {
-        addLog(`CONNECT (Handshake & Webhook) via Edge Function`)
+        addLog(`${action.toUpperCase()} (Handshake & Webhook) via Edge Function`)
         const apiCall = supabase.functions.invoke('whatsapp-uazapi', {
-          body: { action: 'connect', instanceName: inst.instance_name },
+          body: { action, instanceName: inst.instance_name },
         })
 
         const res = (await Promise.race([apiCall, timeoutPromise])) as any
@@ -79,6 +79,7 @@ export default function WhatsApp() {
                   ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
                   : data.error
           setConnectError(errorMsg)
+          toast.error(errorMsg)
           if (data?.code === 'UNAUTHORIZED') {
             setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
           }
@@ -110,12 +111,13 @@ export default function WhatsApp() {
       } catch (e: any) {
         console.error(e)
         if (e.message === 'TIMEOUT') {
-          setConnectError(
-            'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.',
-          )
+          const msg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+          setConnectError(msg)
+          toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
+          toast.error(`Erro de comunicação: ${e.message}`)
         }
       } finally {
         clearInterval(timer)
@@ -128,7 +130,15 @@ export default function WhatsApp() {
 
   const handleReconnect = useCallback(() => {
     if (instance) {
-      checkStatusWithTimeout(instance)
+      setConnectError(null)
+      checkStatusWithTimeout(instance, 'connect')
+    }
+  }, [instance, checkStatusWithTimeout])
+
+  const handleForceSync = useCallback(() => {
+    if (instance) {
+      setConnectError(null)
+      checkStatusWithTimeout(instance, 'force_sync')
     }
   }, [instance, checkStatusWithTimeout])
 
@@ -153,7 +163,7 @@ export default function WhatsApp() {
 
         if (data.instance_name) {
           if (data.status !== 'open' && data.status !== 'connected') {
-            checkStatusWithTimeout(data)
+            checkStatusWithTimeout(data, 'connect')
           }
         }
       } else {
@@ -262,6 +272,7 @@ export default function WhatsApp() {
                 onConnect={() => handleReconnect()}
                 onReconnect={handleReconnect}
                 onDisconnect={handleDisconnect}
+                onForceSync={handleForceSync}
                 error={connectError}
                 countdown={countdown}
               />

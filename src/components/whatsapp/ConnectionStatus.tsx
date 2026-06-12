@@ -25,6 +25,7 @@ interface ConnectionStatusProps {
   onConnect: () => void
   onReconnect: () => void
   onDisconnect: () => void
+  onForceSync: () => void
   error?: string | null
   countdown?: number | null
 }
@@ -36,6 +37,7 @@ export function ConnectionStatus({
   onConnect,
   onReconnect,
   onDisconnect,
+  onForceSync,
   error,
   countdown,
 }: ConnectionStatusProps) {
@@ -107,8 +109,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-orange-600">Instância Não Encontrada</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  A instância configurada não foi encontrada ou está inativa. Contate o
-                  administrador.
+                  {instance?.last_error ||
+                    'A instância configurada não foi encontrada ou está inativa. Contate o administrador.'}
                 </p>
               </div>
             </div>
@@ -120,7 +122,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-red-600">Falha de Autenticação</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  As credenciais da instância estão incorretas. Contate o administrador.
+                  {instance?.last_error ||
+                    'As credenciais da instância estão incorretas. Contate o administrador.'}
                 </p>
               </div>
             </div>
@@ -133,11 +136,9 @@ export function ConnectionStatus({
                 )}
               </div>
               <div>
-                <h3 className="text-lg font-medium text-slate-900">
-                  RECONECTANDO (Health Check)...
-                </h3>
+                <h3 className="text-lg font-medium text-slate-900">Sincronizando...</h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Aguarde enquanto tentamos alcançar a instância configurada.
+                  Sincronizando com WhatsApp... Isso pode levar até 45 segundos.
                 </p>
               </div>
             </div>
@@ -149,7 +150,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-yellow-600">Tempo Limite Atingido</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  {error ||
+                  {instance?.last_error ||
+                    error ||
                     'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'}
                 </p>
               </div>
@@ -161,7 +163,7 @@ export function ConnectionStatus({
               </div>
               <h3 className="text-xl font-semibold text-slate-700">Desconectado</h3>
               <p className="text-sm text-slate-500">
-                A conexão com a instância está inativa ou falhou.
+                {instance?.last_error || 'A conexão com a instância está inativa ou falhou.'}
               </p>
             </div>
           )}
@@ -184,20 +186,30 @@ export function ConnectionStatus({
                   Desconectar Conta
                 </Button>
               ) : (
-                <Button
-                  onClick={onReconnect}
-                  disabled={actionLoading}
-                  className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {actionLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  {error || isTimeout || isNotFound || isUnauthorized
-                    ? 'Tentar Novamente'
-                    : 'Verificar Conexão'}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                  <Button
+                    onClick={onReconnect}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {error || isTimeout || isNotFound || isUnauthorized
+                      ? 'Tentar Novamente'
+                      : 'Verificar Conexão'}
+                  </Button>
+                  <Button
+                    onClick={onForceSync}
+                    disabled={actionLoading}
+                    variant="outline"
+                    className="w-full sm:w-auto gap-2"
+                  >
+                    Sincronizar Conexão
+                  </Button>
+                </div>
               )}
             </>
           )}

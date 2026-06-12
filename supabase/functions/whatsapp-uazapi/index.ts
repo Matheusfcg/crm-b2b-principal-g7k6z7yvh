@@ -310,7 +310,7 @@ Deno.serve(async (req: Request) => {
       const controller = new AbortController()
       const timeoutId = setTimeout(
         () => controller.abort(new Error('Uazapi Request Timeout')),
-        10000,
+        45000,
       )
 
       const fetchOptions = {
@@ -357,6 +357,18 @@ Deno.serve(async (req: Request) => {
           response: { status: 0, error: err.message, timeout: isTimeout },
           user_id: user.id,
         })
+
+        if (existingInstance && existingInstance.id) {
+          await supabaseAdmin
+            .from('whatsapp_instances')
+            .update({
+              last_error: isTimeout
+                ? 'Tempo limite de conexão (Timeout) com o servidor da Uazapi.'
+                : err.message,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingInstance.id)
+        }
 
         if (isTimeout) {
           return {
@@ -667,7 +679,7 @@ Deno.serve(async (req: Request) => {
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
-    } else if (action === 'get_status' || action === 'connect') {
+    } else if (action === 'get_status' || action === 'connect' || action === 'force_sync') {
       const returnedToken = existingInstance?.instance_token
 
       if (!returnedToken) {
@@ -680,8 +692,22 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      if (action === 'connect') {
+      if (action === 'force_sync') {
+        try {
+          await fetchUazapi(
+            `/instance/logout/${sanitizeInstanceName(uazapiInstanceId as string)}`,
+            {
+              method: 'DELETE',
+              headers: getApiHeaders(returnedToken, uazapiInstanceId as string),
+            },
+          )
+        } catch (e) {}
+      }
+
+      if (action === 'connect' || action === 'force_sync') {
         await connectInstance(uazapiInstanceId as string, returnedToken)
+        await setWebhook(uazapiInstanceId as string, returnedToken)
+      } else {
         await setWebhook(uazapiInstanceId as string, returnedToken)
       }
 
@@ -719,6 +745,7 @@ Deno.serve(async (req: Request) => {
 
         const updateData: any = {
           status: state,
+          last_error: null,
           updated_at: new Date().toISOString(),
         }
         if (phone) updateData.phone = phone
@@ -782,7 +809,12 @@ Deno.serve(async (req: Request) => {
         if (existingInstance) {
           const { data } = await supabaseAdmin
             .from('whatsapp_instances')
-            .update({ status: 'unauthorized', qrcode: null, updated_at: new Date().toISOString() })
+            .update({
+              status: 'unauthorized',
+              qrcode: null,
+              last_error: 'Erro de Autenticação (401)',
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', existingInstance.id)
             .select()
             .single()
@@ -831,7 +863,12 @@ Deno.serve(async (req: Request) => {
         if (existingInstance) {
           const { data } = await supabaseAdmin
             .from('whatsapp_instances')
-            .update({ status: 'not_found', qrcode: null, updated_at: new Date().toISOString() })
+            .update({
+              status: 'not_found',
+              qrcode: null,
+              last_error: stateRes.parsedBody?.error || 'Instance not found',
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', existingInstance.id)
             .select()
             .single()
