@@ -245,34 +245,35 @@ export default function WhatsApp() {
 
     setSavingConfig(true)
     try {
-      if (instance?.id) {
-        const { error } = await supabase
-          .from('whatsapp_instances')
-          .update({
-            instance_name: configData.instance_name,
-            server_url: configData.server_url,
-            instance_token: configData.instance_token,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', instance.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('whatsapp_instances').insert({
-          user_id: user.id,
-          instance_name: configData.instance_name,
-          server_url: configData.server_url,
-          instance_token: configData.instance_token,
-          status: 'connecting',
-          updated_at: new Date().toISOString(),
-        })
-        if (error) throw error
+      const payload = {
+        ...(instance?.id ? { id: instance.id } : {}),
+        user_id: user.id,
+        instance_name: configData.instance_name,
+        server_url: configData.server_url,
+        instance_token: configData.instance_token,
+        status: instance?.status || 'connecting',
+        updated_at: new Date().toISOString(),
       }
+
+      const { error } = await supabase
+        .from('whatsapp_instances')
+        .upsert(payload, { onConflict: 'user_id' })
+
+      if (error) throw error
 
       toast.success('Configurações salvas com sucesso!')
       setConfigOpen(false)
       fetchInstance()
     } catch (error: any) {
-      toast.error(`Erro ao salvar configurações: ${error.message}`)
+      const errorMsg = error?.message || error?.details || ''
+      if (
+        errorMsg.includes('whatsapp_instances_instance_name_key') ||
+        errorMsg.includes('duplicate key value')
+      ) {
+        toast.error('Este nome de instância já está em uso por outro usuário.')
+      } else {
+        toast.error(`Erro ao salvar configurações: ${error.message}`)
+      }
     } finally {
       setSavingConfig(false)
     }
