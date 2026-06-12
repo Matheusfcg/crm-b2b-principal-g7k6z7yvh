@@ -23,6 +23,7 @@ interface ConnectionStatusProps {
   uazapiUrl?: string | null
   actionLoading: boolean
   onConnect: () => void
+  onReconnect: () => void
   onDisconnect: () => void
   error?: string | null
   onConfigure?: () => void
@@ -34,6 +35,7 @@ export function ConnectionStatus({
   uazapiUrl,
   actionLoading,
   onConnect,
+  onReconnect,
   onDisconnect,
   error,
   onConfigure,
@@ -82,48 +84,6 @@ export function ConnectionStatus({
                 <p className="text-sm text-slate-500">
                   Sua conta está ativa e sincronizando mensagens automaticamente.
                 </p>
-              </div>
-
-              <div className="bg-[#1d334a] text-white p-6 rounded-xl space-y-5 font-sans shadow-sm w-full text-left relative">
-                {showConfigureButton && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onConfigure}
-                    className="absolute top-4 right-4 bg-transparent border-[#2c4b69] text-[#8ba3b8] hover:bg-[#2c4b69] hover:text-white"
-                  >
-                    Configurar
-                  </Button>
-                )}
-                <h2 className="text-xl font-bold border-b border-[#2c4b69] pb-3 pr-24">
-                  Dados da instância
-                </h2>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[#8ba3b8] text-sm mb-1">Server URL:</p>
-                    <p className="font-bold break-all text-[15px]">
-                      {instance?.server_url || uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[#8ba3b8] text-sm mb-1">Instance Token:</p>
-                    <p className="font-bold break-all text-[15px]">
-                      {instance?.instance_token || 'N/A'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[#8ba3b8] text-sm mb-1">Número conectado:</p>
-                    <p className="font-bold text-[15px]">{instance?.phone || 'N/A'}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-[#8ba3b8] text-sm mb-1">Status:</p>
-                    <p className="font-bold text-[15px]">{instance?.status || 'N/A'}</p>
-                  </div>
-                </div>
               </div>
             </div>
           ) : isNotFound ? (
@@ -177,6 +137,54 @@ export function ConnectionStatus({
               </p>
             </div>
           )}
+
+          {instance?.id && (
+            <div className="bg-[#1d334a] text-white p-6 rounded-xl space-y-5 font-sans shadow-sm w-full text-left relative mt-4">
+              {showConfigureButton && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onConfigure}
+                  className="absolute top-4 right-4 bg-transparent border-[#2c4b69] text-[#8ba3b8] hover:bg-[#2c4b69] hover:text-white"
+                >
+                  Configurar
+                </Button>
+              )}
+              <h2 className="text-xl font-bold border-b border-[#2c4b69] pb-3 pr-24">
+                Dados da instância
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[#8ba3b8] text-sm mb-1">Server URL:</p>
+                  <p className="font-bold break-all text-[15px]">
+                    {instance?.server_url || uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[#8ba3b8] text-sm mb-1">Instance Token:</p>
+                  <p className="font-bold break-all text-[15px]">
+                    {instance?.instance_token || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[#8ba3b8] text-sm mb-1">Número conectado:</p>
+                  <p className="font-bold text-[15px]">{instance?.phone || 'N/A'}</p>
+                </div>
+
+                <div>
+                  <p className="text-[#8ba3b8] text-sm mb-1">Status:</p>
+                  <p
+                    className={`font-bold text-[15px] ${isConnected ? 'text-green-400' : 'text-white'}`}
+                  >
+                    {instance?.status || 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="bg-slate-50 border-t border-slate-100 flex justify-center p-4">
           {isConnected || isGeneratingQr || !!qrcodeSrc ? (
@@ -195,7 +203,12 @@ export function ConnectionStatus({
             </Button>
           ) : (
             <Button
-              onClick={onConnect}
+              onClick={
+                instance?.id &&
+                (error || isTimeout || isUnauthorized || isNotFound || status === 'disconnected')
+                  ? onReconnect
+                  : onConnect
+              }
               disabled={actionLoading}
               className="w-full sm:w-auto gap-2 bg-green-600 hover:bg-green-700 text-white"
             >

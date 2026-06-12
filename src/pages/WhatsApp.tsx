@@ -258,6 +258,55 @@ export default function WhatsApp() {
     }
   }
 
+  const handleReconnect = useCallback(async () => {
+    if (!instance?.instance_name) return
+    setActionLoading(true)
+    setConnectError(null)
+    pollCountRef.current = 0
+    addLog(`RECONECTANDO (Health Check)...`)
+
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+        body: { action: 'get_status', instanceName: instance.instance_name },
+      })
+
+      if (error) throw error
+
+      if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
+        const errorMsg =
+          data?.code === 'UNAUTHORIZED'
+            ? 'Erro de Autenticação: Verifique seu Token e Instance ID nas configurações.'
+            : data?.code === 'SERVER_UNREACHABLE'
+              ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
+              : data.error
+        setConnectError(errorMsg)
+        setIsPolling(false)
+        if (data?.code === 'UNAUTHORIZED') {
+          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+        }
+      } else {
+        if (data?.instance) {
+          setInstance(data.instance)
+          if (data.instance.status === 'open' || data.instance.status === 'connected') {
+            setIsPolling(false)
+            toast.success('Status da instância: Conectado.')
+          } else if (data.instance.status === 'qrcode' || data.instance.qrcode) {
+            setIsPolling(false)
+            toast.info('QR Code aguardando leitura.')
+          } else {
+            setIsPolling(true)
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error(e)
+      setConnectError(`Erro ao reconectar: ${e.message}`)
+      setIsPolling(false)
+    } finally {
+      setActionLoading(false)
+    }
+  }, [instance, addLog])
+
   const handleCheckOrCreate = useCallback(
     async (forcedInstanceName?: string) => {
       setActionLoading(true)
@@ -679,6 +728,7 @@ export default function WhatsApp() {
                 uazapiUrl={uazapiUrl}
                 actionLoading={actionLoading}
                 onConnect={() => handleCheckOrCreate()}
+                onReconnect={handleReconnect}
                 onDisconnect={handleDisconnect}
                 error={connectError}
                 onConfigure={() => setShowConfig(true)}
@@ -687,7 +737,7 @@ export default function WhatsApp() {
               {connectError && (
                 <div className="flex justify-center mt-4">
                   <Button
-                    onClick={() => handleCheckOrCreate()}
+                    onClick={instance?.id ? handleReconnect : () => handleCheckOrCreate()}
                     disabled={actionLoading}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
