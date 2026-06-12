@@ -149,7 +149,8 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-xl font-semibold text-yellow-600">Tempo Limite Atingido</h3>
                 <p className="text-sm text-slate-500 mt-1 max-w-[280px]">
-                  {error || 'A conexão com a Uazapi demorou mais que 5 segundos.'}
+                  {error ||
+                    'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'}
                 </p>
               </div>
             </div>

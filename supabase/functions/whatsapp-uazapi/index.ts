@@ -307,8 +307,20 @@ Deno.serve(async (req: Request) => {
         }),
       )
 
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(new Error('Uazapi Request Timeout')),
+        10000,
+      )
+
+      const fetchOptions = {
+        ...options,
+        signal: controller.signal,
+      }
+
       try {
-        const res = await fetch(url, options)
+        const res = await fetch(url, fetchOptions)
+        clearTimeout(timeoutId)
         const status = res.status
         const text = await res.text()
 
@@ -333,14 +345,32 @@ Deno.serve(async (req: Request) => {
 
         return { ok: res.ok, status, text, parsedBody }
       } catch (err: any) {
+        clearTimeout(timeoutId)
         console.error(`[ERROR] Uazapi fetch failed:`, err)
+
+        const isTimeout = err.name === 'AbortError' || err.message === 'Uazapi Request Timeout'
+
         await supabaseAdmin.from('whatsapp_logs').insert({
           instance_name: uazapiInstanceId,
           endpoint: url,
           payload: payload,
-          response: { status: 0, error: err.message },
+          response: { status: 0, error: err.message, timeout: isTimeout },
           user_id: user.id,
         })
+
+        if (isTimeout) {
+          return {
+            ok: false,
+            status: 408,
+            text: '',
+            parsedBody: {
+              error: 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.',
+            },
+            isNetworkError: true,
+            isTimeout: true,
+          }
+        }
+
         return {
           ok: false,
           status: 0,
@@ -509,10 +539,13 @@ Deno.serve(async (req: Request) => {
         })
 
         if ((stateRes as any).isNetworkError) {
+          const errorMsg = (stateRes as any).isTimeout
+            ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+            : 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
           return new Response(
             JSON.stringify({
-              error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
-              code: 'SERVER_UNREACHABLE',
+              error: errorMsg,
+              code: (stateRes as any).isTimeout ? 'TIMEOUT' : 'SERVER_UNREACHABLE',
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -658,10 +691,13 @@ Deno.serve(async (req: Request) => {
       })
 
       if ((stateRes as any).isNetworkError) {
+        const errorMsg = (stateRes as any).isTimeout
+          ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+          : 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
         return new Response(
           JSON.stringify({
-            error: 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.',
-            code: 'SERVER_UNREACHABLE',
+            error: errorMsg,
+            code: (stateRes as any).isTimeout ? 'TIMEOUT' : 'SERVER_UNREACHABLE',
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -41,7 +41,7 @@ export default function WhatsApp() {
 
       setActionLoading(true)
       setConnectError(null)
-      setCountdown(5)
+      setCountdown(25)
 
       const timer = setInterval(() => {
         setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
@@ -50,7 +50,7 @@ export default function WhatsApp() {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('TIMEOUT'))
-        }, 5000)
+        }, 25000)
       })
 
       try {
@@ -64,16 +64,26 @@ export default function WhatsApp() {
 
         if (error) throw error
 
-        if (data?.error || data?.code === 'UNAUTHORIZED' || data?.code === 'SERVER_UNREACHABLE') {
+        if (
+          data?.error ||
+          data?.code === 'UNAUTHORIZED' ||
+          data?.code === 'SERVER_UNREACHABLE' ||
+          data?.code === 'TIMEOUT'
+        ) {
           const errorMsg =
             data?.code === 'UNAUTHORIZED'
               ? 'Erro de Autenticação: Verifique com o administrador.'
               : data?.code === 'SERVER_UNREACHABLE'
                 ? 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-                : data.error
+                : data?.code === 'TIMEOUT'
+                  ? 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+                  : data.error
           setConnectError(errorMsg)
           if (data?.code === 'UNAUTHORIZED') {
             setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+          }
+          if (data?.code === 'TIMEOUT') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
           }
         } else {
           if (data?.uazapiUrl) {
@@ -100,7 +110,9 @@ export default function WhatsApp() {
       } catch (e: any) {
         console.error(e)
         if (e.message === 'TIMEOUT') {
-          setConnectError('Tempo limite atingido aguardando conexão. Tente novamente.')
+          setConnectError(
+            'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.',
+          )
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else {
           setConnectError(`Erro de comunicação: ${e.message}`)
