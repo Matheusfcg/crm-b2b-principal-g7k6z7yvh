@@ -697,7 +697,6 @@ Deno.serve(async (req: Request) => {
           {
             method: 'POST',
             headers: getApiHeaders(returnedToken || ''),
-            body: JSON.stringify({}),
           },
           uazapiUrl,
         )
