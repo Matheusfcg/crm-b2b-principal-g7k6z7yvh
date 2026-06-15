@@ -77,6 +77,17 @@ export default function WhatsApp() {
 
         if (error) {
           console.error('[WhatsApp] Edge Function Error:', error)
+
+          if (
+            error.context?.status === 429 ||
+            error.status === 429 ||
+            error.message?.includes('429')
+          ) {
+            throw new Error(
+              'Maximum number of instances connected reached. Please check your Uazapi plan limits.',
+            )
+          }
+
           if (
             error.name === 'FunctionsFetchError' ||
             error?.message?.includes('Failed to send a request') ||
@@ -94,7 +105,8 @@ export default function WhatsApp() {
           data?.code === 'UNAUTHORIZED' ||
           data?.code === 'SERVER_UNREACHABLE' ||
           data?.code === 'TIMEOUT' ||
-          data?.code === 'INSTANCE_NOT_FOUND'
+          data?.code === 'INSTANCE_NOT_FOUND' ||
+          data?.code === 'RATE_LIMIT_REACHED'
         ) {
           let errorMsg = data.error || 'Erro desconhecido.'
           if (data?.code === 'UNAUTHORIZED') {
@@ -105,6 +117,9 @@ export default function WhatsApp() {
             errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
           } else if (data?.code === 'INSTANCE_NOT_FOUND') {
             errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
+          } else if (data?.code === 'RATE_LIMIT_REACHED') {
+            errorMsg =
+              'Maximum number of instances connected reached. Please check your Uazapi plan limits.'
           }
 
           setConnectError(errorMsg)
@@ -117,6 +132,9 @@ export default function WhatsApp() {
           }
           if (data?.code === 'INSTANCE_NOT_FOUND') {
             setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
+          }
+          if (data?.code === 'RATE_LIMIT_REACHED') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
           }
         } else {
           if (data?.uazapiUrl) {
@@ -147,6 +165,10 @@ export default function WhatsApp() {
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+        } else if (e.message?.includes('Maximum number of instances connected reached')) {
+          setConnectError(e.message)
+          toast.error(e.message)
+          setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
         } else if (
           e.name === 'FunctionsFetchError' ||
           e?.message?.includes('Failed to send a request') ||

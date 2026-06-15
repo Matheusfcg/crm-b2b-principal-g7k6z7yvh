@@ -153,6 +153,20 @@ Deno.serve(async (req: Request) => {
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       }
+      if (
+        res.status === 429 ||
+        res.parsedBody?.error === 'Maximum number of instances connected reached'
+      ) {
+        const errorMsg = 'Maximum number of instances connected reached'
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ status: 'rate_limited', last_error: errorMsg })
+          .eq('id', instanceRecord.id)
+        return new Response(JSON.stringify({ code: 'RATE_LIMIT_REACHED', error: errorMsg }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
       return new Response(
         JSON.stringify(res.parsedBody || { error: 'Erro na integração com Uazapi' }),
         { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
