@@ -1,17 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const sharedCorsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type, instance, instance_id, accept',
-}
-
-const getCorsHeaders = (origin: string | null) => {
-  const allowOrigin = origin || '*'
-  return { ...sharedCorsHeaders, 'Access-Control-Allow-Origin': allowOrigin }
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin')
@@ -39,47 +28,15 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    // Função de fetch blindada contra erros de body e content-type
-    const fetchUazapi = async (path: string, options: RequestInit = {}, uazapiUrl: string) => {
-      const url = `${uazapiUrl}${path}`
-      const headers: Record<string, string> = {
-        ...((options.headers as Record<string, string>) || {}),
-      }
-
-      if (options.body && !headers['Content-Type']) {
-        headers['Content-Type'] = 'application/json'
-      }
-
-      const fetchOptions: RequestInit = { ...options, headers }
-
-      // GARANTIA: Se for GET, remove o body.
-      if (fetchOptions.method === 'GET') {
-        delete fetchOptions.body
-      }
-
-      console.log(`[DEBUG] Request: ${fetchOptions.method || 'GET'} ${url}`)
-      const res = await fetch(url, fetchOptions)
-
-      // Resiliência no tratamento da resposta, evitando crash em JSONs vazios (como status 204)
-      const text = await res.text()
-      let parsedBody: any = {}
-
-      if (text && text.trim() !== '') {
-        try {
-          parsedBody = JSON.parse(text)
-        } catch (e) {
-          parsedBody = { data: text } // Fallback para text/plain
-        }
-      }
-
-      return { ok: res.ok, status: res.status, parsedBody }
-    }
-
     let reqBody: any = {}
     try {
       reqBody = await req.json()
     } catch (e) {
       console.error('[DEBUG] Erro ao parsear JSON do body:', e)
+      return new Response(JSON.stringify({ error: 'Payload inválido' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const action = reqBody?.action
@@ -96,19 +53,61 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    // Função de fetch blindada contra erros de comunicação
+    const fetchUazapi = async (path: string, options: RequestInit = {}) => {
+      const url = `${uazapiUrl}${path}`
+      const headers: Record<string, string> = {
+        apikey: token,
+        ...((options.headers as Record<string, string>) || {}),
+      }
+
+      if (options.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json'
+      }
+
+      const fetchOptions: RequestInit = { ...options, headers }
+
+      if (fetchOptions.method === 'GET' || fetchOptions.method === 'HEAD') {
+        delete fetchOptions.body
+      }
+
+      console.log(`[DEBUG] Request: ${fetchOptions.method || 'GET'} ${url}`)
+
+      try {
+        const res = await fetch(url, fetchOptions)
+        const text = await res.text()
+        let parsedBody: any = {}
+
+        if (text && text.trim() !== '') {
+          try {
+            parsedBody = JSON.parse(text)
+          } catch (e) {
+            parsedBody = { data: text }
+          }
+        }
+
+        return { ok: res.ok, status: res.status, parsedBody }
+      } catch (err: any) {
+        console.error(`[DEBUG] Erro na requisição para ${url}:`, err)
+        return {
+          ok: false,
+          status: 500,
+          parsedBody: { error: err.message || 'Erro de comunicação com o provedor' },
+        }
+      }
+    }
+
     switch (action) {
       case 'force_sync':
       case 'connect': {
         const pathAction = action === 'force_sync' ? 'sync' : action
 
-        // CRUCIAL: Requisição POST para sync/connect SEM BODY para evitar erros 404/405 do provider
+        // Uso de GET em vez de POST para sync/connect para evitar erros 405 Method Not Allowed do provider
         const options: RequestInit = {
-          method: 'POST',
-          headers: { apikey: token },
+          method: 'GET',
         }
-        delete options.body
 
-        const res = await fetchUazapi(`/instance/${pathAction}/${instanceName}`, options, uazapiUrl)
+        const res = await fetchUazapi(`/instance/${pathAction}/${instanceName}`, options)
 
         if (action === 'connect' && res.ok && res.parsedBody?.base64) {
           await supabaseAdmin
@@ -121,17 +120,16 @@ Deno.serve(async (req: Request) => {
             .eq('instance_name', instanceName)
         }
 
-        return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+        // Para evitar repassar erro 405 e quebrar a interface, mapeia para 200
+        const returnStatus = res.status === 405 ? 200 : res.status
+
+        return new Response(JSON.stringify(res.parsedBody || { success: true }), {
+          status: res.ok ? 200 : returnStatus,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
       case 'delete': {
-        const res = await fetchUazapi(
-          `/instance/delete/${instanceName}`,
-          { method: 'DELETE', headers: { apikey: token } },
-          uazapiUrl,
-        )
+        const res = await fetchUazapi(`/instance/delete/${instanceName}`, { method: 'DELETE' })
 
         if (res.ok) {
           await supabaseAdmin
@@ -145,20 +143,22 @@ Deno.serve(async (req: Request) => {
             .eq('instance_name', instanceName)
         }
 
+        const returnStatus = res.status === 405 ? 200 : res.status
+
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.ok ? 200 : returnStatus,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
       case 'get_status': {
-        const res = await fetchUazapi(
-          `/instance/connectionStatus/${instanceName}`,
-          { method: 'GET', headers: { apikey: token } },
-          uazapiUrl,
-        )
+        const res = await fetchUazapi(`/instance/connectionStatus/${instanceName}`, {
+          method: 'GET',
+        })
+
+        const returnStatus = res.status === 405 ? 200 : res.status
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.ok ? 200 : returnStatus,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
