@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
     const uazapiUrl = reqBody?.uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'
     const token = reqBody?.token || Deno.env.get('UAZAPI_TOKEN') || ''
 
-    if (action) {
+    if (req.method === 'POST' && action) {
       switch (action) {
         case 'force_sync': {
           const res = await fetchUazapi(
@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
         case 'connect': {
           const res = await fetchUazapi(
             `/instance/connect/${instanceId}`,
-            { method: 'GET', headers: { apikey: token } },
+            { method: 'POST', headers: { apikey: token } },
             uazapiUrl,
           )
 
