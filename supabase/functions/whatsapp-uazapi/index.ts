@@ -71,9 +71,12 @@ Deno.serve(async (req: Request) => {
         case 'force_sync':
         case 'connect': {
           const pathAction = action === 'force_sync' ? 'sync' : action
+          const options: RequestInit = { method: 'POST', headers: { apikey: token } }
+          delete options.body
+
           const res = await fetchUazapi(
             `/instance/${pathAction}/${instanceName}`,
-            { method: 'POST', headers: { apikey: token } },
+            options,
             uazapiUrl,
           )
 
@@ -88,7 +91,7 @@ Deno.serve(async (req: Request) => {
               .eq('instance_name', instanceName)
           }
 
-          return new Response(JSON.stringify(res.parsedBody), {
+          return new Response(JSON.stringify(res.parsedBody || {}), {
             status: res.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
@@ -112,7 +115,19 @@ Deno.serve(async (req: Request) => {
               .eq('instance_name', instanceName)
           }
 
-          return new Response(JSON.stringify(res.parsedBody), {
+          return new Response(JSON.stringify(res.parsedBody || {}), {
+            status: res.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+        case 'get_status': {
+          const res = await fetchUazapi(
+            `/instance/connectionStatus/${instanceName}`,
+            { method: 'GET', headers: { apikey: token } },
+            uazapiUrl,
+          )
+
+          return new Response(JSON.stringify(res.parsedBody || {}), {
             status: res.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
@@ -124,20 +139,6 @@ Deno.serve(async (req: Request) => {
           })
         }
       }
-    }
-
-    // ROTA DE STATUS (Exemplo de uso correto / Fallback)
-    if (routePath.includes('/status')) {
-      const res = await fetchUazapi(
-        `/instance/status/${instanceName}`,
-        { method: 'GET', headers: { apikey: token } },
-        uazapiUrl,
-      )
-
-      return new Response(JSON.stringify(res.parsedBody), {
-        status: res.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
     }
 
     return new Response(JSON.stringify({ error: 'Action não reconhecida' }), {
