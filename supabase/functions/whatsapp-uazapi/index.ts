@@ -134,13 +134,22 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const handleUazapiErrors = (res: any) => {
-      if (res.status === 401)
+    const handleUazapiErrors = async (res: any) => {
+      if (res.status === 401) {
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ status: 'unauthorized', last_error: 'Token inválido ou expirado (401)' })
+          .eq('id', instanceData.id)
         return new Response(
           JSON.stringify({ code: 'UNAUTHORIZED', error: 'Token inválido ou expirado (401)' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
-      if (res.status === 404)
+      }
+      if (res.status === 404) {
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ status: 'not_found', last_error: 'Instância não encontrada na Uazapi (404)' })
+          .eq('id', instanceData.id)
         return new Response(
           JSON.stringify({
             code: 'INSTANCE_NOT_FOUND',
@@ -148,7 +157,15 @@ Deno.serve(async (req: Request) => {
           }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
-      if (res.status === 429)
+      }
+      if (res.status === 429) {
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({
+            status: 'rate_limited',
+            last_error: 'Limite de requisições ou instâncias atingido (429)',
+          })
+          .eq('id', instanceData.id)
         return new Response(
           JSON.stringify({
             code: 'RATE_LIMIT_REACHED',
@@ -156,6 +173,7 @@ Deno.serve(async (req: Request) => {
           }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
+      }
       return null
     }
 
@@ -170,7 +188,7 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        const errResp = handleUazapiErrors(res)
+        const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
         return new Response(JSON.stringify(res.parsedBody || []), {
@@ -189,7 +207,7 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        const errResp = handleUazapiErrors(res)
+        const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
         if (res.ok) {
@@ -215,7 +233,7 @@ Deno.serve(async (req: Request) => {
           method: 'GET',
         })
 
-        const errResp = handleUazapiErrors(res)
+        const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
         if (res.ok && res.parsedBody) {
@@ -235,13 +253,16 @@ Deno.serve(async (req: Request) => {
               })
               .eq('id', instanceData.id)
           } else if (['connecting', 'qrcode'].includes(state) || qrcode) {
+            const updatePayload: any = {
+              status: 'connecting',
+              updated_at: new Date().toISOString(),
+            }
+            if (qrcode && typeof qrcode === 'string' && qrcode.length > 10) {
+              updatePayload.qrcode = qrcode
+            }
             await supabaseAdmin
               .from('whatsapp_instances')
-              .update({
-                status: 'connecting',
-                qrcode: qrcode || null,
-                updated_at: new Date().toISOString(),
-              })
+              .update(updatePayload)
               .eq('id', instanceData.id)
           }
         }
@@ -268,7 +289,7 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({ number, text, readchat: true }),
         })
 
-        const errResp = handleUazapiErrors(res)
+        const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
@@ -291,7 +312,7 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        const errResp = handleUazapiErrors(res)
+        const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
         return new Response(JSON.stringify(res.parsedBody || {}), {

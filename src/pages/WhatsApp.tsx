@@ -254,6 +254,9 @@ export default function WhatsApp() {
           const diffSeconds = Math.floor((now - updatedAt) / 1000)
           if (diffSeconds >= 0 && diffSeconds < 180) {
             initialCountdown = 180 - diffSeconds
+          } else if (diffSeconds >= 180 && diffSeconds < 240) {
+            // Allow a small grace period just in case the backend hasn't synced yet
+            initialCountdown = 240 - diffSeconds
           } else {
             data.status = 'timeout'
             data.last_error = 'O tempo limite do QR Code expirou.'
@@ -336,8 +339,18 @@ export default function WhatsApp() {
   useEffect(() => {
     if (instance?.status === 'open' || instance?.status === 'connected') {
       setQrCountdown(null)
+      setConnectError(null)
+    } else if (
+      instance?.status === 'unauthorized' ||
+      instance?.status === 'not_found' ||
+      instance?.status === 'rate_limited' ||
+      instance?.status === 'timeout'
+    ) {
+      if (instance.last_error) {
+        setConnectError(instance.last_error)
+      }
     }
-  }, [instance?.status])
+  }, [instance?.status, instance?.last_error])
 
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -358,7 +371,11 @@ export default function WhatsApp() {
                 instanceName: instance.instance_name,
               },
             })
-            .then(({ data }) => {
+            .then(({ data, error }) => {
+              if (error) {
+                console.error('[WhatsApp] Polling sync error:', error)
+                return
+              }
               if (
                 data &&
                 (data.state === 'open' || data.state === 'connected' || data.status === 'connected')
