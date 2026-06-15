@@ -1,7 +1,9 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { corsHeaders as sharedCorsHeaders } from '../_shared/cors.ts'
 
 const corsHeaders = {
+  ...sharedCorsHeaders,
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
   'Access-Control-Allow-Headers':
@@ -40,14 +42,21 @@ Deno.serve(async (req: Request) => {
     const instanceId = reqBody?.instanceId
     const instanceName = reqBody?.instanceName || reqBody?.instance_name
 
-    if (!action || (!instanceId && !instanceName)) {
+    if (!action) {
       return new Response(
-        JSON.stringify({ error: 'Action e instanceId (ou instanceName) são obrigatórios.' }),
+        JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         },
       )
+    }
+
+    if (!instanceId && !instanceName) {
+      return new Response(JSON.stringify({ error: 'Instance ID ou Name não fornecido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     let query = supabaseAdmin.from('whatsapp_instances').select('*')
@@ -56,15 +65,11 @@ Deno.serve(async (req: Request) => {
     } else {
       query = query.eq('instance_name', instanceName)
     }
+    const { data: instanceData, error: instanceError } = await query.maybeSingle()
 
-    const { data: instances, error: fetchError } = await query.limit(1)
-
-    if (fetchError || !instances || instances.length === 0) {
+    if (instanceError || !instanceData) {
       return new Response(
-        JSON.stringify({
-          code: 'INSTANCE_CONFIG_NOT_FOUND',
-          error: 'Instância não encontrada no banco de dados.',
-        }),
+        JSON.stringify({ error: 'Instância não encontrada no banco.', code: 'INSTANCE_NOT_FOUND' }),
         {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -72,15 +77,14 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const instanceRecord = instances[0]
-    const serverUrl = instanceRecord.server_url || 'https://api.uazapi.com'
-    const token = instanceRecord.instance_token
+    const serverUrl = instanceData.server_url || 'https://api.uazapi.com'
+    const token = instanceData.instance_token
 
     if (!token) {
       return new Response(
         JSON.stringify({
+          error: 'Token Uazapi não configurado para esta instância.',
           code: 'UAZAPI_TOKEN_MISSING',
-          error: 'Token da instância não configurado.',
         }),
         {
           status: 400,
@@ -132,180 +136,149 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const handleUazapiError = async (res: any) => {
-      if (res.status === 401) {
-        await supabaseAdmin
-          .from('whatsapp_instances')
-          .update({ status: 'unauthorized', last_error: 'Token inválido ou expirado' })
-          .eq('id', instanceRecord.id)
-        return new Response(JSON.stringify({ code: 'UNAUTHORIZED', error: 'Não autorizado' }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      if (res.status === 404) {
-        await supabaseAdmin
-          .from('whatsapp_instances')
-          .update({ status: 'not_found', last_error: 'Instância não encontrada na Uazapi' })
-          .eq('id', instanceRecord.id)
+    const handleUazapiErrors = (res: any) => {
+      if (res.status === 401)
         return new Response(
-          JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instância não encontrada' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          JSON.stringify({ code: 'UNAUTHORIZED', error: 'Token inválido ou expirado (401)' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
-      }
-      if (
-        res.status === 429 ||
-        res.parsedBody?.error === 'Maximum number of instances connected reached'
-      ) {
-        const errorMsg = 'Maximum number of instances connected reached'
-        await supabaseAdmin
-          .from('whatsapp_instances')
-          .update({ status: 'rate_limited', last_error: errorMsg })
-          .eq('id', instanceRecord.id)
-        return new Response(JSON.stringify({ code: 'RATE_LIMIT_REACHED', error: errorMsg }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      return new Response(
-        JSON.stringify(res.parsedBody || { error: 'Erro na integração com Uazapi' }),
-        {
-          status: res.status >= 400 ? 200 : res.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      if (res.status === 404)
+        return new Response(
+          JSON.stringify({
+            code: 'INSTANCE_NOT_FOUND',
+            error: 'Instância não encontrada na Uazapi (404)',
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      if (res.status === 429)
+        return new Response(
+          JSON.stringify({
+            code: 'RATE_LIMIT_REACHED',
+            error: 'Limite de requisições ou instâncias atingido (429)',
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      return null
     }
 
     switch (action) {
+      case 'get_conversations': {
+        const res = await fetchUazapi(`/chat/find`, {
+          method: 'POST',
+          body: JSON.stringify({
+            sort: '-wa_lastMsgTimestamp',
+            limit: 50,
+            offset: 0,
+          }),
+        })
+
+        const errResp = handleUazapiErrors(res)
+        if (errResp) return errResp
+
+        return new Response(JSON.stringify(res.parsedBody || []), {
+          status: res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       case 'connect': {
         const res = await fetchUazapi(`/instance/connect`, {
           method: 'POST',
           body: JSON.stringify({ browser: 'auto' }),
         })
 
-        if (res.ok && res.parsedBody?.base64) {
-          const qrcode = res.parsedBody.base64
+        const errResp = handleUazapiErrors(res)
+        if (errResp) return errResp
+
+        if (res.ok) {
           await supabaseAdmin
             .from('whatsapp_instances')
             .update({
-              qrcode: qrcode,
               status: 'connecting',
+              qrcode: res.parsedBody?.base64 || res.parsedBody?.qrcode || null,
               last_error: null,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', instanceRecord.id)
-
-          return new Response(
-            JSON.stringify({
-              instance: {
-                ...instanceRecord,
-                status: 'connecting',
-                qrcode: qrcode,
-                last_error: null,
-              },
-            }),
-            {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            },
-          )
+            .eq('id', instanceData.id)
         }
 
-        if (!res.ok) return handleUazapiError(res)
-
         return new Response(JSON.stringify(res.parsedBody || { success: true }), {
-          status: res.status >= 400 ? 200 : res.status,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
 
       case 'force_sync': {
-        const res = await fetchUazapi(`/instance/status`, { method: 'GET' })
+        const res = await fetchUazapi(`/instance/status`, {
+          method: 'GET',
+        })
 
-        if (res.ok) {
-          const rawStatus = res.parsedBody?.status || res.parsedBody?.state || 'disconnected'
-          const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : 'disconnected'
-          const qrcode = res.parsedBody?.qrcode || res.parsedBody?.base64 || null
+        const errResp = handleUazapiErrors(res)
+        if (errResp) return errResp
 
-          let dbStatus = 'disconnected'
-          let updateData: any = { updated_at: new Date().toISOString() }
+        if (res.ok && res.parsedBody) {
+          const state =
+            res.parsedBody.state || res.parsedBody.status || res.parsedBody.instance?.state
+          const qrcode =
+            res.parsedBody.base64 || res.parsedBody.qrcode || res.parsedBody.instance?.qrcode
 
-          if (['connected', 'open', 'loggedin'].includes(status)) {
-            dbStatus = 'connected'
-            updateData.status = dbStatus
-            updateData.qrcode = null
-            updateData.last_connection = new Date().toISOString()
-          } else if (['connecting', 'qrcode'].includes(status)) {
-            dbStatus = 'connecting'
-            updateData.status = dbStatus
-            if (qrcode) updateData.qrcode = qrcode
-          } else {
-            updateData.status = dbStatus
+          if (['connected', 'open', 'loggedIn'].includes(state)) {
+            await supabaseAdmin
+              .from('whatsapp_instances')
+              .update({
+                status: 'connected',
+                qrcode: null,
+                last_connection: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', instanceData.id)
+          } else if (['connecting', 'qrcode'].includes(state) || qrcode) {
+            await supabaseAdmin
+              .from('whatsapp_instances')
+              .update({
+                status: 'connecting',
+                qrcode: qrcode || null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', instanceData.id)
           }
-
-          await supabaseAdmin
-            .from('whatsapp_instances')
-            .update(updateData)
-            .eq('id', instanceRecord.id)
-
-          return new Response(
-            JSON.stringify({
-              instance: {
-                ...instanceRecord,
-                status: dbStatus,
-                qrcode: updateData.qrcode || null,
-                last_connection: updateData.last_connection || instanceRecord.last_connection,
-              },
-            }),
-            {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            },
-          )
         }
 
-        if (!res.ok) return handleUazapiError(res)
-
-        return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status >= 400 ? 200 : res.status,
+        return new Response(JSON.stringify(res.parsedBody || { success: true }), {
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
 
       case 'send_message': {
-        const number = reqBody.number || reqBody.remoteJid
-        const text = reqBody.text || reqBody.message
+        const number = reqBody?.number || reqBody?.remoteJid
+        const text = reqBody?.text || reqBody?.message
+
+        if (!number || !text) {
+          return new Response(JSON.stringify({ error: 'Missing number or text' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
 
         const res = await fetchUazapi(`/send/text`, {
           method: 'POST',
-          body: JSON.stringify({ number, text }),
+          body: JSON.stringify({ number, text, readchat: true }),
         })
 
-        if (!res.ok) return handleUazapiError(res)
+        const errResp = handleUazapiErrors(res)
+        if (errResp) return errResp
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status >= 400 ? 200 : res.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      case 'get_conversations': {
-        const res = await fetchUazapi(`/chat/find`, {
-          method: 'POST',
-          body: JSON.stringify({ sort: '-wa_lastMsgTimestamp', limit: 50, offset: 0 }),
-        })
-
-        if (!res.ok) return handleUazapiError(res)
-
-        return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status >= 400 ? 200 : res.status,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
 
       case 'setup_webhook': {
-        const webhookUrl =
-          reqBody.webhookUrl || `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-uazapi`
+        const edgeFunctionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-uazapi`
+        const webhookUrl = reqBody?.url || edgeFunctionUrl
+
         const res = await fetchUazapi(`/webhook`, {
           method: 'POST',
           body: JSON.stringify({
@@ -316,19 +289,23 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        if (!res.ok) return handleUazapiError(res)
+        const errResp = handleUazapiErrors(res)
+        if (errResp) return errResp
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status >= 400 ? 200 : res.status,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
 
       default: {
-        return new Response(JSON.stringify({ error: 'Action não reconhecida.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
     }
   } catch (err: any) {

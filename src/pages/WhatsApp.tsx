@@ -32,7 +32,7 @@ export default function WhatsApp() {
   const [configOpen, setConfigOpen] = useState(false)
   const [configData, setConfigData] = useState({
     instance_name: '',
-    server_url: '',
+    server_url: 'https://api.uazapi.com',
     instance_token: '',
   })
   const [savingConfig, setSavingConfig] = useState(false)
@@ -96,7 +96,8 @@ export default function WhatsApp() {
           data?.code === 'SERVER_UNREACHABLE' ||
           data?.code === 'TIMEOUT' ||
           data?.code === 'INSTANCE_NOT_FOUND' ||
-          data?.code === 'RATE_LIMIT_REACHED'
+          data?.code === 'RATE_LIMIT_REACHED' ||
+          data?.code === 'UAZAPI_TOKEN_MISSING'
         ) {
           let errorMsg = data.error || 'Erro desconhecido.'
           if (data?.code === 'UNAUTHORIZED') {
@@ -110,6 +111,9 @@ export default function WhatsApp() {
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
               'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.'
+          } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
+            errorMsg =
+              'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
           }
 
           setConnectError(errorMsg)
@@ -236,7 +240,7 @@ export default function WhatsApp() {
 
         setConfigData({
           instance_name: data.instance_name || '',
-          server_url: data.server_url || '',
+          server_url: data.server_url || 'https://api.uazapi.com',
           instance_token: data.instance_token || '',
         })
 
