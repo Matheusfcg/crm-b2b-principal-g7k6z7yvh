@@ -349,6 +349,7 @@ Deno.serve(async (req: Request) => {
       action !== 'create' &&
       action !== 'delete'
     ) {
+      console.error(`[ERROR] Missing instance_external_id for instance ${internalInstanceName}`)
       return new Response(
         JSON.stringify({
           success: false,
@@ -367,7 +368,14 @@ Deno.serve(async (req: Request) => {
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
-      let payload = options.body ? JSON.parse(options.body as string) : null
+      let payload = null
+      if (options.body && typeof options.body === 'string') {
+        try {
+          payload = JSON.parse(options.body)
+        } catch (e) {
+          payload = options.body
+        }
+      }
 
       if (payload && typeof payload === 'object') {
         delete payload.instanceId
@@ -376,6 +384,10 @@ Deno.serve(async (req: Request) => {
         delete payload.instance_id
         delete payload.instance
         options.body = JSON.stringify(payload)
+      }
+
+      if (options.method === 'GET') {
+        delete options.body
       }
 
       const headersObj = (options.headers as any) || {}
@@ -405,16 +417,19 @@ Deno.serve(async (req: Request) => {
           ? `${tokenUsed.substring(0, 4)}...${tokenUsed.substring(tokenUsed.length - 4)}`
           : '***'
 
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          message: 'Uazapi API Request',
-          endpoint: url,
-          instance_name_sent: instanceNameSent,
-          token_used: maskedToken,
-          payload: payload,
-        }),
-      )
+      const logObject: any = {
+        level: 'info',
+        message: 'Uazapi API Request',
+        endpoint: url,
+        instance_name_sent: instanceNameSent,
+        token_used: maskedToken,
+      }
+
+      if (payload && Object.keys(payload).length > 0 && options.method !== 'GET') {
+        logObject.payload = payload
+      }
+
+      console.log(JSON.stringify(logObject))
 
       const controller = new AbortController()
       const timeoutId = setTimeout(
@@ -422,7 +437,11 @@ Deno.serve(async (req: Request) => {
         45000,
       )
 
-      console.log(`Enviando para: [${url}] Body: [${options.body || ''}]`)
+      if (options.method === 'GET' || !options.body || options.body === '{}') {
+        console.log(`Enviando para: [${url}]`)
+      } else {
+        console.log(`Enviando para: [${url}] Body: [${options.body}]`)
+      }
 
       const fetchOptions = {
         ...options,
@@ -659,27 +678,29 @@ Deno.serve(async (req: Request) => {
 
       let stateRes
 
+      const cleanExternalId = sanitizeInstanceName(externalIdStr)
+
       if (action === 'connect') {
-        stateRes = await fetchUazapi(`/instance/connect/${externalIdStr}`, {
+        stateRes = await fetchUazapi(`/instance/connect/${cleanExternalId}`, {
           method: 'POST',
           headers: getApiHeaders(returnedToken || ''),
           body: JSON.stringify({}),
         })
       } else {
-        stateRes = await fetchUazapi(`/instance/status/${externalIdStr}`, {
+        stateRes = await fetchUazapi(`/instance/status/${cleanExternalId}`, {
           method: 'GET',
           headers: getApiHeaders(returnedToken || ''),
         })
 
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/connectionState/${externalIdStr}`, {
+          stateRes = await fetchUazapi(`/instance/connectionState/${cleanExternalId}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || ''),
           })
         }
 
         if (stateRes.status === 404 || stateRes.status === 405) {
-          stateRes = await fetchUazapi(`/instance/connectionStatus/${externalIdStr}`, {
+          stateRes = await fetchUazapi(`/instance/connectionStatus/${cleanExternalId}`, {
             method: 'GET',
             headers: getApiHeaders(returnedToken || ''),
           })
