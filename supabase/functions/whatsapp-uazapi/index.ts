@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
     const action = reqBody?.action
     const instanceId =
       reqBody?.instanceId || reqBody?.instanceName || reqBody?.instance_name || 'rab2f9f17b6c912'
-    const uazapiUrl = reqBody?.uazapiUrl || 'https://apiwhatsvexaview.uazapi.com'
+    const uazapiUrl = 'https://apiwhatsvexaview.uazapi.com'
     const token = reqBody?.token || Deno.env.get('UAZAPI_TOKEN') || ''
 
     if (req.method === 'POST' && action) {
@@ -126,8 +126,8 @@ Deno.serve(async (req: Request) => {
           })
         }
         default: {
-          return new Response(JSON.stringify({ error: 'Action not found' }), {
-            status: 404,
+          return new Response(JSON.stringify({ error: 'Action não reconhecida' }), {
+            status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         }
@@ -148,8 +148,8 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    return new Response(JSON.stringify({ error: 'Action not found' }), {
-      status: 404,
+    return new Response(JSON.stringify({ error: 'Action não reconhecida' }), {
+      status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
