@@ -40,15 +40,50 @@ Deno.serve(async (req: Request) => {
 
     const action = reqBody?.action
     const instanceId = reqBody?.instanceId
-    const instanceName =
-      reqBody?.instanceName || reqBody?.instance_name || instanceId || 'rab2f9f17b6c912'
-    const uazapiUrl = 'https://apiwhatsvexaview.uazapi.com'
-    // Hardcoded token as a temporary bypass of environment variable retrieval issues
-    const token = reqBody?.token || '9shMWeQXKtmrtATw0IjUbAn2dHraVmLVubHVQK065MUDWPsUgp'
+    const instanceName = reqBody?.instanceName || reqBody?.instance_name
 
-    if (!action) {
+    if (!action || (!instanceId && !instanceName)) {
       return new Response(
-        JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
+        JSON.stringify({ error: 'Action e instanceId (ou instanceName) são obrigatórios.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    let query = supabaseAdmin.from('whatsapp_instances').select('*')
+    if (instanceId) {
+      query = query.eq('id', instanceId)
+    } else {
+      query = query.eq('instance_name', instanceName)
+    }
+
+    const { data: instances, error: fetchError } = await query.limit(1)
+
+    if (fetchError || !instances || instances.length === 0) {
+      return new Response(
+        JSON.stringify({
+          code: 'INSTANCE_CONFIG_NOT_FOUND',
+          error: 'Instância não encontrada no banco de dados.',
+        }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    const instanceRecord = instances[0]
+    const serverUrl = instanceRecord.server_url || 'https://api.uazapi.com'
+    const token = instanceRecord.instance_token
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({
+          code: 'UAZAPI_TOKEN_MISSING',
+          error: 'Token da instância não configurado.',
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -57,9 +92,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
-      const url = `${uazapiUrl}${path}`
+      const url = `${serverUrl.replace(/\/$/, '')}${path}`
       const headers: Record<string, string> = {
-        apikey: token,
+        token: token,
         ...((options.headers as Record<string, string>) || {}),
       }
 
@@ -99,77 +134,185 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const handleUazapiError = async (res: any) => {
+      if (res.status === 401) {
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ status: 'unauthorized', last_error: 'Token inválido ou expirado' })
+          .eq('id', instanceRecord.id)
+        return new Response(JSON.stringify({ code: 'UNAUTHORIZED', error: 'Não autorizado' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (res.status === 404) {
+        await supabaseAdmin
+          .from('whatsapp_instances')
+          .update({ status: 'not_found', last_error: 'Instância não encontrada na Uazapi' })
+          .eq('id', instanceRecord.id)
+        return new Response(
+          JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instância não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      }
+      return new Response(
+        JSON.stringify(res.parsedBody || { error: 'Erro na integração com Uazapi' }),
+        { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     switch (action) {
-      case 'force_sync':
       case 'connect': {
-        const pathAction = action === 'force_sync' ? 'sync' : action
+        const res = await fetchUazapi(`/instance/connect`, {
+          method: 'POST',
+          body: JSON.stringify({ browser: 'auto' }),
+        })
 
-        const options: RequestInit = {
-          method: 'GET',
-        }
-
-        const res = await fetchUazapi(`/instance/${pathAction}/${instanceName}`, options)
-
-        if (action === 'connect' && res.ok && res.parsedBody?.base64) {
+        if (res.ok && res.parsedBody?.base64) {
+          const qrcode = res.parsedBody.base64
           await supabaseAdmin
             .from('whatsapp_instances')
             .update({
-              qrcode: res.parsedBody.base64,
+              qrcode: qrcode,
               status: 'connecting',
+              last_error: null,
               updated_at: new Date().toISOString(),
             })
-            .eq('instance_name', instanceName)
+            .eq('id', instanceRecord.id)
+
+          return new Response(
+            JSON.stringify({
+              instance: {
+                ...instanceRecord,
+                status: 'connecting',
+                qrcode: qrcode,
+                last_error: null,
+              },
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            },
+          )
         }
 
-        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
+        if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || { success: true }), {
-          status: res.ok ? 200 : returnStatus,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      case 'delete': {
-        const res = await fetchUazapi(`/instance/delete/${instanceName}`, { method: 'DELETE' })
+
+      case 'force_sync': {
+        const res = await fetchUazapi(`/instance/status`, { method: 'GET' })
 
         if (res.ok) {
+          const status = res.parsedBody?.status || res.parsedBody?.state || 'disconnected'
+          const qrcode = res.parsedBody?.qrcode || res.parsedBody?.base64 || null
+
+          let dbStatus = 'disconnected'
+          let updateData: any = { updated_at: new Date().toISOString() }
+
+          if (['connected', 'open', 'loggedIn'].includes(status.toLowerCase())) {
+            dbStatus = 'connected'
+            updateData.status = dbStatus
+            updateData.qrcode = null
+            updateData.last_connection = new Date().toISOString()
+          } else if (['connecting', 'qrcode'].includes(status.toLowerCase())) {
+            dbStatus = 'connecting'
+            updateData.status = dbStatus
+            if (qrcode) updateData.qrcode = qrcode
+          } else {
+            updateData.status = dbStatus
+          }
+
           await supabaseAdmin
             .from('whatsapp_instances')
-            .update({
-              status: 'disconnected',
-              qrcode: null,
-              phone: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('instance_name', instanceName)
+            .update(updateData)
+            .eq('id', instanceRecord.id)
+
+          return new Response(
+            JSON.stringify({
+              instance: {
+                ...instanceRecord,
+                status: dbStatus,
+                qrcode: updateData.qrcode || null,
+                last_connection: updateData.last_connection || instanceRecord.last_connection,
+              },
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            },
+          )
         }
 
-        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
+        if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.ok ? 200 : returnStatus,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      case 'get_status': {
-        const res = await fetchUazapi(`/instance/connectionStatus/${instanceName}`, {
-          method: 'GET',
+
+      case 'send_message': {
+        const number = reqBody.number || reqBody.remoteJid
+        const text = reqBody.text || reqBody.message
+
+        const res = await fetchUazapi(`/send/text`, {
+          method: 'POST',
+          body: JSON.stringify({ number, text }),
         })
 
-        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
+        if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.ok ? 200 : returnStatus,
+          status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+
+      case 'get_conversations': {
+        const res = await fetchUazapi(`/chat/find`, {
+          method: 'POST',
+          body: JSON.stringify({ sort: '-wa_lastMsgTimestamp', limit: 50, offset: 0 }),
+        })
+
+        if (!res.ok) return handleUazapiError(res)
+
+        return new Response(JSON.stringify(res.parsedBody || {}), {
+          status: res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      case 'setup_webhook': {
+        const webhookUrl =
+          reqBody.webhookUrl || `${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-uazapi`
+        const res = await fetchUazapi(`/webhook`, {
+          method: 'POST',
+          body: JSON.stringify({
+            enabled: true,
+            url: webhookUrl,
+            events: ['messages', 'connection'],
+            excludeMessages: ['wasSentByApi'],
+          }),
+        })
+
+        if (!res.ok) return handleUazapiError(res)
+
+        return new Response(JSON.stringify(res.parsedBody || {}), {
+          status: res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       default: {
-        return new Response(
-          JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'Action não reconhecida.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
     }
   } catch (err: any) {

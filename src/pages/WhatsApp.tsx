@@ -32,8 +32,8 @@ export default function WhatsApp() {
   const [configOpen, setConfigOpen] = useState(false)
   const [configData, setConfigData] = useState({
     instance_name: '',
-    server_url: 'https://apiwhatsvexaview.uazapi.com',
-    instance_token: '8127b6a5-1564-40f3-bba1-a5540d44cd51',
+    server_url: '',
+    instance_token: '',
   })
   const [savingConfig, setSavingConfig] = useState(false)
 
@@ -219,7 +219,7 @@ export default function WhatsApp() {
 
         setConfigData({
           instance_name: data.instance_name || '',
-          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
+          server_url: data.server_url || '',
           instance_token: data.instance_token || '',
         })
 
@@ -328,24 +328,22 @@ export default function WhatsApp() {
         throw new Error('Sem conexão com a internet.')
       }
 
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
-        body: { action: 'delete', instanceId: instance?.id, instanceName: instance?.instance_name },
-      })
-      if (error) {
-        console.error('[WhatsApp] Disconnect Error:', error)
-        if (
-          error.name === 'FunctionsFetchError' ||
-          error?.message?.includes('Failed to send a request') ||
-          error?.message?.includes('fetch failed')
-        ) {
-          throw new Error(`Falha ao conectar com a Edge Function. Detalhe: ${error.message}`)
-        }
-        throw new Error(error.message || 'Erro ao comunicar com a Edge Function')
+      if (instance?.id) {
+        const { error } = await supabase
+          .from('whatsapp_instances')
+          .update({
+            status: 'disconnected',
+            qrcode: null,
+            phone: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', instance.id)
+        if (error) throw error
       }
-      if (data?.error) throw new Error(data.error)
+
       addLog('Instância desconectada e deletada com sucesso.')
       toast.success('WhatsApp desconectado.')
-      setInstance(null)
+      setInstance((prev: any) => (prev ? { ...prev, status: 'disconnected', qrcode: null } : null))
     } catch (error: any) {
       addLog(`Erro ao desconectar: ${error.message}`)
       toast.error(`Erro ao desconectar: ${error.message}`)
@@ -462,7 +460,7 @@ export default function WhatsApp() {
                 <Label htmlFor="server_url">Server URL</Label>
                 <Input
                   id="server_url"
-                  placeholder="https://apiwhatsvexaview.uazapi.com"
+                  placeholder="https://api.uazapi.com ou https://seusubdominio.uazapi.com"
                   value={configData.server_url}
                   onChange={(e) =>
                     setConfigData((prev) => ({ ...prev, server_url: e.target.value }))
@@ -473,7 +471,7 @@ export default function WhatsApp() {
                 <Label htmlFor="instance_token">Instance Token / API Key</Label>
                 <Input
                   id="instance_token"
-                  placeholder="ex: 8127b6a5-1564-40f3-bba1-a5540d44cd51"
+                  placeholder="Cole o token UUID da instancia Uazapi"
                   value={configData.instance_token}
                   onChange={(e) =>
                     setConfigData((prev) => ({ ...prev, instance_token: e.target.value }))
