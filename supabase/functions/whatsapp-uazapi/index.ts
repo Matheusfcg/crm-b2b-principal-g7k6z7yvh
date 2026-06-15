@@ -206,18 +206,19 @@ Deno.serve(async (req: Request) => {
         const res = await fetchUazapi(`/instance/status`, { method: 'GET' })
 
         if (res.ok) {
-          const status = res.parsedBody?.status || res.parsedBody?.state || 'disconnected'
+          const rawStatus = res.parsedBody?.status || res.parsedBody?.state || 'disconnected'
+          const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : 'disconnected'
           const qrcode = res.parsedBody?.qrcode || res.parsedBody?.base64 || null
 
           let dbStatus = 'disconnected'
           let updateData: any = { updated_at: new Date().toISOString() }
 
-          if (['connected', 'open', 'loggedIn'].includes(status.toLowerCase())) {
+          if (['connected', 'open', 'loggedin'].includes(status)) {
             dbStatus = 'connected'
             updateData.status = dbStatus
             updateData.qrcode = null
             updateData.last_connection = new Date().toISOString()
-          } else if (['connecting', 'qrcode'].includes(status.toLowerCase())) {
+          } else if (['connecting', 'qrcode'].includes(status)) {
             dbStatus = 'connecting'
             updateData.status = dbStatus
             if (qrcode) updateData.qrcode = qrcode
