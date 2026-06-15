@@ -1,9 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { corsHeaders as sharedCorsHeaders } from '../_shared/cors.ts'
 
 const corsHeaders = {
-  ...sharedCorsHeaders,
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
   'Access-Control-Allow-Headers':
