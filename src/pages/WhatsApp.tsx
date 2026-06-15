@@ -81,10 +81,12 @@ export default function WhatsApp() {
           if (
             error.context?.status === 429 ||
             error.status === 429 ||
-            error.message?.includes('429')
+            error.message?.includes('429') ||
+            error.message?.includes('Maximum number of instances connected reached') ||
+            error.message?.includes('RATE_LIMIT_REACHED')
           ) {
             throw new Error(
-              'Maximum number of instances connected reached. Please check your Uazapi plan limits.',
+              'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.',
             )
           }
 
@@ -119,7 +121,7 @@ export default function WhatsApp() {
             errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
-              'Maximum number of instances connected reached. Please check your Uazapi plan limits.'
+              'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.'
           }
 
           setConnectError(errorMsg)
@@ -165,9 +167,14 @@ export default function WhatsApp() {
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-        } else if (e.message?.includes('Maximum number of instances connected reached')) {
-          setConnectError(e.message)
-          toast.error(e.message)
+        } else if (
+          e.message?.includes('Limite de instâncias atingido') ||
+          e.message?.includes('Maximum number of instances connected reached')
+        ) {
+          const msg =
+            'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.'
+          setConnectError(msg)
+          toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
         } else if (
           e.name === 'FunctionsFetchError' ||
