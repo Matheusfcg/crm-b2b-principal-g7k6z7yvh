@@ -1,22 +1,21 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { corsHeaders as sharedCorsHeaders } from '../_shared/cors.ts'
+
+const corsHeaders = {
+  ...sharedCorsHeaders,
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+}
 
 Deno.serve(async (req: Request) => {
-  // Tratamento de preflight CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders })
-  }
+  const origin = req.headers.get('Origin') || 'unknown'
+  console.log(`[DEBUG] Incoming request from Origin: ${origin}`)
 
-  // Validação de Método: Aceita explicitamente apenas requisições POST
-  if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Método não suportado. Apenas requisições POST são aceitas.' }),
-      {
-        status: 405,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   try {
@@ -57,7 +56,6 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Função de fetch blindada contra erros de comunicação
     const fetchUazapi = async (path: string, options: RequestInit = {}) => {
       const url = `${uazapiUrl}${path}`
       const headers: Record<string, string> = {
@@ -106,7 +104,6 @@ Deno.serve(async (req: Request) => {
       case 'connect': {
         const pathAction = action === 'force_sync' ? 'sync' : action
 
-        // Uso de GET em vez de POST para sync/connect para evitar erros 405 Method Not Allowed do provider
         const options: RequestInit = {
           method: 'GET',
         }
@@ -124,7 +121,6 @@ Deno.serve(async (req: Request) => {
             .eq('instance_name', instanceName)
         }
 
-        // Para evitar repassar erro 405 ou 404 e quebrar a interface, mapeia para 200
         const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
 
         return new Response(JSON.stringify(res.parsedBody || { success: true }), {
