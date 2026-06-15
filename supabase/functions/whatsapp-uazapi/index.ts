@@ -1,11 +1,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { getCorsHeaders } from '../_shared/cors.ts'
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
-  const origin = req.headers.get('Origin')
-  const corsHeaders = getCorsHeaders(origin)
-
   // Tratamento de preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders })
@@ -30,7 +27,10 @@ Deno.serve(async (req: Request) => {
 
     let reqBody: any = {}
     try {
-      reqBody = await req.json()
+      const text = await req.text()
+      if (text) {
+        reqBody = JSON.parse(text)
+      }
     } catch (e) {
       console.error('[DEBUG] Erro ao parsear JSON do body:', e)
       return new Response(JSON.stringify({ error: 'Payload inválido' }), {
@@ -47,10 +47,13 @@ Deno.serve(async (req: Request) => {
     const token = reqBody?.token || Deno.env.get('UAZAPI_TOKEN') || ''
 
     if (!action) {
-      return new Response(JSON.stringify({ error: 'Action não reconhecida' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     // Função de fetch blindada contra erros de comunicação
@@ -120,8 +123,8 @@ Deno.serve(async (req: Request) => {
             .eq('instance_name', instanceName)
         }
 
-        // Para evitar repassar erro 405 e quebrar a interface, mapeia para 200
-        const returnStatus = res.status === 405 ? 200 : res.status
+        // Para evitar repassar erro 405 ou 404 e quebrar a interface, mapeia para 200
+        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
 
         return new Response(JSON.stringify(res.parsedBody || { success: true }), {
           status: res.ok ? 200 : returnStatus,
@@ -143,7 +146,7 @@ Deno.serve(async (req: Request) => {
             .eq('instance_name', instanceName)
         }
 
-        const returnStatus = res.status === 405 ? 200 : res.status
+        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
           status: res.ok ? 200 : returnStatus,
@@ -155,7 +158,7 @@ Deno.serve(async (req: Request) => {
           method: 'GET',
         })
 
-        const returnStatus = res.status === 405 ? 200 : res.status
+        const returnStatus = res.status === 405 || res.status === 404 ? 200 : res.status
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
           status: res.ok ? 200 : returnStatus,
@@ -163,10 +166,13 @@ Deno.serve(async (req: Request) => {
         })
       }
       default: {
-        return new Response(JSON.stringify({ error: 'Action não reconhecida' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
     }
   } catch (err: any) {
