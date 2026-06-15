@@ -184,7 +184,11 @@ Deno.serve(async (req: Request) => {
       case 'connect': {
         const res = await fetchUazapi(`/instance/connect`, {
           method: 'POST',
-          body: JSON.stringify({ browser: 'auto' }),
+          body: JSON.stringify({
+            browser: 'auto',
+            timeout: 180000,
+            keepAlive: true,
+          }),
         })
 
         const errResp = handleUazapiErrors(res)

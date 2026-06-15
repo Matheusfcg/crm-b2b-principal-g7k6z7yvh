@@ -29,6 +29,7 @@ interface ConnectionStatusProps {
   onConfig?: () => void
   error?: string | null
   countdown?: number | null
+  qrCountdown?: number | null
 }
 
 export function ConnectionStatus({
@@ -42,6 +43,7 @@ export function ConnectionStatus({
   onConfig,
   error,
   countdown,
+  qrCountdown,
 }: ConnectionStatusProps) {
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
@@ -175,7 +177,7 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-lg font-medium text-slate-900">Sincronizando...</h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Sincronizando com WhatsApp... Isso pode levar até 45 segundos.
+                  Preparando conexão com WhatsApp... Isso pode levar até 3 minutos.
                 </p>
               </div>
             </div>
@@ -297,17 +299,50 @@ export function ConnectionStatus({
           <CardDescription>Escaneie o código para vincular.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center min-h-[250px] p-6">
-          {qrcodeSrc ? (
-            <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300">
-              <img
-                src={qrcodeSrc}
-                alt="WhatsApp QR Code"
-                className="w-[200px] h-[200px] object-contain"
-                onError={(e) => {
-                  ;(e.target as HTMLImageElement).src =
-                    'https://img.usecurling.com/i?q=qr-code-error&color=gray'
-                }}
-              />
+          {qrcodeSrc && !isTimeout ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300 relative">
+                <img
+                  src={qrcodeSrc}
+                  alt="WhatsApp QR Code"
+                  className="w-[200px] h-[200px] object-contain"
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).src =
+                      'https://img.usecurling.com/i?q=qr-code-error&color=gray'
+                  }}
+                />
+              </div>
+              {qrCountdown !== null && qrCountdown > 0 && (
+                <div className="text-sm font-medium text-slate-600 bg-slate-100 px-4 py-1.5 rounded-full animate-pulse flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin text-slate-500" />
+                  QR Code expira em: {Math.floor(qrCountdown / 60)}:
+                  {(qrCountdown % 60).toString().padStart(2, '0')}
+                </div>
+              )}
+            </div>
+          ) : isTimeout || (error && error.toLowerCase().includes('expirado')) ? (
+            <div className="text-center flex flex-col items-center gap-4 max-w-[280px] animate-in fade-in zoom-in duration-300">
+              <div className="h-16 w-16 bg-red-50 rounded-full flex items-center justify-center">
+                <QrCode className="h-8 w-8 text-red-500 opacity-50" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">QR Code Expirado</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  O tempo limite para leitura foi atingido. Por segurança, o código foi invalidado.
+                </p>
+              </div>
+              <Button
+                onClick={onReconnect}
+                disabled={actionLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white w-full gap-2 mt-2"
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Regerar QR Code
+              </Button>
             </div>
           ) : error ? (
             <div className="text-center text-red-500 flex flex-col items-center gap-3 max-w-[250px]">

@@ -28,6 +28,7 @@ export default function WhatsApp() {
   const [logs, setLogs] = useState<string[]>([])
   const [connectError, setConnectError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [qrCountdown, setQrCountdown] = useState<number | null>(null)
 
   const [configOpen, setConfigOpen] = useState(false)
   const [configData, setConfigData] = useState({
@@ -49,7 +50,7 @@ export default function WhatsApp() {
 
       setActionLoading(true)
       setConnectError(null)
-      setCountdown(45)
+      setCountdown(180)
 
       const timer = setInterval(() => {
         setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
@@ -58,7 +59,7 @@ export default function WhatsApp() {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('TIMEOUT'))
-        }, 45000)
+        }, 180000)
       })
 
       try {
@@ -144,11 +145,18 @@ export default function WhatsApp() {
             setInstance(data.instance)
             if (data.instance.status === 'open' || data.instance.status === 'connected') {
               toast.success('WhatsApp Conectado.')
-            } else if (data.instance.status === 'qrcode' || data.instance.qrcode) {
+              setQrCountdown(null)
+            } else if (
+              data.instance.status === 'qrcode' ||
+              data.instance.qrcode ||
+              data.instance.status === 'connecting'
+            ) {
               toast.info('QR Code aguardando leitura.')
+              setQrCountdown(180)
             } else {
               setConnectError('Status desconhecido ou falha na conexão.')
               setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+              setQrCountdown(null)
             }
           }
         }
@@ -236,16 +244,31 @@ export default function WhatsApp() {
         if (data.qrcode && (typeof data.qrcode !== 'string' || data.qrcode.length < 10)) {
           data.qrcode = null
         }
+
+        let initialCountdown = null
+        if ((data.status === 'connecting' || data.status === 'qrcode') && data.qrcode) {
+          const updatedAt = data.updated_at
+            ? new Date(data.updated_at).getTime()
+            : new Date().getTime()
+          const now = new Date().getTime()
+          const diffSeconds = Math.floor((now - updatedAt) / 1000)
+          if (diffSeconds >= 0 && diffSeconds < 180) {
+            initialCountdown = 180 - diffSeconds
+          } else {
+            data.status = 'timeout'
+            data.last_error = 'O tempo limite do QR Code expirou.'
+            setConnectError('O QR Code anterior expirou. Gere um novo.')
+          }
+        }
+
         setInstance(data)
+        if (initialCountdown) setQrCountdown(initialCountdown)
 
         setConfigData({
           instance_name: data.instance_name || '',
           server_url: data.server_url || 'https://api.uazapi.com',
           instance_token: data.instance_token || '',
         })
-
-        // We now rely on webhooks for real-time status updates instead of polling on mount.
-        // Removed automatic checkStatusWithTimeout call to avoid 401/404 errors.
       } else {
         setInstance(null)
       }
@@ -309,6 +332,74 @@ export default function WhatsApp() {
       setSavingConfig(false)
     }
   }
+
+  useEffect(() => {
+    if (instance?.status === 'open' || instance?.status === 'connected') {
+      setQrCountdown(null)
+    }
+  }, [instance?.status])
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    let syncTimer: NodeJS.Timeout
+
+    if (qrCountdown !== null && qrCountdown > 0) {
+      timer = setInterval(() => {
+        setQrCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0))
+      }, 1000)
+
+      syncTimer = setInterval(() => {
+        if (instance && (instance.status === 'connecting' || instance.status === 'qrcode')) {
+          supabase.functions
+            .invoke('whatsapp-uazapi', {
+              body: {
+                action: 'force_sync',
+                instanceId: instance.id,
+                instanceName: instance.instance_name,
+              },
+            })
+            .then(({ data }) => {
+              if (
+                data &&
+                (data.state === 'open' || data.state === 'connected' || data.status === 'connected')
+              ) {
+                setQrCountdown(null)
+                fetchInstance()
+              }
+            })
+        }
+      }, 10000)
+    } else if (qrCountdown === 0) {
+      if (instance?.status === 'connecting' || instance?.status === 'qrcode') {
+        setInstance((prev: any) =>
+          prev
+            ? { ...prev, status: 'timeout', last_error: 'O tempo limite do QR Code expirou.' }
+            : prev,
+        )
+        setConnectError(
+          'O tempo limite para ler o QR Code expirou. Por favor, gere um novo código.',
+        )
+
+        if (instance?.id) {
+          supabase
+            .from('whatsapp_instances')
+            .update({
+              status: 'timeout',
+              last_error: 'Timeout na leitura do QR Code',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', instance.id)
+            .then()
+        }
+      }
+      setQrCountdown(null)
+    }
+
+    return () => {
+      clearInterval(timer)
+      clearInterval(syncTimer)
+    }
+  }, [qrCountdown, instance?.id, instance?.status, instance?.instance_name, fetchInstance])
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -422,6 +513,7 @@ export default function WhatsApp() {
                 onConfig={() => setConfigOpen(true)}
                 error={connectError}
                 countdown={countdown}
+                qrCountdown={qrCountdown}
               />
               {isConnected && instance?.id && (
                 <div className="mt-6 space-y-6">
