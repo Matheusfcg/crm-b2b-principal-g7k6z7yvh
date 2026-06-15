@@ -44,7 +44,8 @@ Deno.serve(async (req: Request) => {
     const instanceName =
       reqBody?.instanceName || reqBody?.instance_name || instanceId || 'rab2f9f17b6c912'
     const uazapiUrl = 'https://apiwhatsvexaview.uazapi.com'
-    const token = reqBody?.token || Deno.env.get('UAZAPI_TOKEN') || ''
+    // Hardcoded token as a temporary bypass of environment variable retrieval issues
+    const token = reqBody?.token || '9shMWeQXKtmrtATw0IjUbAn2dHraVmLVubHVQK065MUDWPsUgp'
 
     if (!action) {
       return new Response(
