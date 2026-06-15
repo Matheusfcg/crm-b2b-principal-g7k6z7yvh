@@ -60,32 +60,24 @@ Deno.serve(async (req: Request) => {
     const routePath = url.pathname
 
     const action = reqBody?.action
-    const instanceId =
-      reqBody?.instanceId || reqBody?.instanceName || reqBody?.instance_name || 'rab2f9f17b6c912'
+    const instanceId = reqBody?.instanceId
+    const instanceName =
+      reqBody?.instanceName || reqBody?.instance_name || instanceId || 'rab2f9f17b6c912'
     const uazapiUrl = 'https://apiwhatsvexaview.uazapi.com'
     const token = reqBody?.token || Deno.env.get('UAZAPI_TOKEN') || ''
 
     if (req.method === 'POST' && action) {
       switch (action) {
-        case 'force_sync': {
-          const res = await fetchUazapi(
-            `/instance/sync/${instanceId}`,
-            { method: 'POST', headers: { apikey: token } },
-            uazapiUrl,
-          )
-          return new Response(JSON.stringify(res.parsedBody), {
-            status: res.status,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          })
-        }
+        case 'force_sync':
         case 'connect': {
+          const pathAction = action === 'force_sync' ? 'sync' : action
           const res = await fetchUazapi(
-            `/instance/connect/${instanceId}`,
+            `/instance/${pathAction}/${instanceName}`,
             { method: 'POST', headers: { apikey: token } },
             uazapiUrl,
           )
 
-          if (res.ok && res.parsedBody?.base64) {
+          if (action === 'connect' && res.ok && res.parsedBody?.base64) {
             await supabaseAdmin
               .from('whatsapp_instances')
               .update({
@@ -93,7 +85,7 @@ Deno.serve(async (req: Request) => {
                 status: 'connecting',
                 updated_at: new Date().toISOString(),
               })
-              .eq('instance_name', instanceId)
+              .eq('instance_name', instanceName)
           }
 
           return new Response(JSON.stringify(res.parsedBody), {
@@ -103,7 +95,7 @@ Deno.serve(async (req: Request) => {
         }
         case 'delete': {
           const res = await fetchUazapi(
-            `/instance/delete/${instanceId}`,
+            `/instance/delete/${instanceName}`,
             { method: 'DELETE', headers: { apikey: token } },
             uazapiUrl,
           )
@@ -117,7 +109,7 @@ Deno.serve(async (req: Request) => {
                 phone: null,
                 updated_at: new Date().toISOString(),
               })
-              .eq('instance_name', instanceId)
+              .eq('instance_name', instanceName)
           }
 
           return new Response(JSON.stringify(res.parsedBody), {
@@ -137,7 +129,7 @@ Deno.serve(async (req: Request) => {
     // ROTA DE STATUS (Exemplo de uso correto / Fallback)
     if (routePath.includes('/status')) {
       const res = await fetchUazapi(
-        `/instance/status/${instanceId}`,
+        `/instance/status/${instanceName}`,
         { method: 'GET', headers: { apikey: token } },
         uazapiUrl,
       )
