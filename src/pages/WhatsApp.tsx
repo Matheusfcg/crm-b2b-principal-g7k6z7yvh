@@ -79,18 +79,6 @@ export default function WhatsApp() {
           console.error('[WhatsApp] Edge Function Error:', error)
 
           if (
-            error.context?.status === 429 ||
-            error.status === 429 ||
-            error.message?.includes('429') ||
-            error.message?.includes('Maximum number of instances connected reached') ||
-            error.message?.includes('RATE_LIMIT_REACHED')
-          ) {
-            throw new Error(
-              'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.',
-            )
-          }
-
-          if (
             error.name === 'FunctionsFetchError' ||
             error?.message?.includes('Failed to send a request') ||
             error?.message?.includes('fetch failed')

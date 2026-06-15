@@ -139,7 +139,7 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'unauthorized', last_error: 'Token inválido ou expirado' })
           .eq('id', instanceRecord.id)
         return new Response(JSON.stringify({ code: 'UNAUTHORIZED', error: 'Não autorizado' }), {
-          status: 401,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
           .eq('id', instanceRecord.id)
         return new Response(
           JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instância não encontrada' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       }
       if (
@@ -163,13 +163,16 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'rate_limited', last_error: errorMsg })
           .eq('id', instanceRecord.id)
         return new Response(JSON.stringify({ code: 'RATE_LIMIT_REACHED', error: errorMsg }), {
-          status: 429,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
       return new Response(
         JSON.stringify(res.parsedBody || { error: 'Erro na integração com Uazapi' }),
-        { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        {
+          status: res.status >= 400 ? 200 : res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
       )
     }
 
@@ -211,7 +214,7 @@ Deno.serve(async (req: Request) => {
         if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || { success: true }), {
-          status: res.status,
+          status: res.status >= 400 ? 200 : res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -264,7 +267,7 @@ Deno.serve(async (req: Request) => {
         if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.status >= 400 ? 200 : res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -281,7 +284,7 @@ Deno.serve(async (req: Request) => {
         if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.status >= 400 ? 200 : res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -295,7 +298,7 @@ Deno.serve(async (req: Request) => {
         if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.status >= 400 ? 200 : res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -316,7 +319,7 @@ Deno.serve(async (req: Request) => {
         if (!res.ok) return handleUazapiError(res)
 
         return new Response(JSON.stringify(res.parsedBody || {}), {
-          status: res.status,
+          status: res.status >= 400 ? 200 : res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
