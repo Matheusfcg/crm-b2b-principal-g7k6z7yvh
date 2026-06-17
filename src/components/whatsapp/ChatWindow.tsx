@@ -100,6 +100,21 @@ export function ChatWindow({
           text,
         },
       })
+
+      const isRateLimited =
+        (error as any)?.status === 429 ||
+        error?.message?.includes('429') ||
+        (error?.name === 'FunctionsHttpError' && (error as any).context?.status === 429) ||
+        data?.code === 'RATE_LIMIT_REACHED'
+
+      if (isRateLimited) {
+        toast.error(
+          'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
+        )
+        setInput(text)
+        return
+      }
+
       if (error) throw new Error(error.message || 'Erro ao comunicar com a API')
       if (data?.error) throw new Error(data.error)
       scrollToBottom(true)

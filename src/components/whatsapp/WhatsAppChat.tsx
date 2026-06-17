@@ -91,6 +91,22 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
           const res = await supabase.functions.invoke('whatsapp-uazapi', {
             body: { action: 'get_conversations', instanceName: instance.instance_name },
           })
+
+          const isRateLimited =
+            (res.error as any)?.status === 429 ||
+            res.error?.message?.includes('429') ||
+            (res.error?.name === 'FunctionsHttpError' &&
+              (res.error as any).context?.status === 429) ||
+            res.data?.code === 'RATE_LIMIT_REACHED'
+
+          if (isRateLimited) {
+            const msg =
+              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
+            setSyncError(msg)
+            toast.error(msg)
+            return
+          }
+
           if (res.error || res.data?.error) {
             setSyncError(
               'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
@@ -217,6 +233,20 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             text: textToSend,
           },
         })
+
+        const isRateLimited =
+          (error as any)?.status === 429 ||
+          error?.message?.includes('429') ||
+          (error?.name === 'FunctionsHttpError' && (error as any).context?.status === 429) ||
+          data?.code === 'RATE_LIMIT_REACHED'
+
+        if (isRateLimited) {
+          toast.error(
+            'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
+          )
+          setReplyText(textToSend)
+          return
+        }
 
         if (error || data?.error) {
           toast.error(data?.error || error?.message || 'Erro ao enviar mensagem.')
