@@ -79,6 +79,12 @@ export default function WhatsApp() {
         if (error) {
           console.error('[WhatsApp] Edge Function Error:', error)
 
+          if ((error as any).status === 429 || error.message?.includes('429')) {
+            throw new Error(
+              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
+            )
+          }
+
           if (
             error.name === 'FunctionsFetchError' ||
             error?.message?.includes('Failed to send a request') ||
@@ -111,7 +117,7 @@ export default function WhatsApp() {
             errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
-              'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.'
+              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.'
           } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
             errorMsg =
               'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
@@ -169,10 +175,12 @@ export default function WhatsApp() {
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else if (
           e.message?.includes('Limite de instâncias atingido') ||
-          e.message?.includes('Maximum number of instances connected reached')
+          e.message?.includes('Maximum number of instances connected reached') ||
+          e.message?.includes('Limite de requisições atingido') ||
+          e.status === 429
         ) {
           const msg =
-            'Limite de instâncias atingido na Uazapi. Por favor, remova instâncias inativas no painel da Uazapi para continuar.'
+            'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.'
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
@@ -361,7 +369,11 @@ export default function WhatsApp() {
         setQrCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0))
       }, 1000)
 
+      let isPollingPaused = false
+
       syncTimer = setInterval(() => {
+        if (isPollingPaused) return
+
         if (instance && (instance.status === 'connecting' || instance.status === 'qrcode')) {
           supabase.functions
             .invoke('whatsapp-uazapi', {
@@ -372,6 +384,23 @@ export default function WhatsApp() {
               },
             })
             .then(({ data, error }) => {
+              const isRateLimited =
+                (error as any)?.status === 429 ||
+                error?.message?.includes('429') ||
+                data?.code === 'RATE_LIMIT_REACHED'
+
+              if (isRateLimited) {
+                isPollingPaused = true
+                toast.error(
+                  'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
+                )
+
+                setTimeout(() => {
+                  isPollingPaused = false
+                }, 30000)
+                return
+              }
+
               if (error) {
                 console.error('[WhatsApp] Polling sync error:', error)
                 return

@@ -163,13 +163,15 @@ Deno.serve(async (req: Request) => {
           .from('whatsapp_instances')
           .update({
             status: 'rate_limited',
-            last_error: 'Limite de requisições ou instâncias atingido (429)',
+            last_error:
+              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
           })
           .eq('id', instanceData.id)
         return new Response(
           JSON.stringify({
             code: 'RATE_LIMIT_REACHED',
-            error: 'Limite de requisições ou instâncias atingido (429)',
+            error:
+              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
           }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
