@@ -78,6 +78,17 @@ export default function WhatsApp() {
 
         if (error) {
           console.error('[WhatsApp] Edge Function Error:', error)
+          if (
+            error.name === 'FunctionsHttpError' &&
+            error.context &&
+            typeof error.context.json === 'function'
+          ) {
+            try {
+              error.contextBody = await error.context.clone().json()
+            } catch (e) {
+              // ignore
+            }
+          }
           throw error // Let the catch block handle all errors gracefully
         }
 
@@ -152,28 +163,32 @@ export default function WhatsApp() {
         }
       } catch (e: any) {
         console.error('[WhatsApp] Exception in checkStatusWithTimeout:', e)
+
+        const errBody = e.contextBody || {}
+        const isRateLimited =
+          e.message?.includes('Limite de instâncias atingido') ||
+          e.message?.includes('Maximum number of instances connected reached') ||
+          e.message?.includes('Limite de requisições atingido') ||
+          e.message?.includes('429') ||
+          e.message?.includes('Fetch Error: HTTP 429') ||
+          e.status === 429 ||
+          errBody?.code === 'RATE_LIMIT_REACHED' ||
+          (e.name === 'FunctionsHttpError' && (e.status === 429 || e.context?.status === 429))
+
         if (e.message === 'TIMEOUT') {
           const msg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-        } else if (
-          e.message?.includes('Limite de instâncias atingido') ||
-          e.message?.includes('Maximum number of instances connected reached') ||
-          e.message?.includes('Limite de requisições atingido') ||
-          e.message?.includes('429') ||
-          e.status === 429 ||
-          (e.name === 'FunctionsHttpError' && e.status === 429)
-        ) {
+        } else if (isRateLimited) {
           const msg =
             'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
           setConnectError(msg)
           toast.error(msg)
-          if (action === 'connect') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          }
+          setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+          setQrCountdown(null)
         } else if (e.name === 'FunctionsHttpError') {
-          const msg = `Erro na API (${e.status || 'Desconhecido'}). A operação falhou.`
+          const msg = `Erro na API (${e.status || e.context?.status || 'Desconhecido'}). A operação falhou.`
           setConnectError(msg)
           toast.error(msg)
         } else if (
@@ -377,15 +392,37 @@ export default function WhatsApp() {
                 instanceName: instance.instance_name,
               },
             })
-            .then(({ data, error }) => {
+            .then(async ({ data, error }) => {
+              // Try to parse body if possible
+              let errBody: any = null
+              if (
+                error &&
+                error.name === 'FunctionsHttpError' &&
+                error.context &&
+                typeof error.context.json === 'function'
+              ) {
+                try {
+                  errBody = await error.context.clone().json()
+                } catch (e) {
+                  // ignore
+                }
+              }
+
               const isRateLimited =
                 (error as any)?.status === 429 ||
                 error?.message?.includes('429') ||
+                error?.message?.includes('Fetch Error: HTTP 429') ||
                 data?.code === 'RATE_LIMIT_REACHED' ||
-                (error?.name === 'FunctionsHttpError' && (error as any).status === 429)
+                errBody?.code === 'RATE_LIMIT_REACHED' ||
+                (error?.name === 'FunctionsHttpError' && (error as any).context?.status === 429)
 
               if (isRateLimited) {
                 isPollingPaused = true
+                setConnectError(
+                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
+                )
+                setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+                setQrCountdown(null)
                 toast.error(
                   'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
                 )
@@ -411,6 +448,30 @@ export default function WhatsApp() {
               ) {
                 setQrCountdown(null)
                 fetchInstance()
+              }
+            })
+            .catch((e) => {
+              const isRateLimited =
+                e?.message?.includes('429') ||
+                e?.status === 429 ||
+                e?.message?.includes('Fetch Error: HTTP 429')
+
+              if (isRateLimited) {
+                isPollingPaused = true
+                setConnectError(
+                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
+                )
+                setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+                setQrCountdown(null)
+                toast.error(
+                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
+                )
+
+                setTimeout(() => {
+                  isPollingPaused = false
+                }, 30000)
+              } else {
+                console.error('[WhatsApp] Polling sync exception:', e)
               }
             })
         }
