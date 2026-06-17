@@ -78,23 +78,7 @@ export default function WhatsApp() {
 
         if (error) {
           console.error('[WhatsApp] Edge Function Error:', error)
-
-          if ((error as any).status === 429 || error.message?.includes('429')) {
-            throw new Error(
-              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
-            )
-          }
-
-          if (
-            error.name === 'FunctionsFetchError' ||
-            error?.message?.includes('Failed to send a request') ||
-            error?.message?.includes('fetch failed')
-          ) {
-            throw new Error(
-              `Falha ao conectar com a Edge Function (Network/CORS). Detalhe: ${error.message}`,
-            )
-          }
-          throw new Error(error.message || 'Erro desconhecido ao chamar a função.')
+          throw error // Let the catch block handle all errors gracefully
         }
 
         if (
@@ -117,7 +101,7 @@ export default function WhatsApp() {
             errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
-              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.'
+              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
           } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
             errorMsg =
               'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
@@ -177,13 +161,21 @@ export default function WhatsApp() {
           e.message?.includes('Limite de instâncias atingido') ||
           e.message?.includes('Maximum number of instances connected reached') ||
           e.message?.includes('Limite de requisições atingido') ||
-          e.status === 429
+          e.message?.includes('429') ||
+          e.status === 429 ||
+          (e.name === 'FunctionsHttpError' && e.status === 429)
         ) {
           const msg =
-            'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.'
+            'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
           setConnectError(msg)
           toast.error(msg)
-          setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+          if (action === 'connect') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+          }
+        } else if (e.name === 'FunctionsHttpError') {
+          const msg = `Erro na API (${e.status || 'Desconhecido'}). A operação falhou.`
+          setConnectError(msg)
+          toast.error(msg)
         } else if (
           e.name === 'FunctionsFetchError' ||
           e?.message?.includes('Failed to send a request') ||
@@ -191,8 +183,10 @@ export default function WhatsApp() {
           e?.message?.includes('Falha ao conectar com a Edge Function')
         ) {
           const msg =
-            e.message ||
-            'Falha ao conectar com a Edge Function. Verifique sua conexão ou tente novamente.'
+            e.message?.includes('Failed to send a request') || e.message?.includes('fetch failed')
+              ? `Falha ao conectar com a Edge Function (Network/CORS). Detalhe: ${e.message}`
+              : e.message ||
+                'Falha ao conectar com a Edge Function. Verifique sua conexão ou tente novamente.'
           setConnectError(msg)
           toast.error(msg)
         } else {
@@ -387,12 +381,13 @@ export default function WhatsApp() {
               const isRateLimited =
                 (error as any)?.status === 429 ||
                 error?.message?.includes('429') ||
-                data?.code === 'RATE_LIMIT_REACHED'
+                data?.code === 'RATE_LIMIT_REACHED' ||
+                (error?.name === 'FunctionsHttpError' && (error as any).status === 429)
 
               if (isRateLimited) {
                 isPollingPaused = true
                 toast.error(
-                  'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
+                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
                 )
 
                 setTimeout(() => {
@@ -403,6 +398,11 @@ export default function WhatsApp() {
 
               if (error) {
                 console.error('[WhatsApp] Polling sync error:', error)
+                if (error.name === 'FunctionsHttpError') {
+                  // Ignore general HTTP errors silently during polling to maintain UI resilience
+                } else if (error.name === 'FunctionsFetchError') {
+                  // Network error, also ignore silently during polling
+                }
                 return
               }
               if (

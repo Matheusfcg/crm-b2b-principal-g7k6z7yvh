@@ -1,12 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || 'unknown'
@@ -164,14 +158,14 @@ Deno.serve(async (req: Request) => {
           .update({
             status: 'rate_limited',
             last_error:
-              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
+              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
           })
           .eq('id', instanceData.id)
         return new Response(
           JSON.stringify({
             code: 'RATE_LIMIT_REACHED',
             error:
-              'Limite de requisições atingido. Por favor, aguarde alguns instantes antes de tentar novamente.',
+              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
           }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )

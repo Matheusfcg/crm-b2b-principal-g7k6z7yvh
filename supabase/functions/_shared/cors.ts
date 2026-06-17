@@ -4,9 +4,3 @@ export const corsHeaders = {
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
-
-export const getCorsHeaders = (origin?: string | null) => {
-  return corsHeaders
-}
-
-export const sharedCorsHeaders = corsHeaders
