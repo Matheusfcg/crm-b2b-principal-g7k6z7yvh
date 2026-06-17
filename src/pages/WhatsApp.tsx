@@ -86,7 +86,6 @@ export default function WhatsApp() {
           ) {
             try {
               errBody = await error.context.clone().json()
-              error.contextBody = errBody
             } catch (e) {
               // ignore
             }
@@ -94,22 +93,48 @@ export default function WhatsApp() {
 
           const isRateLimitedError =
             error.status === 429 ||
-            error.context?.status === 429 ||
+            (error as any).context?.status === 429 ||
             errBody?.code === 'RATE_LIMIT_REACHED' ||
-            error.message?.includes('429')
+            error.message?.includes('429') ||
+            errBody?.error?.includes('429')
+
+          const dataLikeObj = errBody || {}
 
           if (isRateLimitedError) {
             const msg =
-              errBody?.error ||
+              dataLikeObj.error ||
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
             setConnectError(msg)
             toast.error(msg)
             setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
             setQrCountdown(null)
-            return // Do not throw to avoid unhandled exception propagation
+            return
           }
 
-          throw error // Let the catch block handle other errors gracefully
+          let errorMsg = dataLikeObj.error || error.message || 'Erro desconhecido.'
+          if (dataLikeObj.code === 'UNAUTHORIZED') {
+            errorMsg = 'Erro de Autenticação: Verifique com o administrador.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+          } else if (dataLikeObj.code === 'SERVER_UNREACHABLE') {
+            errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
+          } else if (dataLikeObj.code === 'TIMEOUT') {
+            errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+          } else if (dataLikeObj.code === 'INSTANCE_NOT_FOUND') {
+            errorMsg = `Instância não encontrada (404): ${dataLikeObj.details?.error || dataLikeObj.error}`
+            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
+          } else if (dataLikeObj.code === 'RATE_LIMIT_REACHED') {
+            errorMsg =
+              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
+          } else if (dataLikeObj.code === 'UAZAPI_TOKEN_MISSING') {
+            errorMsg =
+              'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
+          }
+
+          setConnectError(errorMsg)
+          toast.error(errorMsg)
+          return
         }
 
         if (
@@ -124,15 +149,19 @@ export default function WhatsApp() {
           let errorMsg = data.error || 'Erro desconhecido.'
           if (data?.code === 'UNAUTHORIZED') {
             errorMsg = 'Erro de Autenticação: Verifique com o administrador.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
           } else if (data?.code === 'SERVER_UNREACHABLE') {
             errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
           } else if (data?.code === 'TIMEOUT') {
             errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
           } else if (data?.code === 'INSTANCE_NOT_FOUND') {
             errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
+            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
+            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
           } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
             errorMsg =
               'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
@@ -140,18 +169,6 @@ export default function WhatsApp() {
 
           setConnectError(errorMsg)
           toast.error(errorMsg)
-          if (data?.code === 'UNAUTHORIZED') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-          }
-          if (data?.code === 'TIMEOUT') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-          }
-          if (data?.code === 'INSTANCE_NOT_FOUND') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-          }
-          if (data?.code === 'RATE_LIMIT_REACHED') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          }
         } else {
           if (data?.uazapiUrl) {
             setUazapiUrl(data.uazapiUrl)
@@ -184,49 +201,13 @@ export default function WhatsApp() {
       } catch (e: any) {
         console.error('[WhatsApp] Exception in checkStatusWithTimeout:', e)
 
-        const errBody = e.contextBody || {}
-        const isRateLimited =
-          e.message?.includes('Limite de instâncias atingido') ||
-          e.message?.includes('Maximum number of instances connected reached') ||
-          e.message?.includes('Limite de requisições atingido') ||
-          e.message?.includes('429') ||
-          e.message?.includes('Fetch Error: HTTP 429') ||
-          e.status === 429 ||
-          errBody?.code === 'RATE_LIMIT_REACHED' ||
-          (e.name === 'FunctionsHttpError' && (e.status === 429 || e.context?.status === 429))
-
         if (e.message === 'TIMEOUT') {
           const msg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-        } else if (isRateLimited) {
-          const msg =
-            errBody?.error ||
-            'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-          setConnectError(msg)
-          toast.error(msg)
-          setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          setQrCountdown(null)
-        } else if (e.name === 'FunctionsHttpError') {
-          const msg = `Erro na API (${e.status || e.context?.status || 'Desconhecido'}). A operação falhou.`
-          setConnectError(msg)
-          toast.error(msg)
-        } else if (
-          e.name === 'FunctionsFetchError' ||
-          e?.message?.includes('Failed to send a request') ||
-          e?.message?.includes('fetch failed') ||
-          e?.message?.includes('Falha ao conectar com a Edge Function')
-        ) {
-          const msg =
-            e.message?.includes('Failed to send a request') || e.message?.includes('fetch failed')
-              ? `Falha ao conectar com a Edge Function (Network/CORS). Detalhe: ${e.message}`
-              : e.message ||
-                'Falha ao conectar com a Edge Function. Verifique sua conexão ou tente novamente.'
-          setConnectError(msg)
-          toast.error(msg)
         } else {
-          const msg = `Erro de comunicação: ${e.message || 'Desconhecido'}`
+          const msg = e.message || 'Erro de comunicação desconhecido'
           setConnectError(msg)
           toast.error(msg)
         }
