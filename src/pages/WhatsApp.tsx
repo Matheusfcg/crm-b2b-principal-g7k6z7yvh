@@ -332,13 +332,33 @@ export default function WhatsApp() {
         updated_at: new Date().toISOString(),
       }
 
+      const conflictTarget = instance?.id ? 'id' : 'instance_name'
+
       const { data, error } = await supabase
         .from('whatsapp_instances')
-        .upsert(payload, { onConflict: 'instance_name' })
+        .upsert(payload, { onConflict: conflictTarget })
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        const errorMsg = error?.message || error?.details || ''
+        const errorCode = error?.code || ''
+        const status = (error as any)?.status
+
+        if (
+          errorCode === '23505' ||
+          errorMsg.includes('whatsapp_instances_instance_name_key') ||
+          errorMsg.includes('duplicate key value') ||
+          status === 409
+        ) {
+          toast.error(
+            'Este nome de instância já está em uso. Por favor, escolha um nome diferente.',
+          )
+          return
+        }
+
+        throw error
+      }
 
       toast.success('Configurações salvas com sucesso!')
       setConfigOpen(false)
@@ -355,11 +375,14 @@ export default function WhatsApp() {
       if (
         errorCode === '23505' ||
         errorMsg.includes('whatsapp_instances_instance_name_key') ||
-        errorMsg.includes('duplicate key value')
+        errorMsg.includes('duplicate key value') ||
+        error?.status === 409
       ) {
         toast.error('Este nome de instância já está em uso. Por favor, escolha um nome diferente.')
       } else {
-        toast.error(`Erro ao salvar configurações: ${error.message}`)
+        toast.error(
+          `Erro ao salvar configurações: ${errorMsg || error?.message || 'Erro desconhecido'}`,
+        )
       }
     } finally {
       setSavingConfig(false)
