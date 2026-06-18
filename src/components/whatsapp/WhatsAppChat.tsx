@@ -36,6 +36,10 @@ interface Message {
   type: string | null
 }
 
+const isValidUUID = (id: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+}
+
 export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
@@ -51,6 +55,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const fetchConversations = async (isInitial = false) => {
+    if (!instanceId || !isValidUUID(instanceId)) return
     if (isInitial) setLoading(true)
     try {
       const { data, error } = await supabase
@@ -78,6 +83,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
 
   useEffect(() => {
     const syncFromUazapi = async () => {
+      if (!instanceId || !isValidUUID(instanceId)) return
       setSyncing(true)
       setSyncError(null)
       try {
@@ -124,26 +130,26 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
       }
     }
 
-    if (instanceId) {
+    if (instanceId && isValidUUID(instanceId)) {
       fetchConversations(true).then(() => syncFromUazapi())
-    }
 
-    const channel = supabase
-      .channel('conversations-channel')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations',
-          filter: `instance_id=eq.${instanceId}`,
-        },
-        () => fetchConversations(false),
-      )
-      .subscribe()
+      const channel = supabase
+        .channel('conversations-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversations',
+            filter: `instance_id=eq.${instanceId}`,
+          },
+          () => fetchConversations(false),
+        )
+        .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
+      return () => {
+        supabase.removeChannel(channel)
+      }
     }
   }, [instanceId])
 
@@ -216,6 +222,13 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     const textToSend = replyText.trim()
     setReplyText('')
     setSending(true)
+
+    if (!instanceId || !isValidUUID(instanceId)) {
+      toast.error('ID da instância inválido.')
+      setSending(false)
+      setReplyText(textToSend)
+      return
+    }
 
     try {
       const { data: instance } = await supabase

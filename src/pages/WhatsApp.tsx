@@ -18,6 +18,10 @@ import { supabase } from '@/lib/supabase/client'
 import { ConnectionStatus } from '@/components/whatsapp/ConnectionStatus'
 import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
 
+const isValidUUID = (id: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+}
+
 export default function WhatsApp() {
   const { user } = useAuth()
 
@@ -352,8 +356,10 @@ export default function WhatsApp() {
 
     setSavingConfig(true)
     try {
+      const hasValidId = instance?.id && isValidUUID(instance.id)
+
       const payload = {
-        ...(instance?.id ? { id: instance.id } : {}),
+        ...(hasValidId ? { id: instance.id } : {}),
         user_id: user.id,
         instance_name: configData.instance_name,
         server_url: configData.server_url,
@@ -362,7 +368,7 @@ export default function WhatsApp() {
         updated_at: new Date().toISOString(),
       }
 
-      const conflictTarget = instance?.id ? 'id' : 'instance_name'
+      const conflictTarget = hasValidId ? 'id' : 'instance_name'
 
       const { data, error } = await supabase
         .from('whatsapp_instances')
@@ -657,7 +663,7 @@ export default function WhatsApp() {
         throw new Error('Sem conexão com a internet.')
       }
 
-      if (instance?.id) {
+      if (instance?.id && isValidUUID(instance.id)) {
         const { error } = await supabase
           .from('whatsapp_instances')
           .update({

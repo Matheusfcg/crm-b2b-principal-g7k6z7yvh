@@ -10,6 +10,10 @@ import { toast } from 'sonner'
 import { format, isToday, isYesterday } from 'date-fns'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
+const isValidUUID = (id: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+}
+
 export function ChatWindow({
   instance,
   conversationId,
@@ -84,6 +88,13 @@ export function ChatWindow({
     const text = input.trim()
     setInput('')
     setSending(true)
+
+    if (!instance?.id || !isValidUUID(instance.id)) {
+      toast.error('ID da instância inválido.')
+      setSending(false)
+      setInput(text)
+      return
+    }
 
     try {
       const { data: instanceData } = await supabase
