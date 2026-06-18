@@ -109,7 +109,22 @@ export default function WhatsApp() {
             error.message?.includes('429') ||
             errBody?.error?.includes('429')
 
+          const isUnauthorizedError =
+            statusCode === 401 ||
+            errBody?.code === 'UNAUTHORIZED' ||
+            error.message?.includes('401') ||
+            errBody?.error?.includes('401')
+
           const dataLikeObj = errBody || {}
+
+          if (isUnauthorizedError) {
+            const msg = 'Token inválido ou expirado (401)'
+            setConnectError(msg)
+            toast.error(msg)
+            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+            setQrCountdown(null)
+            return
+          }
 
           if (isRateLimitedError) {
             const msg =
@@ -122,10 +137,7 @@ export default function WhatsApp() {
           }
 
           let errorMsg = dataLikeObj.error || error.message || 'Erro desconhecido.'
-          if (dataLikeObj.code === 'UNAUTHORIZED') {
-            errorMsg = 'Erro de Autenticação: Verifique com o administrador.'
-            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-          } else if (dataLikeObj.code === 'SERVER_UNREACHABLE') {
+          if (dataLikeObj.code === 'SERVER_UNREACHABLE') {
             errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
           } else if (dataLikeObj.code === 'TIMEOUT') {
             errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
@@ -158,7 +170,7 @@ export default function WhatsApp() {
         ) {
           let errorMsg = data.error || 'Erro desconhecido.'
           if (data?.code === 'UNAUTHORIZED') {
-            errorMsg = 'Erro de Autenticação: Verifique com o administrador.'
+            errorMsg = 'Token inválido ou expirado (401)'
             setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
           } else if (data?.code === 'SERVER_UNREACHABLE') {
             errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
@@ -216,7 +228,18 @@ export default function WhatsApp() {
           e?.message?.includes('429') ||
           e?.message?.includes('Fetch Error: HTTP 429')
 
-        if (isRateLimitedError) {
+        const isUnauthorizedError =
+          e?.status === 401 ||
+          e?.message?.includes('401') ||
+          e?.message?.includes('Fetch Error: HTTP 401')
+
+        if (isUnauthorizedError) {
+          const msg = 'Token inválido ou expirado (401)'
+          setConnectError(msg)
+          toast.error(msg)
+          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+          setQrCountdown(null)
+        } else if (isRateLimitedError) {
           const msg =
             'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
           setConnectError(msg)
@@ -476,6 +499,23 @@ export default function WhatsApp() {
                 data?.code === 'RATE_LIMIT_REACHED' ||
                 errBody?.code === 'RATE_LIMIT_REACHED'
 
+              const isUnauthorized =
+                statusCode === 401 ||
+                error?.message?.includes('401') ||
+                error?.message?.includes('Fetch Error: HTTP 401') ||
+                data?.code === 'UNAUTHORIZED' ||
+                errBody?.code === 'UNAUTHORIZED'
+
+              if (isUnauthorized) {
+                isPollingPaused = true
+                const msg = 'Token inválido ou expirado (401)'
+                setConnectError(msg)
+                setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+                setQrCountdown(null)
+                toast.error(msg)
+                return
+              }
+
               if (isRateLimited) {
                 isPollingPaused = true
                 const msg =
@@ -514,7 +554,19 @@ export default function WhatsApp() {
                 e?.status === 429 ||
                 e?.message?.includes('Fetch Error: HTTP 429')
 
-              if (isRateLimited) {
+              const isUnauthorized =
+                e?.message?.includes('401') ||
+                e?.status === 401 ||
+                e?.message?.includes('Fetch Error: HTTP 401')
+
+              if (isUnauthorized) {
+                isPollingPaused = true
+                const msg = 'Token inválido ou expirado (401)'
+                setConnectError(msg)
+                setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
+                setQrCountdown(null)
+                toast.error(msg)
+              } else if (isRateLimited) {
                 isPollingPaused = true
                 const msg =
                   'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
