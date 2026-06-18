@@ -190,6 +190,8 @@ Deno.serve(async (req: Request) => {
         const errResp = await handleUazapiErrors(res)
         if (errResp) return errResp
 
+        console.log('[DEBUG] Uazapi get_conversations response:', JSON.stringify(res.parsedBody))
+
         return new Response(JSON.stringify(res.parsedBody || []), {
           status: res.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
