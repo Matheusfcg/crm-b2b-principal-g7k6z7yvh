@@ -61,7 +61,10 @@ Deno.serve(async (req: Request) => {
 
     if (instanceError || !instanceData) {
       return new Response(
-        JSON.stringify({ error: 'Instância não encontrada no banco.', code: 'INSTANCE_NOT_FOUND' }),
+        JSON.stringify({
+          code: 'INSTANCE_CONFIG_NOT_FOUND',
+          error: 'Configuração da instância não encontrada',
+        }),
         {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -69,14 +72,14 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const serverUrl = instanceData.server_url || 'https://api.uazapi.com'
+    const serverUrl = instanceData.server_url
     const token = instanceData.instance_token
 
-    if (!token) {
+    if (!token || !serverUrl) {
       return new Response(
         JSON.stringify({
-          error: 'Token Uazapi não configurado para esta instância.',
-          code: 'UAZAPI_TOKEN_MISSING',
+          code: 'INSTANCE_CONFIG_NOT_FOUND',
+          error: 'Configuração da instância não encontrada',
         }),
         {
           status: 400,
