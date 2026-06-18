@@ -50,7 +50,7 @@ export default function WhatsApp() {
 
       setActionLoading(true)
       setConnectError(null)
-      setCountdown(180)
+      setCountdown(600)
 
       const timer = setInterval(() => {
         setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
@@ -59,7 +59,7 @@ export default function WhatsApp() {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('TIMEOUT'))
-        }, 180000)
+        }, 600000)
       })
 
       try {
@@ -211,8 +211,8 @@ export default function WhatsApp() {
               data.instance.qrcode ||
               data.instance.status === 'connecting'
             ) {
-              toast.info('QR Code aguardando leitura.')
-              setQrCountdown(180)
+              toast.info('Aguardando leitura do QR Code... isso pode levar um momento.')
+              setQrCountdown(600)
             } else {
               setConnectError('Status desconhecido ou falha na conexão.')
               setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
@@ -316,15 +316,11 @@ export default function WhatsApp() {
             : new Date().getTime()
           const now = new Date().getTime()
           const diffSeconds = Math.floor((now - updatedAt) / 1000)
-          if (diffSeconds >= 0 && diffSeconds < 180) {
-            initialCountdown = 180 - diffSeconds
-          } else if (diffSeconds >= 180 && diffSeconds < 240) {
-            // Allow a small grace period just in case the backend hasn't synced yet
-            initialCountdown = 240 - diffSeconds
+          if (diffSeconds >= 0 && diffSeconds < 600) {
+            initialCountdown = 600 - diffSeconds
           } else {
-            data.status = 'timeout'
-            data.last_error = 'O tempo limite do QR Code expirou.'
-            setConnectError('O QR Code anterior expirou. Gere um novo.')
+            // Trigger auto-refresh logic
+            initialCountdown = 0
           }
         }
 
@@ -586,28 +582,34 @@ export default function WhatsApp() {
       }, 10000)
     } else if (qrCountdown === 0) {
       if (instance?.status === 'connecting' || instance?.status === 'qrcode') {
+        // Auto-refresh the QR Code
+        setConnectError(null)
         setInstance((prev: any) =>
-          prev
-            ? { ...prev, status: 'timeout', last_error: 'O tempo limite do QR Code expirou.' }
-            : prev,
+          prev ? { ...prev, status: 'connecting', last_error: null } : prev,
         )
-        setConnectError(
-          'O tempo limite para ler o QR Code expirou. Por favor, gere um novo código.',
-        )
-
-        if (instance?.id) {
-          supabase
-            .from('whatsapp_instances')
-            .update({
-              status: 'timeout',
-              last_error: 'Timeout na leitura do QR Code',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', instance.id)
-            .then()
-        }
+        supabase.functions
+          .invoke('whatsapp-uazapi', {
+            body: {
+              action: 'connect',
+              instanceId: instance.id,
+              instanceName: instance.instance_name,
+            },
+          })
+          .then((res) => {
+            if (res?.data?.qrcode || res?.data?.base64 || res?.data?.success) {
+              setQrCountdown(600)
+              fetchInstance()
+            } else {
+              setQrCountdown(600) // Fallback retry
+            }
+          })
+          .catch((e) => {
+            console.warn('[WhatsApp] Auto-refresh QR error:', e)
+            setQrCountdown(60) // retry later in 1 min if error
+          })
+      } else {
+        setQrCountdown(null)
       }
-      setQrCountdown(null)
     }
 
     return () => {

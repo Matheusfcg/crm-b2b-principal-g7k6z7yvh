@@ -177,7 +177,7 @@ export function ConnectionStatus({
               <div>
                 <h3 className="text-lg font-medium text-slate-900">Sincronizando...</h3>
                 <p className="text-sm text-slate-500 max-w-[250px] mt-1">
-                  Preparando conexão com WhatsApp... Isso pode levar até 3 minutos.
+                  Preparando conexão com WhatsApp... Isso pode levar alguns minutos.
                 </p>
               </div>
             </div>
@@ -313,10 +313,15 @@ export function ConnectionStatus({
                 />
               </div>
               {qrCountdown !== null && qrCountdown > 0 && (
-                <div className="text-sm font-medium text-slate-600 bg-slate-100 px-4 py-1.5 rounded-full animate-pulse flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin text-slate-500" />
-                  QR Code expira em: {Math.floor(qrCountdown / 60)}:
-                  {(qrCountdown % 60).toString().padStart(2, '0')}
+                <div className="text-sm font-medium text-slate-600 bg-slate-100 px-4 py-2 rounded-xl animate-pulse flex flex-col items-center gap-1 border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    <span>Aguardando leitura... isso pode levar um momento.</span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-normal">
+                    O QR Code atualiza automaticamente em: {Math.floor(qrCountdown / 60)}:
+                    {(qrCountdown % 60).toString().padStart(2, '0')}
+                  </span>
                 </div>
               )}
             </div>
