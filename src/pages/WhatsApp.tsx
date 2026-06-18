@@ -69,31 +69,42 @@ export default function WhatsApp() {
           throw new Error('Sem conexão com a internet. Verifique sua rede.')
         }
 
-        const apiCall = supabase.functions.invoke('whatsapp-uazapi', {
-          body: { action, instanceId: inst.id, instanceName: inst.instance_name },
-        })
+        const apiCall = supabase.functions
+          .invoke('whatsapp-uazapi', {
+            body: { action, instanceId: inst.id, instanceName: inst.instance_name },
+          })
+          .catch((err) => {
+            console.warn('[WhatsApp] Safely caught invoke exception:', err)
+            return { data: null, error: err }
+          })
 
         const res = (await Promise.race([apiCall, timeoutPromise])) as any
         const { data, error } = res
 
         if (error) {
-          console.error('[WhatsApp] Edge Function Error:', error)
+          console.warn('[WhatsApp] Edge Function Error Intercepted:', error)
           let errBody: any = null
+          let statusCode = (error as any).status
+
           if (
-            error.name === 'FunctionsHttpError' &&
-            error.context &&
-            typeof error.context.json === 'function'
+            error.name === 'FunctionsHttpError' ||
+            error.name === 'FunctionsRelayError' ||
+            error.name === 'FunctionsFetchError'
           ) {
-            try {
-              errBody = await error.context.clone().json()
-            } catch (e) {
-              // ignore
+            if ((error as any).context) {
+              statusCode = statusCode || (error as any).context.status
+              if (typeof (error as any).context.json === 'function') {
+                try {
+                  errBody = await (error as any).context.clone().json()
+                } catch (e) {
+                  // ignore JSON parse error
+                }
+              }
             }
           }
 
           const isRateLimitedError =
-            error.status === 429 ||
-            (error as any).context?.status === 429 ||
+            statusCode === 429 ||
             errBody?.code === 'RATE_LIMIT_REACHED' ||
             error.message?.includes('429') ||
             errBody?.error?.includes('429')
@@ -198,7 +209,7 @@ export default function WhatsApp() {
           }
         }
       } catch (e: any) {
-        console.error('[WhatsApp] Exception in checkStatusWithTimeout:', e)
+        console.warn('[WhatsApp] Exception safely caught in checkStatusWithTimeout:', e)
 
         const isRateLimitedError =
           e?.status === 429 ||
@@ -428,29 +439,42 @@ export default function WhatsApp() {
                 instanceName: instance.instance_name,
               },
             })
-            .then(async ({ data, error }) => {
+            .catch((err) => {
+              console.warn('[WhatsApp] Safely caught polling invoke exception:', err)
+              return { data: null, error: err }
+            })
+            .then(async (res) => {
+              if (!res) return
+              const { data, error } = res
+
               // Try to parse body if possible
               let errBody: any = null
+              let statusCode = error ? (error as any).status : undefined
+
               if (
                 error &&
-                error.name === 'FunctionsHttpError' &&
-                error.context &&
-                typeof error.context.json === 'function'
+                (error.name === 'FunctionsHttpError' ||
+                  error.name === 'FunctionsRelayError' ||
+                  error.name === 'FunctionsFetchError')
               ) {
-                try {
-                  errBody = await error.context.clone().json()
-                } catch (e) {
-                  // ignore
+                if ((error as any).context) {
+                  statusCode = statusCode || (error as any).context.status
+                  if (typeof (error as any).context.json === 'function') {
+                    try {
+                      errBody = await (error as any).context.clone().json()
+                    } catch (e) {
+                      // ignore
+                    }
+                  }
                 }
               }
 
               const isRateLimited =
-                (error as any)?.status === 429 ||
+                statusCode === 429 ||
                 error?.message?.includes('429') ||
                 error?.message?.includes('Fetch Error: HTTP 429') ||
                 data?.code === 'RATE_LIMIT_REACHED' ||
-                errBody?.code === 'RATE_LIMIT_REACHED' ||
-                (error?.name === 'FunctionsHttpError' && (error as any).context?.status === 429)
+                errBody?.code === 'RATE_LIMIT_REACHED'
 
               if (isRateLimited) {
                 isPollingPaused = true
@@ -468,7 +492,7 @@ export default function WhatsApp() {
               }
 
               if (error) {
-                console.error('[WhatsApp] Polling sync error:', error)
+                console.warn('[WhatsApp] Polling sync error intercepted:', error)
                 if (error.name === 'FunctionsHttpError') {
                   // Ignore general HTTP errors silently during polling to maintain UI resilience
                 } else if (error.name === 'FunctionsFetchError') {
@@ -503,7 +527,7 @@ export default function WhatsApp() {
                   isPollingPaused = false
                 }, 30000)
               } else {
-                console.error('[WhatsApp] Polling sync exception:', e)
+                console.warn('[WhatsApp] Safely caught polling sync exception:', e)
               }
             })
         }
