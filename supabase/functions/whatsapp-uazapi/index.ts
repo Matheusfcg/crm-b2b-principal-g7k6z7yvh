@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
     // Force redirection away from incorrect domains
     let serverUrl = instance.server_url || 'https://api.uazapi.com'
     if (serverUrl.includes('api.goskip.dev')) {
-      serverUrl = 'https://api.uazapi.com'
+      serverUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
     }
 
     const apikey = instance.instance_token
@@ -157,12 +157,84 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'get_conversations') {
-      return new Response(
-        JSON.stringify({ success: true, message: 'Conversations sync triggered successfully' }),
-        {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        },
-      )
+      try {
+        const chatsResponse = await callApi(`/chat/findChats/${instance.instance_name}`)
+        const chats = chatsResponse?.chats || chatsResponse?.data || chatsResponse || []
+
+        if (Array.isArray(chats)) {
+          for (const chat of chats) {
+            const remoteJid = chat.id || chat.remoteJid
+            if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast')
+              continue
+
+            const pushName = chat.name || chat.pushName || ''
+            const profilePic = chat.profilePictureUrl || chat.profilePic || null
+
+            const { data: contactData } = await supabase
+              .from('contacts')
+              .upsert(
+                {
+                  instance_id: instance.id,
+                  remote_jid: remoteJid,
+                  push_name: pushName,
+                  profile_picture: profilePic,
+                },
+                { onConflict: 'instance_id,remote_jid' },
+              )
+              .select('id')
+              .single()
+
+            if (contactData) {
+              const unreadCount = chat.unreadCount || 0
+              let lastMsg = ''
+              if (chat.lastMessage?.message?.conversation) {
+                lastMsg = chat.lastMessage.message.conversation
+              } else if (chat.lastMessage?.message?.extendedTextMessage?.text) {
+                lastMsg = chat.lastMessage.message.extendedTextMessage.text
+              } else {
+                lastMsg = chat.lastMessage || ''
+              }
+
+              let timestamp = new Date().toISOString()
+              if (chat.conversationTimestamp) {
+                timestamp = new Date(Number(chat.conversationTimestamp) * 1000).toISOString()
+              } else if (chat.updatedAt) {
+                timestamp = new Date(chat.updatedAt).toISOString()
+              }
+
+              await supabase.from('conversations').upsert(
+                {
+                  instance_id: instance.id,
+                  contact_id: contactData.id,
+                  last_message: typeof lastMsg === 'string' ? lastMsg.substring(0, 255) : '',
+                  unread_count: unreadCount,
+                  updated_at: timestamp,
+                },
+                { onConflict: 'instance_id,contact_id' },
+              )
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Conversations sync completed successfully' }),
+          {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          },
+        )
+      } catch (e: any) {
+        if (e.message === 'UNAUTHORIZED')
+          return new Response(JSON.stringify({ code: 'UNAUTHORIZED' }), {
+            status: 401,
+            headers: corsHeaders,
+          })
+        if (e.message === 'RATE_LIMIT_REACHED')
+          return new Response(JSON.stringify({ code: 'RATE_LIMIT_REACHED' }), {
+            status: 429,
+            headers: corsHeaders,
+          })
+        throw e
+      }
     }
 
     return new Response(JSON.stringify({ success: true, message: 'Action executed' }), {

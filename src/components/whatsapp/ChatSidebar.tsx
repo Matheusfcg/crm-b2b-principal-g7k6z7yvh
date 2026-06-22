@@ -15,20 +15,12 @@ interface ChatSidebarProps {
 }
 
 function ContactAvatar({ contact, className }: { contact: any; className?: string }) {
-  const [error, setError] = useState(false)
   const src = contact?.profile_picture?.startsWith('http') ? contact.profile_picture : null
   const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Desconhecido'
 
   return (
     <Avatar className={cn('border border-slate-200 shadow-sm shrink-0', className)}>
-      {!error && src ? (
-        <img
-          src={src}
-          alt={name}
-          className="h-full w-full object-cover"
-          onError={() => setError(true)}
-        />
-      ) : null}
+      <AvatarImage src={src || undefined} alt={name} />
       <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
         {name.substring(0, 2).toUpperCase()}
       </AvatarFallback>
