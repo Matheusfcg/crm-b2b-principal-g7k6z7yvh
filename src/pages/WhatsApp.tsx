@@ -49,7 +49,7 @@ export default function WhatsApp() {
   }, [])
 
   const checkStatusWithTimeout = useCallback(
-    async (inst: any, action: 'connect' | 'force_sync' = 'connect') => {
+    async (inst: any, action: 'get_qr' | 'get_status' = 'get_qr') => {
       if (!inst || !inst.instance_name) return
 
       setActionLoading(true)
@@ -272,14 +272,14 @@ export default function WhatsApp() {
   const handleReconnect = useCallback(() => {
     if (instance) {
       setConnectError(null)
-      checkStatusWithTimeout(instance, 'connect')
+      checkStatusWithTimeout(instance, 'get_qr')
     }
   }, [instance, checkStatusWithTimeout])
 
   const handleForceSync = useCallback(() => {
     if (instance) {
       setConnectError(null)
-      checkStatusWithTimeout(instance, 'force_sync')
+      checkStatusWithTimeout(instance, 'get_status')
     }
   }, [instance, checkStatusWithTimeout])
 
@@ -323,13 +323,16 @@ export default function WhatsApp() {
           if (diffSeconds >= 0 && diffSeconds < 600) {
             initialCountdown = 600 - diffSeconds
           } else {
-            // Trigger auto-refresh logic
             initialCountdown = 0
           }
         }
 
         setInstance(data)
-        if (initialCountdown) setQrCountdown(initialCountdown)
+        if (initialCountdown !== null) {
+          setQrCountdown(initialCountdown)
+        } else if (data.status === 'disconnected') {
+          checkStatusWithTimeout(data, 'get_qr')
+        }
 
         setConfigData({
           instance_name: data.instance_name || '',
@@ -401,7 +404,7 @@ export default function WhatsApp() {
 
       if (data) {
         setInstance(data)
-        checkStatusWithTimeout(data, 'connect')
+        checkStatusWithTimeout(data, 'get_qr')
       } else {
         fetchInstance()
       }
@@ -459,7 +462,7 @@ export default function WhatsApp() {
           supabase.functions
             .invoke('whatsapp-uazapi', {
               body: {
-                action: 'force_sync',
+                action: 'get_status',
                 instanceId: instance.id,
                 instanceName: instance.instance_name,
               },
@@ -596,7 +599,7 @@ export default function WhatsApp() {
         supabase.functions
           .invoke('whatsapp-uazapi', {
             body: {
-              action: 'connect',
+              action: 'get_qr',
               instanceId: instance.id,
               instanceName: instance.instance_name,
             },
@@ -725,21 +728,22 @@ export default function WhatsApp() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-3 space-y-4">
-              <ConnectionStatus
-                instance={instance}
-                uazapiUrl={uazapiUrl}
-                actionLoading={actionLoading}
-                onConnect={() => setConfigOpen(true)}
-                onReconnect={handleReconnect}
-                onDisconnect={handleDisconnect}
-                onForceSync={handleForceSync}
-                onConfig={() => setConfigOpen(true)}
-                error={connectError}
-                countdown={countdown}
-                qrCountdown={qrCountdown}
-              />
-              {isConnected && instance?.id && (
-                <div className="mt-6 space-y-6">
+              {!isConnected ? (
+                <ConnectionStatus
+                  instance={instance}
+                  uazapiUrl={uazapiUrl}
+                  actionLoading={actionLoading}
+                  onConnect={() => setConfigOpen(true)}
+                  onReconnect={handleReconnect}
+                  onDisconnect={handleDisconnect}
+                  onForceSync={handleForceSync}
+                  onConfig={() => setConfigOpen(true)}
+                  error={connectError}
+                  countdown={countdown}
+                  qrCountdown={qrCountdown}
+                />
+              ) : (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                     <div>
                       <h3 className="font-semibold text-slate-900">
@@ -750,12 +754,12 @@ export default function WhatsApp() {
                     <button
                       onClick={handleDisconnect}
                       disabled={actionLoading}
-                      className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                      className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors flex items-center gap-2"
                     >
                       {actionLoading ? 'Desconectando...' : 'Desconectar'}
                     </button>
                   </div>
-                  <WhatsAppChat instanceId={instance.id} />
+                  {instance?.id && <WhatsAppChat instanceId={instance.id} />}
                 </div>
               )}
             </div>

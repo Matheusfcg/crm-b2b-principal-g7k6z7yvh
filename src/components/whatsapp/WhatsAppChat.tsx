@@ -121,7 +121,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             if (Array.isArray(res.data) && res.data.length > 0) {
               for (const chat of res.data) {
                 const remoteJid = chat.id || chat.remoteJid
-                if (!remoteJid || remoteJid.includes('@g.us')) continue
+                if (!remoteJid) continue
 
                 const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
                 const profilePic = chat.profilePicUrl || chat.profilePicture || null

@@ -36,6 +36,52 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    if (reqBody?.event) {
+      const event = reqBody.event
+      const instanceNameWebhook = reqBody.instance || reqBody.instanceName
+      console.log(`[DEBUG] Webhook received: ${event} for instance: ${instanceNameWebhook}`)
+
+      if (event === 'connection.update') {
+        const state = reqBody.data?.state || reqBody.data?.status
+        console.log(`[DEBUG] Webhook connection state: ${state}`)
+        if (['open', 'connected', 'loggedIn'].includes(state)) {
+          await supabaseAdmin
+            .from('whatsapp_instances')
+            .update({
+              status: 'connected',
+              qrcode: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('instance_name', instanceNameWebhook)
+        } else if (state === 'connecting' || reqBody.data?.qrcode) {
+          await supabaseAdmin
+            .from('whatsapp_instances')
+            .update({
+              status: 'connecting',
+              qrcode: reqBody.data?.qrcode || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('instance_name', instanceNameWebhook)
+        } else if (state === 'close') {
+          await supabaseAdmin
+            .from('whatsapp_instances')
+            .update({
+              status: 'disconnected',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('instance_name', instanceNameWebhook)
+        }
+      }
+
+      if (event === 'messages.upsert') {
+        console.log(`[DEBUG] Received message from webhook for ${instanceNameWebhook}`)
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const action = reqBody?.action
     const instanceId = reqBody?.instanceId
     const instanceName = reqBody?.instanceName || reqBody?.instance_name
@@ -126,6 +172,12 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        if (res.ok) {
+          if (path.includes('/instance/status') || path.includes('/instance/connect')) {
+            console.log(`[DEBUG] 200 OK received from Uazapi after ${path} event`)
+          }
+        }
+
         return { ok: res.ok, status: res.status, parsedBody }
       } catch (err: any) {
         console.error(`[DEBUG] Erro na requisição para ${url}:`, err)
@@ -204,7 +256,8 @@ Deno.serve(async (req: Request) => {
         })
       }
 
-      case 'connect': {
+      case 'connect':
+      case 'get_qr': {
         const res = await fetchUazapi(`/instance/connect`, {
           method: 'POST',
           body: JSON.stringify({
@@ -235,7 +288,8 @@ Deno.serve(async (req: Request) => {
         })
       }
 
-      case 'force_sync': {
+      case 'force_sync':
+      case 'get_status': {
         const res = await fetchUazapi(`/instance/status`, {
           method: 'GET',
         })
@@ -315,7 +369,6 @@ Deno.serve(async (req: Request) => {
             enabled: true,
             url: webhookUrl,
             events: ['messages', 'connection'],
-            excludeMessages: ['wasSentByApi'],
           }),
         })
 

@@ -31,15 +31,7 @@ export type Database = {
           push_name?: string | null
           remote_jid?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: 'contacts_instance_id_fkey'
-            columns: ['instance_id']
-            isOneToOne: false
-            referencedRelation: 'whatsapp_instances'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       conversations: {
         Row: {
@@ -72,13 +64,6 @@ export type Database = {
             columns: ['contact_id']
             isOneToOne: false
             referencedRelation: 'contacts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'conversations_instance_id_fkey'
-            columns: ['instance_id']
-            isOneToOne: false
-            referencedRelation: 'whatsapp_instances'
             referencedColumns: ['id']
           },
         ]
@@ -347,62 +332,6 @@ export type Database = {
           role?: string
         }
         Relationships: []
-      }
-      whatsapp_instances: {
-        Row: {
-          created_at: string | null
-          id: string
-          instance_external_id: string | null
-          instance_name: string
-          instance_token: string | null
-          last_connection: string | null
-          last_error: string | null
-          phone: string | null
-          qrcode: string | null
-          server_url: string | null
-          status: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          instance_external_id?: string | null
-          instance_name: string
-          instance_token?: string | null
-          last_connection?: string | null
-          last_error?: string | null
-          phone?: string | null
-          qrcode?: string | null
-          server_url?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          instance_external_id?: string | null
-          instance_name?: string
-          instance_token?: string | null
-          last_connection?: string | null
-          last_error?: string | null
-          phone?: string | null
-          qrcode?: string | null
-          server_url?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'whatsapp_instances_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-        ]
       }
       whatsapp_logs: {
         Row: {
