@@ -78,7 +78,7 @@ export default function WhatsApp() {
             body: { action, instanceId: inst.id, instanceName: inst.instance_name },
           })
           .catch((err) => {
-            console.warn('[WhatsApp] Safely caught invoke exception:', err)
+            console.warn('[DEBUG_WHATSAPP] Safely caught invoke exception:', err)
             return { data: null, error: err }
           })
 
@@ -86,7 +86,7 @@ export default function WhatsApp() {
         const { data, error } = res
 
         if (error) {
-          console.warn('[WhatsApp] Edge Function Error Intercepted:', error)
+          console.error('[DEBUG_WHATSAPP] Edge Function Error Intercepted:', error)
           let errBody: any = null
           let statusCode = (error as any).status
 
@@ -225,7 +225,7 @@ export default function WhatsApp() {
           }
         }
       } catch (e: any) {
-        console.warn('[WhatsApp] Exception safely caught in checkStatusWithTimeout:', e)
+        console.warn('[DEBUG_WHATSAPP] Exception safely caught in checkStatusWithTimeout:', e)
 
         const isRateLimitedError =
           e?.status === 429 ||
@@ -303,7 +303,7 @@ export default function WhatsApp() {
         .maybeSingle()
 
       if (error) {
-        console.error('[WhatsApp] Error fetching instance:', error)
+        console.error('[DEBUG_WHATSAPP] Error fetching instance:', error)
         toast.error('Falha ao conectar com o banco de dados. Tentando novamente em breve.')
         return
       }
@@ -343,7 +343,7 @@ export default function WhatsApp() {
         setInstance(null)
       }
     } catch (e) {
-      console.error('[WhatsApp] Error in fetchInstance:', e)
+      console.error('[DEBUG_WHATSAPP] Error in fetchInstance:', e)
       toast.error('Erro ao buscar dados da instância.')
     } finally {
       setLoading(false)
@@ -468,7 +468,7 @@ export default function WhatsApp() {
               },
             })
             .catch((err) => {
-              console.warn('[WhatsApp] Safely caught polling invoke exception:', err)
+              console.warn('[DEBUG_WHATSAPP] Safely caught polling invoke exception:', err)
               return { data: null, error: err }
             })
             .then(async (res) => {
@@ -537,7 +537,7 @@ export default function WhatsApp() {
               }
 
               if (error) {
-                console.warn('[WhatsApp] Polling sync error intercepted:', error)
+                console.warn('[DEBUG_WHATSAPP] Polling sync error intercepted:', error)
                 if (error.name === 'FunctionsHttpError') {
                   // Ignore general HTTP errors silently during polling to maintain UI resilience
                 } else if (error.name === 'FunctionsFetchError') {
@@ -584,7 +584,7 @@ export default function WhatsApp() {
                   isPollingPaused = false
                 }, 30000)
               } else {
-                console.warn('[WhatsApp] Safely caught polling sync exception:', e)
+                console.warn('[DEBUG_WHATSAPP] Safely caught polling sync exception:', e)
               }
             })
         }
@@ -613,7 +613,7 @@ export default function WhatsApp() {
             }
           })
           .catch((e) => {
-            console.warn('[WhatsApp] Auto-refresh QR error:', e)
+            console.warn('[DEBUG_WHATSAPP] Auto-refresh QR error:', e)
             setQrCountdown(60) // retry later in 1 min if error
           })
       } else {
