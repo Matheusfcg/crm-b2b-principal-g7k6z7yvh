@@ -14,6 +14,28 @@ interface ChatSidebarProps {
   onSelect: (id: string) => void
 }
 
+function ContactAvatar({ contact, className }: { contact: any; className?: string }) {
+  const [error, setError] = useState(false)
+  const src = contact?.profile_picture?.startsWith('http') ? contact.profile_picture : null
+  const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Desconhecido'
+
+  return (
+    <Avatar className={cn('border border-slate-200 shadow-sm shrink-0', className)}>
+      {!error && src ? (
+        <img
+          src={src}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setError(true)}
+        />
+      ) : null}
+      <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
+        {name.substring(0, 2).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
 export function ChatSidebar({ instance, selectedId, onSelect }: ChatSidebarProps) {
   const [conversations, setConversations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -122,18 +144,7 @@ export function ChatSidebar({ instance, selectedId, onSelect }: ChatSidebarProps
                   {isSelected && (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r-full" />
                   )}
-                  <Avatar className="h-12 w-12 border border-slate-200 shadow-sm shrink-0">
-                    <AvatarImage
-                      src={
-                        conv.contact?.profile_picture?.startsWith('http')
-                          ? conv.contact.profile_picture
-                          : undefined
-                      }
-                    />
-                    <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
-                      {name.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <ContactAvatar contact={conv.contact} className="h-12 w-12" />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
                       <span className="font-semibold text-slate-900 truncate pr-2">{name}</span>

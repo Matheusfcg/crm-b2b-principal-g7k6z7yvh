@@ -40,6 +40,28 @@ const isValidUUID = (id: string) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
 }
 
+function ContactAvatar({ contact, className }: { contact: Contact | null; className?: string }) {
+  const [error, setError] = useState(false)
+  const src = contact?.profile_picture?.startsWith('http') ? contact.profile_picture : null
+  const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Desconhecido'
+
+  return (
+    <Avatar className={cn('border border-slate-200 shrink-0', className)}>
+      {!error && src ? (
+        <img
+          src={src}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setError(true)}
+        />
+      ) : null}
+      <AvatarFallback className="bg-slate-200 text-slate-600 font-medium">
+        {name.charAt(0).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
 export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
@@ -89,6 +111,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     }
     setSyncing(true)
     setSyncError(null)
+    toast.info('Sincronizando dados...')
     console.log('[DEBUG_WHATSAPP] Iniciando syncFromUazapi para a instância:', instanceId)
     try {
       const { data: instance } = await supabase
@@ -102,6 +125,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
         const res = await supabase.functions.invoke('whatsapp-uazapi', {
           body: { action: 'get_conversations', instanceName: instance.instance_name },
         })
+        console.log('[DEBUG_WHATSAPP]', res)
 
         const isRateLimited =
           (res.error as any)?.status === 429 ||
@@ -148,9 +172,9 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             res.error || res.data?.error,
           )
           setSyncError(errMsg)
-          toast.error(errMsg)
+          toast.error('Erro ao sincronizar. Verifique o console.')
         } else {
-          toast.success('Conversas sincronizadas com sucesso!')
+          toast.success('Sincronização concluída com sucesso!')
           console.log('[DEBUG_WHATSAPP] Sync successful, fetching conversations.')
           await fetchConversations()
         }
@@ -419,20 +443,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
                   )}
                 >
                   <div className="relative">
-                    <Avatar className="h-10 w-10 border border-slate-200">
-                      <AvatarImage
-                        src={
-                          conv.contact?.profile_picture?.startsWith('http')
-                            ? conv.contact.profile_picture
-                            : undefined
-                        }
-                      />
-                      <AvatarFallback className="bg-slate-200 text-slate-600">
-                        {conv.contact?.push_name?.charAt(0)?.toUpperCase() || (
-                          <User className="h-5 w-5" />
-                        )}
-                      </AvatarFallback>
-                    </Avatar>
+                    <ContactAvatar contact={conv.contact} className="h-10 w-10" />
                     {conv.unread_count > 0 && (
                       <span className="absolute -top-1 -right-1 h-5 w-5 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white">
                         {conv.unread_count}
@@ -486,20 +497,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
           <>
             {/* Chat Header */}
             <div className="p-4 border-b border-slate-200 flex items-center gap-3 bg-white">
-              <Avatar className="h-10 w-10 border border-slate-200">
-                <AvatarImage
-                  src={
-                    selectedConv?.contact?.profile_picture?.startsWith('http')
-                      ? selectedConv.contact.profile_picture
-                      : undefined
-                  }
-                />
-                <AvatarFallback className="bg-slate-200 text-slate-600">
-                  {selectedConv?.contact?.push_name?.charAt(0)?.toUpperCase() || (
-                    <User className="h-5 w-5" />
-                  )}
-                </AvatarFallback>
-              </Avatar>
+              <ContactAvatar contact={selectedConv?.contact ?? null} className="h-10 w-10" />
               <div>
                 <h3 className="font-semibold text-slate-900">
                   {selectedConv?.contact?.push_name ||

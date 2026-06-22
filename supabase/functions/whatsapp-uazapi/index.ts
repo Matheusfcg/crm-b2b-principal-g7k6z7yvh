@@ -1,12 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || 'unknown'
@@ -290,6 +284,12 @@ Deno.serve(async (req: Request) => {
             `[DEBUG] get_conversations Uazapi error: Status ${res.status}, Body:`,
             res.parsedBody,
           )
+          await supabaseAdmin.from('whatsapp_logs').insert({
+            instance_name: instanceData.instance_name,
+            endpoint: '/chat/find',
+            payload: { action: 'get_conversations' },
+            response: res.parsedBody || { error: `HTTP ${res.status}` },
+          })
           return errResp
         }
 
@@ -298,6 +298,23 @@ Deno.serve(async (req: Request) => {
           : res.parsedBody?.data && Array.isArray(res.parsedBody.data)
             ? res.parsedBody.data
             : []
+
+        if (!Array.isArray(chats)) {
+          console.error(`[DEBUG] Invalid payload format received from Uazapi:`, res.parsedBody)
+          await supabaseAdmin.from('whatsapp_logs').insert({
+            instance_name: instanceData.instance_name,
+            endpoint: '/chat/find',
+            payload: { action: 'get_conversations' },
+            response: res.parsedBody || { error: 'Invalid format' },
+          })
+          return new Response(
+            JSON.stringify({ error: 'Formato de resposta inválido da Uazapi.' }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            },
+          )
+        }
 
         console.log(`[DEBUG_WHATSAPP] Received ${chats.length} chats from Uazapi`)
 
