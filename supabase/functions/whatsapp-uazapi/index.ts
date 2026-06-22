@@ -140,7 +140,7 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const fetchUazapi = async (path: string, options: RequestInit = {}) => {
+    const fetchUazapi = async (path: string, options: RequestInit = {}, timeoutMs = 25000) => {
       const url = `${serverUrl.replace(/\/$/, '')}${path}`
       const headers: Record<string, string> = {
         token: token,
@@ -151,7 +151,10 @@ Deno.serve(async (req: Request) => {
         headers['Content-Type'] = 'application/json'
       }
 
-      const fetchOptions: RequestInit = { ...options, headers }
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+      const fetchOptions: RequestInit = { ...options, headers, signal: controller.signal }
 
       if (fetchOptions.method === 'GET' || fetchOptions.method === 'HEAD') {
         delete fetchOptions.body
@@ -161,6 +164,7 @@ Deno.serve(async (req: Request) => {
 
       try {
         const res = await fetch(url, fetchOptions)
+        clearTimeout(timeoutId)
         const text = await res.text()
         let parsedBody: any = {}
 
@@ -182,6 +186,15 @@ Deno.serve(async (req: Request) => {
 
         return { ok: res.ok, status: res.status, parsedBody }
       } catch (err: any) {
+        clearTimeout(timeoutId)
+        if (err.name === 'AbortError') {
+          console.error(`[DEBUG] Timeout na requisição para ${url}`)
+          return {
+            ok: false,
+            status: 504,
+            parsedBody: { error: 'Tempo limite de conexão excedido com a Uazapi' },
+          }
+        }
         console.error(`[DEBUG] Erro na requisição para ${url}:`, err)
         return {
           ok: false,
@@ -304,14 +317,36 @@ Deno.serve(async (req: Request) => {
           }
 
           if (contactsData.length > 0) {
-            const { data: upsertedContacts, error: contactsError } = await supabaseAdmin
-              .from('contacts')
-              .upsert(contactsData, { onConflict: 'instance_id,remote_jid' })
-              .select('id, remote_jid')
+            const CHUNK_SIZE = 50
+            for (let i = 0; i < contactsData.length; i += CHUNK_SIZE) {
+              const chunk = contactsData.slice(i, i + CHUNK_SIZE)
+              const { error: contactsError } = await supabaseAdmin
+                .from('contacts')
+                .upsert(chunk, { onConflict: 'instance_id,remote_jid' })
+              if (contactsError) {
+                console.error('[DEBUG] Error upserting contacts chunk:', contactsError)
+              }
+            }
 
-            if (contactsError) {
-              console.error('[DEBUG] Error upserting contacts:', contactsError)
-            } else if (upsertedContacts) {
+            const jids = Array.from(uniqueJids)
+            const upsertedContacts: any[] = []
+
+            for (let i = 0; i < jids.length; i += CHUNK_SIZE) {
+              const chunkJids = jids.slice(i, i + CHUNK_SIZE)
+              const { data: fetchedContacts, error: fetchContactsError } = await supabaseAdmin
+                .from('contacts')
+                .select('id, remote_jid')
+                .eq('instance_id', instanceData.id)
+                .in('remote_jid', chunkJids)
+
+              if (fetchContactsError) {
+                console.error('[DEBUG] Error fetching contacts:', fetchContactsError)
+              } else if (fetchedContacts) {
+                upsertedContacts.push(...fetchedContacts)
+              }
+            }
+
+            if (upsertedContacts.length > 0) {
               const conversationsData: any[] = []
               for (const chat of chats) {
                 const remoteJid = chat.id || chat.remoteJid
@@ -348,12 +383,16 @@ Deno.serve(async (req: Request) => {
               )
 
               if (uniqueConvs.length > 0) {
-                const { error: convError } = await supabaseAdmin
-                  .from('conversations')
-                  .upsert(uniqueConvs, { onConflict: 'instance_id,contact_id' })
+                const CHUNK_SIZE = 50
+                for (let i = 0; i < uniqueConvs.length; i += CHUNK_SIZE) {
+                  const chunk = uniqueConvs.slice(i, i + CHUNK_SIZE)
+                  const { error: convError } = await supabaseAdmin
+                    .from('conversations')
+                    .upsert(chunk, { onConflict: 'instance_id,contact_id' })
 
-                if (convError) {
-                  console.error('[DEBUG] Error upserting conversations:', convError)
+                  if (convError) {
+                    console.error('[DEBUG] Error upserting conversations chunk:', convError)
+                  }
                 }
               }
             }

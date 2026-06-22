@@ -104,6 +104,24 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             (res.error as any).context?.status === 429) ||
           res.data?.code === 'RATE_LIMIT_REACHED'
 
+        const isUnauthorized =
+          (res.error as any)?.status === 401 ||
+          (res.error as any)?.status === 403 ||
+          res.error?.message?.includes('401') ||
+          res.error?.message?.includes('403') ||
+          (res.error?.name === 'FunctionsHttpError' &&
+            ((res.error as any).context?.status === 401 ||
+              (res.error as any).context?.status === 403)) ||
+          res.data?.code === 'UNAUTHORIZED'
+
+        if (isUnauthorized) {
+          const msg =
+            'Token inválido ou acesso negado (401/403). Verifique a configuração da instância.'
+          setSyncError(msg)
+          toast.error(msg)
+          return
+        }
+
         if (isRateLimited) {
           const msg =
             'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
@@ -113,10 +131,14 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
         }
 
         if (res.error || res.data?.error) {
-          setSyncError(
-            'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
-          )
+          const errMsg =
+            res.data?.error ||
+            res.error?.message ||
+            'Não foi possível carregar as conversas. Verifique a conexão da sua instância.'
+          setSyncError(errMsg)
+          toast.error(errMsg)
         } else {
+          toast.success('Conversas sincronizadas com sucesso!')
           await fetchConversations()
         }
       }
