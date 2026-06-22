@@ -192,14 +192,29 @@ Deno.serve(async (req: Request) => {
     }
 
     const handleUazapiErrors = async (res: any) => {
-      if (res.status === 401) {
+      if (!res.ok) {
+        console.error(`[DEBUG] API Error captured. Status: ${res.status}. Body:`, res.parsedBody)
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        const errorMsg =
+          res.status === 401 ? 'Token inválido ou expirado (401)' : 'Acesso negado (403)'
         await supabaseAdmin
           .from('whatsapp_instances')
-          .update({ status: 'unauthorized', last_error: 'Token inválido ou expirado (401)' })
+          .update({ status: 'unauthorized', last_error: errorMsg })
           .eq('id', instanceData.id)
+        return new Response(JSON.stringify({ code: 'UNAUTHORIZED', error: errorMsg }), {
+          status: res.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (res.status === 504 || res.status >= 500) {
         return new Response(
-          JSON.stringify({ code: 'UNAUTHORIZED', error: 'Token inválido ou expirado (401)' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          JSON.stringify({
+            code: 'SERVER_ERROR',
+            error: `Erro no servidor da API (${res.status})`,
+          }),
+          { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       }
       if (res.status === 404) {
@@ -238,22 +253,118 @@ Deno.serve(async (req: Request) => {
 
     switch (action) {
       case 'get_conversations': {
+        const startTime = Date.now()
+        console.log(`[DEBUG] Starting get_conversations for instance ${instanceData.id}`)
+
         const res = await fetchUazapi(`/chat/find`, {
           method: 'POST',
           body: JSON.stringify({
             sort: '-wa_lastMsgTimestamp',
-            limit: 50,
+            limit: 100,
             offset: 0,
           }),
         })
 
         const errResp = await handleUazapiErrors(res)
-        if (errResp) return errResp
+        if (errResp) {
+          console.error(
+            `[DEBUG] get_conversations Uazapi error: Status ${res.status}, Body:`,
+            res.parsedBody,
+          )
+          return errResp
+        }
 
-        console.log('[DEBUG] Uazapi get_conversations response:', JSON.stringify(res.parsedBody))
+        const chats = Array.isArray(res.parsedBody)
+          ? res.parsedBody
+          : res.parsedBody?.data && Array.isArray(res.parsedBody.data)
+            ? res.parsedBody.data
+            : []
 
-        return new Response(JSON.stringify(res.parsedBody || []), {
-          status: res.status,
+        console.log(`[DEBUG] Received ${chats.length} chats from Uazapi`)
+
+        if (chats.length > 0) {
+          const contactsData: any[] = []
+          const uniqueJids = new Set<string>()
+
+          for (const chat of chats) {
+            const remoteJid = chat.id || chat.remoteJid
+            if (!remoteJid) continue
+            if (uniqueJids.has(remoteJid)) continue
+            uniqueJids.add(remoteJid)
+
+            const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
+            const profilePic = chat.profilePicUrl || chat.profilePicture || null
+
+            contactsData.push({
+              instance_id: instanceData.id,
+              remote_jid: remoteJid,
+              push_name: pushName,
+              profile_picture: profilePic,
+            })
+          }
+
+          if (contactsData.length > 0) {
+            const { data: upsertedContacts, error: contactsError } = await supabaseAdmin
+              .from('contacts')
+              .upsert(contactsData, { onConflict: 'instance_id,remote_jid' })
+              .select('id, remote_jid')
+
+            if (contactsError) {
+              console.error('[DEBUG] Error upserting contacts:', contactsError)
+            } else if (upsertedContacts) {
+              const conversationsData: any[] = []
+              for (const chat of chats) {
+                const remoteJid = chat.id || chat.remoteJid
+                if (!remoteJid) continue
+
+                const contact = upsertedContacts.find((c: any) => c.remote_jid === remoteJid)
+                if (!contact) continue
+
+                let lastMessageText = ''
+                if (chat.lastMessage) {
+                  const msg = chat.lastMessage.message || chat.lastMessage
+                  lastMessageText =
+                    msg?.conversation || msg?.extendedTextMessage?.text || msg?.text || ''
+                }
+
+                const timestamp = chat.conversationTimestamp || chat.timestamp
+                const updatedAt = timestamp
+                  ? new Date(timestamp * 1000).toISOString()
+                  : new Date().toISOString()
+
+                conversationsData.push({
+                  instance_id: instanceData.id,
+                  contact_id: contact.id,
+                  last_message: lastMessageText,
+                  unread_count: chat.unreadCount || 0,
+                  updated_at: updatedAt,
+                })
+              }
+
+              const uniqueConvs = Array.from(
+                new Map(
+                  conversationsData.map((c) => [`${c.instance_id}_${c.contact_id}`, c]),
+                ).values(),
+              )
+
+              if (uniqueConvs.length > 0) {
+                const { error: convError } = await supabaseAdmin
+                  .from('conversations')
+                  .upsert(uniqueConvs, { onConflict: 'instance_id,contact_id' })
+
+                if (convError) {
+                  console.error('[DEBUG] Error upserting conversations:', convError)
+                }
+              }
+            }
+          }
+        }
+
+        const endTime = Date.now()
+        console.log(`[DEBUG] Processed ${chats.length} conversations in ${endTime - startTime}ms`)
+
+        return new Response(JSON.stringify({ success: true, count: chats.length }), {
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }

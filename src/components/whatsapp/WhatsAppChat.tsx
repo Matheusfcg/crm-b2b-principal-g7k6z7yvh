@@ -117,54 +117,6 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
           )
         } else {
-          if (Array.isArray(res.data) && res.data.length > 0) {
-            for (const chat of res.data) {
-              const remoteJid = chat.id || chat.remoteJid
-              if (!remoteJid) continue
-
-              const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
-              const profilePic = chat.profilePicUrl || chat.profilePicture || null
-
-              const { data: contactData } = await supabase
-                .from('contacts')
-                .upsert(
-                  {
-                    instance_id: instanceId,
-                    remote_jid: remoteJid,
-                    push_name: pushName,
-                    profile_picture: profilePic,
-                  },
-                  { onConflict: 'instance_id,remote_jid' },
-                )
-                .select('id')
-                .single()
-
-              if (contactData) {
-                let lastMessageText = ''
-                if (chat.lastMessage) {
-                  const msg = chat.lastMessage.message || chat.lastMessage
-                  lastMessageText =
-                    msg?.conversation || msg?.extendedTextMessage?.text || msg?.text || ''
-                }
-
-                const timestamp = chat.conversationTimestamp || chat.timestamp
-                const updatedAt = timestamp
-                  ? new Date(timestamp * 1000).toISOString()
-                  : new Date().toISOString()
-
-                await supabase.from('conversations').upsert(
-                  {
-                    instance_id: instanceId,
-                    contact_id: contactData.id,
-                    last_message: lastMessageText,
-                    unread_count: chat.unreadCount || 0,
-                    updated_at: updatedAt,
-                  },
-                  { onConflict: 'instance_id,contact_id' },
-                )
-              }
-            }
-          }
           await fetchConversations()
         }
       }
