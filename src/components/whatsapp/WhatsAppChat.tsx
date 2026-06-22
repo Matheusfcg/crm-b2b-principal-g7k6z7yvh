@@ -82,7 +82,11 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
   }
 
   const syncFromUazapi = async () => {
-    if (!instanceId || !isValidUUID(instanceId)) return
+    if (!instanceId || !isValidUUID(instanceId)) {
+      setSyncError('Nenhuma instância configurada.')
+      toast.error('Nenhuma instância configurada. Conecte seu WhatsApp primeiro.')
+      return
+    }
     setSyncing(true)
     setSyncError(null)
     try {
@@ -360,8 +364,23 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
         </div>
 
         {syncError && (
-          <div className="bg-red-50 p-3 text-xs text-red-600 border-b border-red-100">
-            {syncError}
+          <div className="bg-red-50 p-3 text-xs text-red-600 border-b border-red-100 flex items-center justify-between">
+            <span>{syncError}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => syncFromUazapi()}
+              className="h-6 px-2 text-[10px] text-red-700 hover:bg-red-100"
+            >
+              Tentar Novamente
+            </Button>
+          </div>
+        )}
+
+        {syncing && conversations.length > 0 && (
+          <div className="bg-blue-50 p-2 text-xs text-blue-600 flex items-center justify-center gap-2 border-b border-blue-100">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Sincronizando dados mais recentes...
           </div>
         )}
 
@@ -369,7 +388,10 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
           {loading || (syncing && conversations.length === 0) ? (
             <div className="p-8 flex flex-col items-center justify-center space-y-3 text-slate-400">
               <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="text-sm">Sincronizando conversas...</span>
+              <span className="text-sm">Sincronizando conversas do WhatsApp...</span>
+              <p className="text-[10px] text-slate-400 max-w-[200px] text-center mt-1">
+                Isso pode levar alguns instantes. Aguarde.
+              </p>
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="p-8 text-center text-slate-500 text-sm">

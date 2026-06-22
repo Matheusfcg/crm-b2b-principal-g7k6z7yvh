@@ -359,7 +359,21 @@ Deno.serve(async (req: Request) => {
                 if (chat.lastMessage) {
                   const msg = chat.lastMessage.message || chat.lastMessage
                   lastMessageText =
-                    msg?.conversation || msg?.extendedTextMessage?.text || msg?.text || ''
+                    msg?.conversation ||
+                    msg?.extendedTextMessage?.text ||
+                    msg?.text ||
+                    msg?.imageMessage?.caption ||
+                    msg?.videoMessage?.caption ||
+                    msg?.documentMessage?.caption ||
+                    ''
+
+                  if (!lastMessageText) {
+                    if (msg?.imageMessage) lastMessageText = '📷 Imagem'
+                    else if (msg?.videoMessage) lastMessageText = '🎥 Vídeo'
+                    else if (msg?.audioMessage) lastMessageText = '🎵 Áudio'
+                    else if (msg?.documentMessage) lastMessageText = '📄 Documento'
+                    else if (msg?.stickerMessage) lastMessageText = '🌟 Sticker'
+                  }
                 }
 
                 const timestamp = chat.conversationTimestamp || chat.timestamp

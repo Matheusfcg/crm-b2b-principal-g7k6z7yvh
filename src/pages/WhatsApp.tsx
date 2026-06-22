@@ -728,7 +728,23 @@ export default function WhatsApp() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-3 space-y-4">
-              {!isConnected ? (
+              {!instance ? (
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex items-center justify-between shadow-sm">
+                  <div>
+                    <h3 className="text-yellow-800 font-semibold">Nenhuma instância configurada</h3>
+                    <p className="text-sm text-yellow-600">
+                      Por favor, configure sua instância do WhatsApp para começar a sincronizar
+                      mensagens.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => setConfigOpen(true)}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    Configurar Instância
+                  </Button>
+                </div>
+              ) : !isConnected ? (
                 <ConnectionStatus
                   instance={instance}
                   uazapiUrl={uazapiUrl}
