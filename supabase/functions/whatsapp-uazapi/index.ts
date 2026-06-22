@@ -86,6 +86,12 @@ Deno.serve(async (req: Request) => {
     const instanceId = reqBody?.instanceId
     const instanceName = reqBody?.instanceName || reqBody?.instance_name
 
+    if (action === 'get_conversations') {
+      console.log(
+        `[DEBUG_WHATSAPP] Action get_conversations called for instanceId: ${instanceId}, instanceName: ${instanceName}`,
+      )
+    }
+
     if (!action) {
       return new Response(
         JSON.stringify({ error: 'Action não reconhecida. Verifique o payload.' }),
@@ -267,7 +273,7 @@ Deno.serve(async (req: Request) => {
     switch (action) {
       case 'get_conversations': {
         const startTime = Date.now()
-        console.log(`[DEBUG] Starting get_conversations for instance ${instanceData.id}`)
+        console.log(`[DEBUG_WHATSAPP] Starting get_conversations for instance ${instanceData.id}`)
 
         const res = await fetchUazapi(`/chat/find`, {
           method: 'POST',
@@ -293,7 +299,7 @@ Deno.serve(async (req: Request) => {
             ? res.parsedBody.data
             : []
 
-        console.log(`[DEBUG] Received ${chats.length} chats from Uazapi`)
+        console.log(`[DEBUG_WHATSAPP] Received ${chats.length} chats from Uazapi`)
 
         if (chats.length > 0) {
           const contactsData: any[] = []
@@ -306,7 +312,11 @@ Deno.serve(async (req: Request) => {
             uniqueJids.add(remoteJid)
 
             const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
-            const profilePic = chat.profilePicUrl || chat.profilePicture || null
+
+            let profilePic = chat.profilePicUrl || chat.profilePicture || null
+            if (profilePic && typeof profilePic === 'string' && !profilePic.startsWith('http')) {
+              profilePic = null
+            }
 
             contactsData.push({
               instance_id: instanceData.id,
@@ -414,7 +424,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const endTime = Date.now()
-        console.log(`[DEBUG] Processed ${chats.length} conversations in ${endTime - startTime}ms`)
+        console.log(
+          `[DEBUG_WHATSAPP] Processed ${chats.length} conversations in ${endTime - startTime}ms`,
+        )
 
         return new Response(JSON.stringify({ success: true, count: chats.length }), {
           status: 200,

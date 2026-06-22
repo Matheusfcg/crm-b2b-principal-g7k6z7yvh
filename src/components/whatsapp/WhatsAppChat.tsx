@@ -89,6 +89,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     }
     setSyncing(true)
     setSyncError(null)
+    console.log('[DEBUG_WHATSAPP] Iniciando syncFromUazapi para a instância:', instanceId)
     try {
       const { data: instance } = await supabase
         .from('whatsapp_instances')
@@ -97,6 +98,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
         .single()
 
       if (instance?.instance_name) {
+        console.log('[DEBUG_WHATSAPP] Invocando edge function para get_conversations')
         const res = await supabase.functions.invoke('whatsapp-uazapi', {
           body: { action: 'get_conversations', instanceName: instance.instance_name },
         })
@@ -129,6 +131,7 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
         if (isRateLimited) {
           const msg =
             'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
+          console.error('[DEBUG_WHATSAPP] Sync rate limited:', res.error)
           setSyncError(msg)
           toast.error(msg)
           return
@@ -139,14 +142,21 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             res.data?.error ||
             res.error?.message ||
             'Não foi possível carregar as conversas. Verifique a conexão da sua instância.'
+          console.error(
+            '[DEBUG_WHATSAPP] Sync error from edge function:',
+            errMsg,
+            res.error || res.data?.error,
+          )
           setSyncError(errMsg)
           toast.error(errMsg)
         } else {
           toast.success('Conversas sincronizadas com sucesso!')
+          console.log('[DEBUG_WHATSAPP] Sync successful, fetching conversations.')
           await fetchConversations()
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[DEBUG_WHATSAPP] Error syncing from Uazapi:', err)
       setSyncError('Não foi possível carregar as conversas. Verifique a conexão da sua instância.')
     } finally {
       setSyncing(false)
@@ -410,7 +420,13 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
                 >
                   <div className="relative">
                     <Avatar className="h-10 w-10 border border-slate-200">
-                      <AvatarImage src={conv.contact?.profile_picture || undefined} />
+                      <AvatarImage
+                        src={
+                          conv.contact?.profile_picture?.startsWith('http')
+                            ? conv.contact.profile_picture
+                            : undefined
+                        }
+                      />
                       <AvatarFallback className="bg-slate-200 text-slate-600">
                         {conv.contact?.push_name?.charAt(0)?.toUpperCase() || (
                           <User className="h-5 w-5" />
@@ -471,7 +487,13 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             {/* Chat Header */}
             <div className="p-4 border-b border-slate-200 flex items-center gap-3 bg-white">
               <Avatar className="h-10 w-10 border border-slate-200">
-                <AvatarImage src={selectedConv?.contact?.profile_picture || undefined} />
+                <AvatarImage
+                  src={
+                    selectedConv?.contact?.profile_picture?.startsWith('http')
+                      ? selectedConv.contact.profile_picture
+                      : undefined
+                  }
+                />
                 <AvatarFallback className="bg-slate-200 text-slate-600">
                   {selectedConv?.contact?.push_name?.charAt(0)?.toUpperCase() || (
                     <User className="h-5 w-5" />

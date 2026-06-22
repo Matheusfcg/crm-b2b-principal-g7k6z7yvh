@@ -123,7 +123,13 @@ export function ChatSidebar({ instance, selectedId, onSelect }: ChatSidebarProps
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r-full" />
                   )}
                   <Avatar className="h-12 w-12 border border-slate-200 shadow-sm shrink-0">
-                    <AvatarImage src={conv.contact?.profile_picture || undefined} />
+                    <AvatarImage
+                      src={
+                        conv.contact?.profile_picture?.startsWith('http')
+                          ? conv.contact.profile_picture
+                          : undefined
+                      }
+                    />
                     <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
                       {name.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
