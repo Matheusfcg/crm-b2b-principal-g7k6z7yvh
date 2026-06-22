@@ -172,10 +172,10 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
             res.error || res.data?.error,
           )
           setSyncError(errMsg)
-          toast.error('Erro ao sincronizar. Verifique o console.')
+          toast.error('Erro ao sincronizar mensagens. Verifique o console para mais detalhes.')
         } else {
           toast.success('Sincronização concluída com sucesso!')
-          console.log('[DEBUG_WHATSAPP] Sync successful, fetching conversations.')
+          console.log('[DEBUG_WHATSAPP] Sync successful, payload:', res.data)
           await fetchConversations()
         }
       }

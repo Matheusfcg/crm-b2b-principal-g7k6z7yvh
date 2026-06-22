@@ -445,10 +445,13 @@ Deno.serve(async (req: Request) => {
           `[DEBUG_WHATSAPP] Processed ${chats.length} conversations in ${endTime - startTime}ms`,
         )
 
-        return new Response(JSON.stringify({ success: true, count: chats.length }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ success: true, count: chats.length, payload: chats.slice(0, 10) }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       case 'connect':
