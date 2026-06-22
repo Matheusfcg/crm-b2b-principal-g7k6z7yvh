@@ -176,6 +176,8 @@ Deno.serve(async (req: Request) => {
           if (path.includes('/instance/status') || path.includes('/instance/connect')) {
             console.log(`[DEBUG] 200 OK received from Uazapi after ${path} event`)
           }
+        } else {
+          console.error(`[DEBUG] Uazapi request failed with status ${res.status}. Body: ${text}`)
         }
 
         return { ok: res.ok, status: res.status, parsedBody }

@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { format } from 'date-fns'
-import { MessageSquare, User, Loader2, Send, Search, Filter } from 'lucide-react'
+import { MessageSquare, User, Loader2, Send, Search, Filter, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -81,103 +81,101 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
     }
   }
 
-  useEffect(() => {
-    const syncFromUazapi = async () => {
-      if (!instanceId || !isValidUUID(instanceId)) return
-      setSyncing(true)
-      setSyncError(null)
-      try {
-        const { data: instance } = await supabase
-          .from('whatsapp_instances')
-          .select('instance_name')
-          .eq('id', instanceId)
-          .single()
+  const syncFromUazapi = async () => {
+    if (!instanceId || !isValidUUID(instanceId)) return
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const { data: instance } = await supabase
+        .from('whatsapp_instances')
+        .select('instance_name')
+        .eq('id', instanceId)
+        .single()
 
-        if (instance?.instance_name) {
-          const res = await supabase.functions.invoke('whatsapp-uazapi', {
-            body: { action: 'get_conversations', instanceName: instance.instance_name },
-          })
+      if (instance?.instance_name) {
+        const res = await supabase.functions.invoke('whatsapp-uazapi', {
+          body: { action: 'get_conversations', instanceName: instance.instance_name },
+        })
 
-          const isRateLimited =
-            (res.error as any)?.status === 429 ||
-            res.error?.message?.includes('429') ||
-            (res.error?.name === 'FunctionsHttpError' &&
-              (res.error as any).context?.status === 429) ||
-            res.data?.code === 'RATE_LIMIT_REACHED'
+        const isRateLimited =
+          (res.error as any)?.status === 429 ||
+          res.error?.message?.includes('429') ||
+          (res.error?.name === 'FunctionsHttpError' &&
+            (res.error as any).context?.status === 429) ||
+          res.data?.code === 'RATE_LIMIT_REACHED'
 
-          if (isRateLimited) {
-            const msg =
-              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-            setSyncError(msg)
-            toast.error(msg)
-            return
-          }
+        if (isRateLimited) {
+          const msg =
+            'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
+          setSyncError(msg)
+          toast.error(msg)
+          return
+        }
 
-          if (res.error || res.data?.error) {
-            setSyncError(
-              'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
-            )
-          } else {
-            if (Array.isArray(res.data) && res.data.length > 0) {
-              for (const chat of res.data) {
-                const remoteJid = chat.id || chat.remoteJid
-                if (!remoteJid) continue
+        if (res.error || res.data?.error) {
+          setSyncError(
+            'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
+          )
+        } else {
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            for (const chat of res.data) {
+              const remoteJid = chat.id || chat.remoteJid
+              if (!remoteJid) continue
 
-                const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
-                const profilePic = chat.profilePicUrl || chat.profilePicture || null
+              const pushName = chat.name || chat.pushName || remoteJid.split('@')[0]
+              const profilePic = chat.profilePicUrl || chat.profilePicture || null
 
-                const { data: contactData } = await supabase
-                  .from('contacts')
-                  .upsert(
-                    {
-                      instance_id: instanceId,
-                      remote_jid: remoteJid,
-                      push_name: pushName,
-                      profile_picture: profilePic,
-                    },
-                    { onConflict: 'instance_id,remote_jid' },
-                  )
-                  .select('id')
-                  .single()
+              const { data: contactData } = await supabase
+                .from('contacts')
+                .upsert(
+                  {
+                    instance_id: instanceId,
+                    remote_jid: remoteJid,
+                    push_name: pushName,
+                    profile_picture: profilePic,
+                  },
+                  { onConflict: 'instance_id,remote_jid' },
+                )
+                .select('id')
+                .single()
 
-                if (contactData) {
-                  let lastMessageText = ''
-                  if (chat.lastMessage) {
-                    const msg = chat.lastMessage.message || chat.lastMessage
-                    lastMessageText =
-                      msg?.conversation || msg?.extendedTextMessage?.text || msg?.text || ''
-                  }
-
-                  const timestamp = chat.conversationTimestamp || chat.timestamp
-                  const updatedAt = timestamp
-                    ? new Date(timestamp * 1000).toISOString()
-                    : new Date().toISOString()
-
-                  await supabase.from('conversations').upsert(
-                    {
-                      instance_id: instanceId,
-                      contact_id: contactData.id,
-                      last_message: lastMessageText,
-                      unread_count: chat.unreadCount || 0,
-                      updated_at: updatedAt,
-                    },
-                    { onConflict: 'instance_id,contact_id' },
-                  )
+              if (contactData) {
+                let lastMessageText = ''
+                if (chat.lastMessage) {
+                  const msg = chat.lastMessage.message || chat.lastMessage
+                  lastMessageText =
+                    msg?.conversation || msg?.extendedTextMessage?.text || msg?.text || ''
                 }
+
+                const timestamp = chat.conversationTimestamp || chat.timestamp
+                const updatedAt = timestamp
+                  ? new Date(timestamp * 1000).toISOString()
+                  : new Date().toISOString()
+
+                await supabase.from('conversations').upsert(
+                  {
+                    instance_id: instanceId,
+                    contact_id: contactData.id,
+                    last_message: lastMessageText,
+                    unread_count: chat.unreadCount || 0,
+                    updated_at: updatedAt,
+                  },
+                  { onConflict: 'instance_id,contact_id' },
+                )
               }
             }
-            await fetchConversations()
           }
+          await fetchConversations()
         }
-      } catch (err) {
-        setSyncError(
-          'Não foi possível carregar as conversas. Verifique a conexão da sua instância.',
-        )
-      } finally {
-        setSyncing(false)
       }
+    } catch (err) {
+      setSyncError('Não foi possível carregar as conversas. Verifique a conexão da sua instância.')
+    } finally {
+      setSyncing(false)
     }
+  }
 
+  useEffect(() => {
     if (instanceId && isValidUUID(instanceId)) {
       fetchConversations(true).then(() => syncFromUazapi())
 
@@ -343,9 +341,22 @@ export function WhatsAppChat({ instanceId }: { instanceId: string }) {
               <MessageSquare className="h-5 w-5" />
               Conversas
             </h2>
-            {syncing && (
-              <Loader2 className="h-4 w-4 animate-spin text-slate-400" title="Sincronizando..." />
-            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={() => syncFromUazapi()}
+                disabled={syncing}
+              >
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                )}
+                Sincronizar
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">

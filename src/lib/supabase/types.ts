@@ -333,6 +333,51 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_instances: {
+        Row: {
+          created_at: string | null
+          id: string
+          instance_name: string
+          instance_token: string | null
+          last_connection: string | null
+          last_error: string | null
+          phone: string | null
+          qrcode: string | null
+          server_url: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          instance_token?: string | null
+          last_connection?: string | null
+          last_error?: string | null
+          phone?: string | null
+          qrcode?: string | null
+          server_url?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          instance_token?: string | null
+          last_connection?: string | null
+          last_error?: string | null
+          phone?: string | null
+          qrcode?: string | null
+          server_url?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_logs: {
         Row: {
           created_at: string | null
