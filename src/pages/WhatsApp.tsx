@@ -294,18 +294,41 @@ export default function WhatsApp() {
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('whatsapp_instances')
         .select(
           'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
         )
         .eq('user_id', user.id)
+        .limit(1)
         .maybeSingle()
 
       if (error) {
         console.error('[DEBUG_WHATSAPP] Error fetching instance:', error)
         toast.error('Falha ao conectar com o banco de dados. Tentando novamente em breve.')
         return
+      }
+
+      if (!data) {
+        const newInstanceName = `inst_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`
+        const { data: newData, error: insertError } = await supabase
+          .from('whatsapp_instances')
+          .insert({
+            user_id: user.id,
+            instance_name: newInstanceName,
+            server_url: 'https://api.uazapi.com',
+            status: 'disconnected',
+          })
+          .select(
+            'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
+          )
+          .single()
+
+        if (insertError) {
+          console.error('[DEBUG_WHATSAPP] Error creating default instance:', insertError)
+        } else {
+          data = newData
+        }
       }
 
       if (data) {
