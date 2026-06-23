@@ -759,19 +759,22 @@ export default function WhatsApp() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-3 space-y-4">
               {!instance ? (
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex items-center justify-between shadow-sm">
+                <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl flex flex-col md:flex-row items-center justify-between shadow-sm gap-4">
                   <div>
-                    <h3 className="text-yellow-800 font-semibold">Nenhuma instância configurada</h3>
-                    <p className="text-sm text-yellow-600">
-                      Por favor, configure sua instância do WhatsApp para começar a sincronizar
-                      mensagens.
+                    <h3 className="text-blue-900 font-semibold text-lg">
+                      Nenhuma instância encontrada
+                    </h3>
+                    <p className="text-sm text-blue-700 mt-1 max-w-lg">
+                      Você ainda não possui uma instância do WhatsApp vinculada à sua conta. Para
+                      começar a sincronizar suas mensagens e gerenciar conversas diretamente pelo
+                      CRM, crie e inicialize uma nova instância.
                     </p>
                   </div>
                   <Button
                     onClick={() => setConfigOpen(true)}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                    className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
                   >
-                    Configurar Instância
+                    Criar / Inicializar Instância
                   </Button>
                 </div>
               ) : !isConnected ? (

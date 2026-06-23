@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import {
   MessageCircle,
   QrCode,
@@ -45,6 +46,7 @@ export function ConnectionStatus({
   countdown,
   qrCountdown,
 }: ConnectionStatusProps) {
+  const [imgError, setImgError] = useState(false)
   const status = instance?.status || 'disconnected'
   const isConnected = status === 'open' || status === 'connected'
   const isConnecting = status === 'connecting' || status === 'qrcode' || instance?.is_connecting
@@ -62,6 +64,10 @@ export function ConnectionStatus({
         ? rawQr
         : `data:image/png;base64,${rawQr}`
   }
+
+  useEffect(() => {
+    setImgError(false)
+  }, [rawQr])
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -299,17 +305,41 @@ export function ConnectionStatus({
           <CardDescription>Escaneie o código para vincular.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center min-h-[250px] p-6">
-          {qrcodeSrc && !isTimeout ? (
+          {imgError ? (
+            <div className="text-center flex flex-col items-center gap-4 max-w-[280px] animate-in fade-in zoom-in duration-300">
+              <div className="h-16 w-16 bg-red-50 rounded-full flex items-center justify-center">
+                <QrCode className="h-8 w-8 text-red-500 opacity-50" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">Erro na Imagem</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Não foi possível carregar o QR Code. Por favor, tente regerar.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setImgError(false)
+                  onReconnect()
+                }}
+                disabled={actionLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white w-full gap-2 mt-2"
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Regerar QR Code
+              </Button>
+            </div>
+          ) : qrcodeSrc && !isTimeout ? (
             <div className="flex flex-col items-center gap-4">
               <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm animate-in fade-in zoom-in duration-300 relative">
                 <img
                   src={qrcodeSrc}
                   alt="WhatsApp QR Code"
                   className="w-[200px] h-[200px] object-contain"
-                  onError={(e) => {
-                    ;(e.target as HTMLImageElement).src =
-                      'https://img.usecurling.com/i?q=qr-code-error&color=gray'
-                  }}
+                  onError={() => setImgError(true)}
                 />
               </div>
               {qrCountdown !== null && qrCountdown > 0 && (
