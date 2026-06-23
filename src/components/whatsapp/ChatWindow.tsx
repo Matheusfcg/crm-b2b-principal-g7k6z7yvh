@@ -15,7 +15,16 @@ const isValidUUID = (id: string) => {
 }
 
 function ContactAvatar({ contact, className }: { contact: any; className?: string }) {
-  const src = contact?.profile_picture?.startsWith('http') ? contact.profile_picture : null
+  let src = null
+  try {
+    if (contact?.profile_picture && contact.profile_picture.startsWith('http')) {
+      new URL(contact.profile_picture)
+      src = contact.profile_picture
+    }
+  } catch (e) {
+    src = null
+  }
+
   const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Desconhecido'
 
   return (
@@ -117,15 +126,27 @@ export function ChatWindow({
         .eq('id', instance.id)
         .single()
 
-      const { data, error } = await supabase.functions.invoke('whatsapp-uazapi', {
+      if (!instanceData?.instance_token || !instanceData?.instance_name) {
+        throw new Error(
+          'Configuração da instância incompleta. Verifique o token e nome da instância.',
+        )
+      }
+
+      const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
         body: {
           action: 'send_message',
-          instanceName: instanceData?.instance_name,
-          instanceToken: instanceData?.instance_token,
+          instanceName: instanceData.instance_name,
+          instanceToken: instanceData.instance_token,
           remoteJid: contact.remote_jid,
           text,
         },
       })
+      const timeoutPromise = new Promise<any>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+      })
+
+      const res = await Promise.race([invokePromise, timeoutPromise])
+      const { data, error } = res as any
 
       const isRateLimited =
         (error as any)?.status === 429 ||

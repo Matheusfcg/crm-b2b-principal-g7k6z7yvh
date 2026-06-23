@@ -63,7 +63,7 @@ export default function WhatsApp() {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('TIMEOUT'))
-        }, 600000)
+        }, 15000)
       })
 
       try {
@@ -483,15 +483,20 @@ export default function WhatsApp() {
             instance.status === 'qrcode' ||
             instance.status === 'waiting')
         ) {
-          supabase.functions
-            .invoke('whatsapp-uazapi', {
-              body: {
-                action: 'get_status',
-                instanceId: instance.id,
-                instanceName: instance.instance_name,
-                instanceToken: instance.instance_token,
-              },
-            })
+          const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
+            body: {
+              action: 'get_status',
+              instanceId: instance.id,
+              instanceName: instance.instance_name,
+              instanceToken: instance.instance_token,
+            },
+          })
+
+          const pollTimeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) => {
+            setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+          })
+
+          Promise.race([invokePromise, pollTimeoutPromise])
             .catch((err) => {
               console.warn('[DEBUG_WHATSAPP] Safely caught polling invoke exception:', err)
               return { data: null, error: err }
@@ -625,15 +630,19 @@ export default function WhatsApp() {
         setInstance((prev: any) =>
           prev ? { ...prev, status: 'connecting', last_error: null } : prev,
         )
-        supabase.functions
-          .invoke('whatsapp-uazapi', {
-            body: {
-              action: 'get_qr',
-              instanceId: instance.id,
-              instanceName: instance.instance_name,
-              instanceToken: instance.instance_token,
-            },
-          })
+        const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
+          body: {
+            action: 'get_qr',
+            instanceId: instance.id,
+            instanceName: instance.instance_name,
+            instanceToken: instance.instance_token,
+          },
+        })
+        const qrTimeoutPromise = new Promise<any>((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+        })
+
+        Promise.race([invokePromise, qrTimeoutPromise])
           .then((res) => {
             if (res?.data?.qrcode || res?.data?.base64 || res?.data?.success) {
               setQrCountdown(600)
