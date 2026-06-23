@@ -213,7 +213,8 @@ export default function WhatsApp() {
             } else if (
               data.instance.status === 'qrcode' ||
               data.instance.qrcode ||
-              data.instance.status === 'connecting'
+              data.instance.status === 'connecting' ||
+              data.instance.status === 'waiting'
             ) {
               toast.info('Aguardando leitura do QR Code... isso pode levar um momento.')
               setQrCountdown(600)
@@ -337,7 +338,10 @@ export default function WhatsApp() {
         }
 
         let initialCountdown = null
-        if ((data.status === 'connecting' || data.status === 'qrcode') && data.qrcode) {
+        if (
+          (data.status === 'connecting' || data.status === 'qrcode' || data.status === 'waiting') &&
+          data.qrcode
+        ) {
           const updatedAt = data.updated_at
             ? new Date(data.updated_at).getTime()
             : new Date().getTime()
@@ -353,7 +357,7 @@ export default function WhatsApp() {
         setInstance(data)
         if (initialCountdown !== null) {
           setQrCountdown(initialCountdown)
-        } else if (data.status === 'disconnected') {
+        } else if (data.status === 'disconnected' || data.status === 'waiting') {
           checkStatusWithTimeout(data, 'get_qr')
         }
 
@@ -481,7 +485,12 @@ export default function WhatsApp() {
       syncTimer = setInterval(() => {
         if (isPollingPaused) return
 
-        if (instance && (instance.status === 'connecting' || instance.status === 'qrcode')) {
+        if (
+          instance &&
+          (instance.status === 'connecting' ||
+            instance.status === 'qrcode' ||
+            instance.status === 'waiting')
+        ) {
           supabase.functions
             .invoke('whatsapp-uazapi', {
               body: {
@@ -613,7 +622,11 @@ export default function WhatsApp() {
         }
       }, 10000)
     } else if (qrCountdown === 0) {
-      if (instance?.status === 'connecting' || instance?.status === 'qrcode') {
+      if (
+        instance?.status === 'connecting' ||
+        instance?.status === 'qrcode' ||
+        instance?.status === 'waiting'
+      ) {
         // Auto-refresh the QR Code
         setConnectError(null)
         setInstance((prev: any) =>

@@ -57,10 +57,14 @@ Deno.serve(async (req: Request) => {
 
     const serverUrl = instance.server_url || 'https://api.uazapi.com'
 
-    const apikey = instance.instance_token
+    const apikey = body.instanceToken || instance.instance_token
+
     if (!apikey) {
       return new Response(
-        JSON.stringify({ code: 'UAZAPI_TOKEN_MISSING', error: 'Missing API key' }),
+        JSON.stringify({
+          code: 'UAZAPI_TOKEN_MISSING',
+          error: 'O token da instância não foi encontrado no banco nem enviado na requisição.',
+        }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },

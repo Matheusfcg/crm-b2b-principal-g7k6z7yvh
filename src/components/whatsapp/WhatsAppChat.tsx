@@ -75,7 +75,12 @@ export default function WhatsApp() {
 
         const apiCall = supabase.functions
           .invoke('whatsapp-uazapi', {
-            body: { action, instanceId: inst.id, instanceName: inst.instance_name, instanceToken: inst.instance_token },
+            body: {
+              action,
+              instanceId: inst.id,
+              instanceName: inst.instance_name,
+              instanceToken: inst.instance_token,
+            },
           })
           .catch((err) => {
             console.warn('[DEBUG_WHATSAPP] Safely caught invoke exception:', err)
