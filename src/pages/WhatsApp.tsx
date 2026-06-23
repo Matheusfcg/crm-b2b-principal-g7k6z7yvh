@@ -37,7 +37,7 @@ export default function WhatsApp() {
   const [configOpen, setConfigOpen] = useState(false)
   const [configData, setConfigData] = useState({
     instance_name: '',
-    server_url: 'https://api.uazapi.com',
+    server_url: 'https://apiwhatsvexaview.uazapi.com',
     instance_token: '',
   })
   const [savingConfig, setSavingConfig] = useState(false)
@@ -80,6 +80,7 @@ export default function WhatsApp() {
               instanceId: inst.id,
               instanceName: inst.instance_name,
               instanceToken: inst.instance_token,
+              serverUrl: inst.server_url,
             },
           })
           .catch((err) => {
@@ -350,7 +351,7 @@ export default function WhatsApp() {
 
         setConfigData({
           instance_name: data.instance_name || '',
-          server_url: data.server_url || 'https://api.uazapi.com',
+          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
           instance_token: data.instance_token || '',
         })
       } else {
@@ -489,6 +490,7 @@ export default function WhatsApp() {
               instanceId: instance.id,
               instanceName: instance.instance_name,
               instanceToken: instance.instance_token,
+              serverUrl: instance.server_url,
             },
           })
 
@@ -636,6 +638,7 @@ export default function WhatsApp() {
             instanceId: instance.id,
             instanceName: instance.instance_name,
             instanceToken: instance.instance_token,
+            serverUrl: instance.server_url,
           },
         })
         const qrTimeoutPromise = new Promise<any>((_, reject) => {
@@ -847,7 +850,7 @@ export default function WhatsApp() {
                 <Label htmlFor="instance_name">Nome / ID da Instância</Label>
                 <Input
                   id="instance_name"
-                  placeholder="ex: rf082990e59c1b2"
+                  placeholder="ex: teste"
                   value={configData.instance_name}
                   onChange={(e) =>
                     setConfigData((prev) => ({ ...prev, instance_name: e.target.value }))
@@ -858,7 +861,7 @@ export default function WhatsApp() {
                 <Label htmlFor="server_url">Server URL</Label>
                 <Input
                   id="server_url"
-                  placeholder="https://api.uazapi.com ou https://seusubdominio.uazapi.com"
+                  placeholder="https://apiwhatsvexaview.uazapi.com"
                   value={configData.server_url}
                   onChange={(e) =>
                     setConfigData((prev) => ({ ...prev, server_url: e.target.value }))
