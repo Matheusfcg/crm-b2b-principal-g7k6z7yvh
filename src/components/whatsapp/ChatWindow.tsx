@@ -113,7 +113,7 @@ export function ChatWindow({
     try {
       const { data: instanceData } = await supabase
         .from('whatsapp_instances')
-        .select('instance_name')
+        .select('instance_name, instance_token')
         .eq('id', instance.id)
         .single()
 
@@ -121,6 +121,7 @@ export function ChatWindow({
         body: {
           action: 'send_message',
           instanceName: instanceData?.instance_name,
+          instanceToken: instanceData?.instance_token,
           remoteJid: contact.remote_jid,
           text,
         },

@@ -75,7 +75,12 @@ export default function WhatsApp() {
 
         const apiCall = supabase.functions
           .invoke('whatsapp-uazapi', {
-            body: { action, instanceId: inst.id, instanceName: inst.instance_name },
+            body: {
+              action,
+              instanceId: inst.id,
+              instanceName: inst.instance_name,
+              instanceToken: inst.instance_token,
+            },
           })
           .catch((err) => {
             console.warn('[DEBUG_WHATSAPP] Safely caught invoke exception:', err)
@@ -154,8 +159,7 @@ export default function WhatsApp() {
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
             setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
           } else if (dataLikeObj.code === 'UAZAPI_TOKEN_MISSING') {
-            errorMsg =
-              'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
+            errorMsg = 'Erro na leitura do token. Por favor, tente sincronizar novamente.'
           }
 
           setConnectError(errorMsg)
@@ -189,8 +193,7 @@ export default function WhatsApp() {
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
             setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
           } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
-            errorMsg =
-              'Token Uazapi não configurado. Por favor, atualize a configuração da instância.'
+            errorMsg = 'Erro na leitura do token. Por favor, tente sincronizar novamente.'
           }
 
           setConnectError(errorMsg)
@@ -311,25 +314,9 @@ export default function WhatsApp() {
       }
 
       if (!data) {
-        const newInstanceName = `inst_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`
-        const { data: newData, error: insertError } = await supabase
-          .from('whatsapp_instances')
-          .insert({
-            user_id: user.id,
-            instance_name: newInstanceName,
-            server_url: 'https://api.uazapi.com',
-            status: 'disconnected',
-          })
-          .select(
-            'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
-          )
-          .single()
-
-        if (insertError) {
-          console.error('[DEBUG_WHATSAPP] Error creating default instance:', insertError)
-        } else {
-          data = newData
-        }
+        setInstance(null)
+        setLoading(false)
+        return
       }
 
       if (data) {
@@ -389,22 +376,27 @@ export default function WhatsApp() {
       const hasValidId = instance?.id && isValidUUID(instance.id)
 
       const payload = {
-        ...(hasValidId ? { id: instance.id } : {}),
         user_id: user.id,
         instance_name: configData.instance_name,
         server_url: configData.server_url,
         instance_token: configData.instance_token,
-        status: instance?.status || 'connecting',
+        status: instance?.status || 'disconnected',
         updated_at: new Date().toISOString(),
       }
 
-      const conflictTarget = hasValidId ? 'id' : 'instance_name'
+      let response
+      if (hasValidId) {
+        response = await supabase
+          .from('whatsapp_instances')
+          .update(payload)
+          .eq('id', instance.id)
+          .select()
+          .single()
+      } else {
+        response = await supabase.from('whatsapp_instances').insert(payload).select().single()
+      }
 
-      const { data, error } = await supabase
-        .from('whatsapp_instances')
-        .upsert(payload, { onConflict: conflictTarget })
-        .select()
-        .single()
+      const { data, error } = response
 
       if (error) {
         const errorMsg = error?.message || error?.details || ''
@@ -497,6 +489,7 @@ export default function WhatsApp() {
                 action: 'get_status',
                 instanceId: instance.id,
                 instanceName: instance.instance_name,
+                instanceToken: instance.instance_token,
               },
             })
             .catch((err) => {
@@ -638,6 +631,7 @@ export default function WhatsApp() {
               action: 'get_qr',
               instanceId: instance.id,
               instanceName: instance.instance_name,
+              instanceToken: instance.instance_token,
             },
           })
           .then((res) => {
