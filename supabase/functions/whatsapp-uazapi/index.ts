@@ -8,8 +8,32 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json()
+    let body: any = {}
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      try {
+        const textBody = await req.text()
+        const contentType = req.headers.get('content-type') || ''
+        if (textBody && textBody.trim().length > 0) {
+          if (contentType.includes('application/json')) {
+            body = JSON.parse(textBody)
+          } else {
+            console.warn(`Unexpected request Content-Type: ${contentType}`)
+            body = { _raw: textBody }
+          }
+        }
+      } catch (e) {
+        console.warn('Request body is not valid JSON')
+      }
+    }
+
     const { action, instanceId, instanceName, remoteJid, text } = body
+
+    if (!instanceId && !instanceName) {
+      return new Response(
+        JSON.stringify({ success: true, message: 'No instance provided, assuming health check' }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      )
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -31,11 +55,7 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Force redirection away from incorrect domains
-    let serverUrl = instance.server_url || 'https://api.uazapi.com'
-    if (serverUrl.includes('api.goskip.dev')) {
-      serverUrl = 'https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi'
-    }
+    const serverUrl = instance.server_url || 'https://api.uazapi.com'
 
     const apikey = instance.instance_token
     if (!apikey) {
@@ -58,10 +78,26 @@ Deno.serve(async (req: Request) => {
       if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED')
       if (res.status === 429) throw new Error('RATE_LIMIT_REACHED')
 
+      const textData = await res.text()
+      const contentType = res.headers.get('content-type') || ''
       try {
-        return await res.json()
-      } catch (e) {
+        if (textData && textData.trim().length > 0) {
+          if (contentType.includes('application/json')) {
+            return JSON.parse(textData)
+          } else {
+            console.warn(`External API returned non-JSON content-type: ${contentType}`)
+            if (!res.ok) {
+              throw new Error(`API Error (${res.status}): ${textData.substring(0, 100)}`)
+            }
+            return { success: res.ok, status: res.status, data: textData }
+          }
+        }
         return { success: res.ok, status: res.status }
+      } catch (e: any) {
+        if (e.message && e.message.startsWith('API Error')) {
+          throw e
+        }
+        return { success: res.ok, status: res.status, error: e.message }
       }
     }
 
