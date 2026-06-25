@@ -50,7 +50,14 @@ export default function WhatsApp() {
 
   const checkStatusWithTimeout = useCallback(
     async (inst: any, action: 'get_qr' | 'get_status' = 'get_qr') => {
-      if (!inst || !inst.instance_name) return
+      if (!inst) return
+
+      if (!inst.instance_name || !inst.instance_token) {
+        const msg = 'Instance data not found'
+        setConnectError(msg)
+        toast.error(msg)
+        return
+      }
 
       setActionLoading(true)
       setConnectError(null)
@@ -77,7 +84,7 @@ export default function WhatsApp() {
           .invoke('whatsapp-uazapi', {
             body: {
               action,
-              instanceId: inst.id,
+              instanceId: inst.instance_name,
               instanceName: inst.instance_name,
               instanceToken: inst.instance_token,
               serverUrl: inst.server_url,
@@ -128,7 +135,7 @@ export default function WhatsApp() {
           const dataLikeObj = errBody || {}
 
           if (isUnauthorizedError) {
-            const msg = 'Token inválido ou expirado (401)'
+            const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
             setConnectError(msg)
             toast.error(msg)
             setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
@@ -146,21 +153,15 @@ export default function WhatsApp() {
             return
           }
 
-          let errorMsg = dataLikeObj.error || error.message || 'Erro desconhecido.'
-          if (dataLikeObj.code === 'SERVER_UNREACHABLE') {
-            errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
-          } else if (dataLikeObj.code === 'TIMEOUT') {
-            errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
+          let errorMsg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
+          if (dataLikeObj.code === 'TIMEOUT') {
             setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
           } else if (dataLikeObj.code === 'INSTANCE_NOT_FOUND') {
-            errorMsg = `Instância não encontrada (404): ${dataLikeObj.details?.error || dataLikeObj.error}`
             setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
           } else if (dataLikeObj.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
             setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          } else if (dataLikeObj.code === 'UAZAPI_TOKEN_MISSING') {
-            errorMsg = 'Erro na leitura do token. Por favor, tente sincronizar novamente.'
           }
 
           setConnectError(errorMsg)
@@ -177,24 +178,17 @@ export default function WhatsApp() {
           data?.code === 'RATE_LIMIT_REACHED' ||
           data?.code === 'UAZAPI_TOKEN_MISSING'
         ) {
-          let errorMsg = data.error || 'Erro desconhecido.'
+          let errorMsg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
           if (data?.code === 'UNAUTHORIZED') {
-            errorMsg = 'Token inválido ou expirado (401)'
             setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-          } else if (data?.code === 'SERVER_UNREACHABLE') {
-            errorMsg = 'Erro de Conexão: Não foi possível alcançar o servidor da Uazapi.'
           } else if (data?.code === 'TIMEOUT') {
-            errorMsg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
             setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
           } else if (data?.code === 'INSTANCE_NOT_FOUND') {
-            errorMsg = `Instância não encontrada (404): ${data.details?.error || data.error}`
             setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
           } else if (data?.code === 'RATE_LIMIT_REACHED') {
             errorMsg =
               'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
             setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          } else if (data?.code === 'UAZAPI_TOKEN_MISSING') {
-            errorMsg = 'Erro na leitura do token. Por favor, tente sincronizar novamente.'
           }
 
           setConnectError(errorMsg)
@@ -243,7 +237,7 @@ export default function WhatsApp() {
           e?.message?.includes('Fetch Error: HTTP 401')
 
         if (isUnauthorizedError) {
-          const msg = 'Token inválido ou expirado (401)'
+          const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
           setConnectError(msg)
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
@@ -255,15 +249,13 @@ export default function WhatsApp() {
           toast.error(msg)
           setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
           setQrCountdown(null)
-        } else if (e.message === 'TIMEOUT') {
-          const msg = 'Ocorreu um tempo limite na conexão. A API da Uazapi não respondeu a tempo.'
-          setConnectError(msg)
-          toast.error(msg)
-          setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
         } else {
-          const msg = e.message || 'Erro de comunicação desconhecido'
+          const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
           setConnectError(msg)
           toast.error(msg)
+          if (e.message === 'TIMEOUT') {
+            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
+          }
         }
       } finally {
         clearInterval(timer)
@@ -480,6 +472,8 @@ export default function WhatsApp() {
 
         if (
           instance &&
+          instance.instance_name &&
+          instance.instance_token &&
           (instance.status === 'connecting' ||
             instance.status === 'qrcode' ||
             instance.status === 'waiting')
@@ -487,7 +481,7 @@ export default function WhatsApp() {
           const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
             body: {
               action: 'get_status',
-              instanceId: instance.id,
+              instanceId: instance.instance_name,
               instanceName: instance.instance_name,
               instanceToken: instance.instance_token,
               serverUrl: instance.server_url,
@@ -545,7 +539,7 @@ export default function WhatsApp() {
 
               if (isUnauthorized) {
                 isPollingPaused = true
-                const msg = 'Token inválido ou expirado (401)'
+                const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
                 setConnectError(msg)
                 setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
                 setQrCountdown(null)
@@ -598,7 +592,7 @@ export default function WhatsApp() {
 
               if (isUnauthorized) {
                 isPollingPaused = true
-                const msg = 'Token inválido ou expirado (401)'
+                const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
                 setConnectError(msg)
                 setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
                 setQrCountdown(null)
@@ -623,9 +617,11 @@ export default function WhatsApp() {
       }, 10000)
     } else if (qrCountdown === 0) {
       if (
-        instance?.status === 'connecting' ||
-        instance?.status === 'qrcode' ||
-        instance?.status === 'waiting'
+        instance?.instance_name &&
+        instance?.instance_token &&
+        (instance?.status === 'connecting' ||
+          instance?.status === 'qrcode' ||
+          instance?.status === 'waiting')
       ) {
         // Auto-refresh the QR Code
         setConnectError(null)
@@ -635,7 +631,7 @@ export default function WhatsApp() {
         const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
           body: {
             action: 'get_qr',
-            instanceId: instance.id,
+            instanceId: instance.instance_name,
             instanceName: instance.instance_name,
             instanceToken: instance.instance_token,
             serverUrl: instance.server_url,
@@ -667,7 +663,14 @@ export default function WhatsApp() {
       clearInterval(timer)
       clearInterval(syncTimer)
     }
-  }, [qrCountdown, instance?.id, instance?.status, instance?.instance_name, fetchInstance])
+  }, [
+    qrCountdown,
+    instance?.id,
+    instance?.status,
+    instance?.instance_name,
+    instance?.instance_token,
+    fetchInstance,
+  ])
 
   useEffect(() => {
     if (!hasInitialized.current) {
