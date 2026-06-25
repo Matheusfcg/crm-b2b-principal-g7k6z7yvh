@@ -52,10 +52,15 @@ export default function WhatsApp() {
     async (inst: any, action: 'get_qr' | 'get_status' = 'get_qr') => {
       if (!inst) return
 
-      if (!inst.instance_name || !inst.instance_token) {
-        const msg = 'Instance data not found'
+      if (!inst.id || !inst.instance_name || !inst.instance_token) {
+        const msg = 'Dados da instância incompletos (id ou token ausente).'
         setConnectError(msg)
         toast.error(msg)
+        console.error('[DEBUG_WHATSAPP] Missing instance data for invoke:', {
+          id: inst.id,
+          name: inst.instance_name,
+          hasToken: !!inst.instance_token,
+        })
         return
       }
 
@@ -84,14 +89,18 @@ export default function WhatsApp() {
           .invoke('whatsapp-uazapi', {
             body: {
               action,
-              instanceId: inst.instance_name,
+              instanceId: inst.id,
               instanceName: inst.instance_name,
               instanceToken: inst.instance_token,
               serverUrl: inst.server_url,
             },
           })
           .catch((err) => {
-            console.warn('[DEBUG_WHATSAPP] Safely caught invoke exception:', err)
+            console.error('[DEBUG_WHATSAPP] Safely caught invoke exception:', err, {
+              message: err.message,
+              status: err.status,
+              name: err.name,
+            })
             return { data: null, error: err }
           })
 
@@ -472,6 +481,7 @@ export default function WhatsApp() {
 
         if (
           instance &&
+          instance.id &&
           instance.instance_name &&
           instance.instance_token &&
           (instance.status === 'connecting' ||
@@ -481,7 +491,7 @@ export default function WhatsApp() {
           const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
             body: {
               action: 'get_status',
-              instanceId: instance.instance_name,
+              instanceId: instance.id,
               instanceName: instance.instance_name,
               instanceToken: instance.instance_token,
               serverUrl: instance.server_url,
@@ -494,7 +504,10 @@ export default function WhatsApp() {
 
           Promise.race([invokePromise, pollTimeoutPromise])
             .catch((err) => {
-              console.warn('[DEBUG_WHATSAPP] Safely caught polling invoke exception:', err)
+              console.error('[DEBUG_WHATSAPP] Safely caught polling invoke exception:', err, {
+                message: err.message,
+                status: err.status,
+              })
               return { data: null, error: err }
             })
             .then(async (res) => {
@@ -617,6 +630,7 @@ export default function WhatsApp() {
       }, 10000)
     } else if (qrCountdown === 0) {
       if (
+        instance?.id &&
         instance?.instance_name &&
         instance?.instance_token &&
         (instance?.status === 'connecting' ||
@@ -628,15 +642,20 @@ export default function WhatsApp() {
         setInstance((prev: any) =>
           prev ? { ...prev, status: 'connecting', last_error: null } : prev,
         )
-        const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
-          body: {
-            action: 'get_qr',
-            instanceId: instance.instance_name,
-            instanceName: instance.instance_name,
-            instanceToken: instance.instance_token,
-            serverUrl: instance.server_url,
-          },
-        })
+        const invokePromise = supabase.functions
+          .invoke('whatsapp-uazapi', {
+            body: {
+              action: 'get_qr',
+              instanceId: instance.id,
+              instanceName: instance.instance_name,
+              instanceToken: instance.instance_token,
+              serverUrl: instance.server_url,
+            },
+          })
+          .catch((err) => {
+            console.error('[DEBUG_WHATSAPP] Error invoking get_qr auto-refresh:', err)
+            return { data: null, error: err }
+          })
         const qrTimeoutPromise = new Promise<any>((_, reject) => {
           setTimeout(() => reject(new Error('TIMEOUT')), 15000)
         })

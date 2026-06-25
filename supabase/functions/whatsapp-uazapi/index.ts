@@ -4,7 +4,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
 
 Deno.serve(async (req: Request) => {
@@ -203,8 +204,20 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (instanceError || !instance) {
+      console.error(
+        'Instance fetch error:',
+        instanceError,
+        'for instanceId:',
+        instanceId,
+        'instanceName:',
+        instanceName,
+      )
       return new Response(
-        JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instance not found' }),
+        JSON.stringify({
+          code: 'INSTANCE_NOT_FOUND',
+          error: 'Instance not found',
+          details: instanceError,
+        }),
         {
           status: 404,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
