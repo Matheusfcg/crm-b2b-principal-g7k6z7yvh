@@ -4,8 +4,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
 
 Deno.serve(async (req: Request) => {
@@ -196,18 +195,9 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (instanceError || !instance || !instance.instance_name) {
-      console.error(
-        'Instance fetch error or missing instance_name:',
-        instanceError,
-        'for id/name:',
-        instanceId || instanceName,
-      )
+      console.error('Instance fetch error or missing instance_name:', instanceError, 'for id/name:', instanceId || instanceName)
       return new Response(
-        JSON.stringify({
-          code: 'INSTANCE_NOT_FOUND',
-          error: 'Instance not found or missing instance_name',
-          details: instanceError,
-        }),
+        JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instance not found or missing instance_name', details: instanceError }),
         {
           status: 404,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
@@ -239,14 +229,14 @@ Deno.serve(async (req: Request) => {
 
       const cleanServerUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl
       const url = `${cleanServerUrl}${endpoint}`
-
-      console.log(`[Uazapi Request] URL: ${url} | Method: ${method}`)
-      console.log(`[Uazapi Request] Headers:`, {
-        'Content-Type': 'application/json',
-        apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING',
-      })
+      
+      console.log(`[Uazapi Request] URL: ${url} | Method: ${method}`);
+      console.log(`[Uazapi Request] Headers:`, { 
+        'Content-Type': 'application/json', 
+        apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING' 
+      });
       if (payload) {
-        console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload))
+        console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload));
       }
 
       const res = await fetch(url, {
@@ -255,7 +245,7 @@ Deno.serve(async (req: Request) => {
         body: payload ? JSON.stringify(payload) : undefined,
       })
 
-      console.log(`[Uazapi Response] Status: ${res.status} ${res.statusText}`)
+      console.log(`[Uazapi Response] Status: ${res.status} ${res.statusText}`);
 
       if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED')
       if (res.status === 429) throw new Error('RATE_LIMIT_REACHED')
