@@ -4,7 +4,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
 
 Deno.serve(async (req: Request) => {
@@ -194,10 +195,19 @@ Deno.serve(async (req: Request) => {
       .eq(instanceId ? 'id' : 'instance_name', instanceId || instanceName)
       .single()
 
-    if (instanceError || !instance) {
-      console.error('Instance fetch error:', instanceError, 'for instanceId:', instanceId, 'instanceName:', instanceName)
+    if (instanceError || !instance || !instance.instance_name) {
+      console.error(
+        'Instance fetch error or missing instance_name:',
+        instanceError,
+        'for id/name:',
+        instanceId || instanceName,
+      )
       return new Response(
-        JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instance not found', details: instanceError }),
+        JSON.stringify({
+          code: 'INSTANCE_NOT_FOUND',
+          error: 'Instance not found or missing instance_name',
+          details: instanceError,
+        }),
         {
           status: 404,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
@@ -223,15 +233,37 @@ Deno.serve(async (req: Request) => {
     }
 
     const callApi = async (endpoint: string, method: string = 'GET', payload?: any) => {
+      if (!endpoint || endpoint.includes('undefined') || endpoint.includes('null')) {
+        throw new Error('Malformed API endpoint URL due to missing instance details')
+      }
+
       const cleanServerUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl
-      const res = await fetch(`${cleanServerUrl}${endpoint}`, {
+      const url = `${cleanServerUrl}${endpoint}`
+
+      console.log(`[Uazapi Request] URL: ${url} | Method: ${method}`)
+      console.log(`[Uazapi Request] Headers:`, {
+        'Content-Type': 'application/json',
+        apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING',
+      })
+      if (payload) {
+        console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload))
+      }
+
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', apikey },
         body: payload ? JSON.stringify(payload) : undefined,
       })
 
+      console.log(`[Uazapi Response] Status: ${res.status} ${res.statusText}`)
+
       if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED')
       if (res.status === 429) throw new Error('RATE_LIMIT_REACHED')
+      if (res.status === 404 || res.status === 405) {
+        const errorText = await res.text()
+        console.error(`[Uazapi Error] Endpoint returned ${res.status}:`, errorText)
+        throw new Error(`API Error (${res.status}): Method or Endpoint invalid for ${endpoint}`)
+      }
 
       const textData = await res.text()
       const contentType = res.headers.get('content-type') || ''
@@ -258,7 +290,7 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'get_qr') {
       try {
-        const data = await callApi(`/instance/connect/${instance.instance_name}`)
+        const data = await callApi(`/instance/connect/${instance.instance_name}`, 'GET')
         await supabase
           .from('whatsapp_instances')
           .update({
@@ -290,7 +322,7 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'get_status') {
       try {
-        const data = await callApi(`/instance/connectionState/${instance.instance_name}`)
+        const data = await callApi(`/instance/connectionState/${instance.instance_name}`, 'GET')
         const state = data?.instance?.state || 'disconnected'
         await supabase
           .from('whatsapp_instances')
@@ -349,7 +381,7 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'get_conversations') {
       try {
-        const chatsResponse = await callApi(`/chat/findChats/${instance.instance_name}`)
+        const chatsResponse = await callApi(`/chat/findChats/${instance.instance_name}`, 'POST', {})
         const chats = chatsResponse?.chats || chatsResponse?.data || chatsResponse || []
 
         if (Array.isArray(chats)) {
