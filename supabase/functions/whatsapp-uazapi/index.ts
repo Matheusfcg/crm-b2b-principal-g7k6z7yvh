@@ -4,7 +4,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
 
 Deno.serve(async (req: Request) => {
@@ -16,18 +17,10 @@ Deno.serve(async (req: Request) => {
     let body: any = {}
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       try {
-        const textBody = await req.text()
-        const contentType = req.headers.get('content-type') || ''
-        if (textBody && textBody.trim().length > 0) {
-          if (contentType.includes('application/json')) {
-            body = JSON.parse(textBody)
-          } else {
-            console.warn(`Unexpected request Content-Type: ${contentType}`)
-            body = { _raw: textBody }
-          }
-        }
-      } catch (e) {
-        console.warn('Request body is not valid JSON')
+        body = await req.json()
+        console.log('Incoming request body:', body)
+      } catch (e: any) {
+        console.warn('Request body is not valid JSON or empty:', e.message)
       }
     }
 
@@ -203,9 +196,20 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (instanceError || !instance) {
-      console.error('Instance fetch error:', instanceError, 'for instanceId:', instanceId, 'instanceName:', instanceName)
+      console.error(
+        'Instance fetch error:',
+        instanceError,
+        'for instanceId:',
+        instanceId,
+        'instanceName:',
+        instanceName,
+      )
       return new Response(
-        JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instance not found', details: instanceError }),
+        JSON.stringify({
+          code: 'INSTANCE_NOT_FOUND',
+          error: 'Instance not found',
+          details: instanceError,
+        }),
         {
           status: 404,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
