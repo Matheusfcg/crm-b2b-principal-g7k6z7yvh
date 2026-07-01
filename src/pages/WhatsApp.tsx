@@ -1,770 +1,110 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { MessageCircle, Loader2 } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { MessageCircle, Loader2, Settings, LogOut, Plus } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { cn } from '@/lib/utils'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase/client'
-import { ConnectionStatus } from '@/components/whatsapp/ConnectionStatus'
+import { whatsappMetaService, WhatsappConfig } from '@/services/whatsapp-meta'
 import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
-
-const isValidUUID = (id: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
-}
+import { supabase } from '@/lib/supabase/client'
 
 export default function WhatsApp() {
   const { user } = useAuth()
-
+  const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [instance, setInstance] = useState<any>(null)
-  const [uazapiUrl, setUazapiUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
-  const [logs, setLogs] = useState<string[]>([])
-  const [connectError, setConnectError] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const [qrCountdown, setQrCountdown] = useState<number | null>(null)
-
   const [configOpen, setConfigOpen] = useState(false)
-  const [configData, setConfigData] = useState({
-    instance_name: '',
-    server_url: 'https://apiwhatsvexaview.uazapi.com',
-    instance_token: '',
-  })
-  const [savingConfig, setSavingConfig] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [formData, setFormData] = useState({ phone_number_id: '', waba_id: '', access_token: '' })
 
-  const hasInitialized = useRef(false)
-
-  const addLog = useCallback((msg: string) => {
-    setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10))
-  }, [])
-
-  const checkStatusWithTimeout = useCallback(
-    async (inst: any, action: 'get_qr' | 'get_status' = 'get_qr') => {
-      if (!inst) return
-
-      if (!inst.id || !inst.instance_name || !inst.instance_token) {
-        const msg = 'Dados da instância incompletos (id ou token ausente).'
-        setConnectError(msg)
-        toast.error(msg)
-        console.error('[DEBUG_WHATSAPP] Missing instance data for invoke:', {
-          id: inst.id,
-          name: inst.instance_name,
-          hasToken: !!inst.instance_token,
-        })
-        return
-      }
-
-      setActionLoading(true)
-      setConnectError(null)
-      setCountdown(600)
-
-      const timer = setInterval(() => {
-        setCountdown((prev) => (prev && prev > 1 ? prev - 1 : 0))
-      }, 1000)
-
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('TIMEOUT'))
-        }, 15000)
-      })
-
-      try {
-        addLog(`${action.toUpperCase()} (Handshake & Webhook) via Edge Function`)
-
-        if (!navigator.onLine) {
-          throw new Error('Sem conexão com a internet. Verifique sua rede.')
-        }
-
-        const apiCall = supabase.functions
-          .invoke('whatsapp-uazapi', {
-            body: {
-              action,
-              instanceId: inst.id,
-              instanceName: inst.instance_name,
-              instanceToken: inst.instance_token,
-              serverUrl: inst.server_url,
-            },
-          })
-          .catch((err) => {
-            console.error('[DEBUG_WHATSAPP] Safely caught invoke exception:', err, {
-              message: err.message,
-              status: err.status,
-              name: err.name,
-            })
-            return { data: null, error: err }
-          })
-
-        const res = (await Promise.race([apiCall, timeoutPromise])) as any
-        const { data, error } = res
-
-        if (error) {
-          console.error('[DEBUG_WHATSAPP] Edge Function Error Intercepted:', error)
-          let errBody: any = null
-          let statusCode = (error as any).status
-
-          if (
-            error.name === 'FunctionsHttpError' ||
-            error.name === 'FunctionsRelayError' ||
-            error.name === 'FunctionsFetchError'
-          ) {
-            if ((error as any).context) {
-              statusCode = statusCode || (error as any).context.status
-              if (typeof (error as any).context.json === 'function') {
-                try {
-                  errBody = await (error as any).context.clone().json()
-                } catch (e) {
-                  // ignore JSON parse error
-                }
-              }
-            }
-          }
-
-          const isRateLimitedError =
-            statusCode === 429 ||
-            errBody?.code === 'RATE_LIMIT_REACHED' ||
-            error.message?.includes('429') ||
-            errBody?.error?.includes('429')
-
-          const isUnauthorizedError =
-            statusCode === 401 ||
-            errBody?.code === 'UNAUTHORIZED' ||
-            error.message?.includes('401') ||
-            errBody?.error?.includes('401')
-
-          const dataLikeObj = errBody || {}
-
-          if (isUnauthorizedError) {
-            const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-            setConnectError(msg)
-            toast.error(msg)
-            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-            setQrCountdown(null)
-            return
-          }
-
-          if (isRateLimitedError) {
-            const msg =
-              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-            setConnectError(msg)
-            toast.error(msg)
-            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-            setQrCountdown(null)
-            return
-          }
-
-          let errorMsg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-          if (dataLikeObj.code === 'TIMEOUT') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-          } else if (dataLikeObj.code === 'INSTANCE_NOT_FOUND') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-          } else if (dataLikeObj.code === 'RATE_LIMIT_REACHED') {
-            errorMsg =
-              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          }
-
-          setConnectError(errorMsg)
-          toast.error(errorMsg)
-          return
-        }
-
-        if (
-          data?.error ||
-          data?.code === 'UNAUTHORIZED' ||
-          data?.code === 'SERVER_UNREACHABLE' ||
-          data?.code === 'TIMEOUT' ||
-          data?.code === 'INSTANCE_NOT_FOUND' ||
-          data?.code === 'RATE_LIMIT_REACHED' ||
-          data?.code === 'UAZAPI_TOKEN_MISSING'
-        ) {
-          let errorMsg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-          if (data?.code === 'UNAUTHORIZED') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-          } else if (data?.code === 'TIMEOUT') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-          } else if (data?.code === 'INSTANCE_NOT_FOUND') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'not_found' } : prev))
-          } else if (data?.code === 'RATE_LIMIT_REACHED') {
-            errorMsg =
-              'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-            setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          }
-
-          setConnectError(errorMsg)
-          toast.error(errorMsg)
-        } else {
-          if (data?.uazapiUrl) {
-            setUazapiUrl(data.uazapiUrl)
-          }
-          if (data?.instance) {
-            if (
-              data.instance.qrcode &&
-              (typeof data.instance.qrcode !== 'string' || data.instance.qrcode.length < 10)
-            ) {
-              data.instance.qrcode = null
-            }
-            setInstance(data.instance)
-            if (data.instance.status === 'open' || data.instance.status === 'connected') {
-              toast.success('WhatsApp Conectado.')
-              setQrCountdown(null)
-            } else if (
-              data.instance.status === 'qrcode' ||
-              data.instance.qrcode ||
-              data.instance.status === 'connecting' ||
-              data.instance.status === 'waiting'
-            ) {
-              toast.info('Aguardando leitura do QR Code... isso pode levar um momento.')
-              setQrCountdown(600)
-            } else {
-              setConnectError('Status desconhecido ou falha na conexão.')
-              setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-              setQrCountdown(null)
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('[DEBUG_WHATSAPP] Exception safely caught in checkStatusWithTimeout:', e)
-
-        const isRateLimitedError =
-          e?.status === 429 ||
-          e?.message?.includes('429') ||
-          e?.message?.includes('Fetch Error: HTTP 429')
-
-        const isUnauthorizedError =
-          e?.status === 401 ||
-          e?.message?.includes('401') ||
-          e?.message?.includes('Fetch Error: HTTP 401')
-
-        if (isUnauthorizedError) {
-          const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-          setConnectError(msg)
-          toast.error(msg)
-          setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-          setQrCountdown(null)
-        } else if (isRateLimitedError) {
-          const msg =
-            'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-          setConnectError(msg)
-          toast.error(msg)
-          setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-          setQrCountdown(null)
-        } else {
-          const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-          setConnectError(msg)
-          toast.error(msg)
-          if (e.message === 'TIMEOUT') {
-            setInstance((prev: any) => (prev ? { ...prev, status: 'timeout' } : prev))
-          }
-        }
-      } finally {
-        clearInterval(timer)
-        setCountdown(null)
-        setActionLoading(false)
-      }
-    },
-    [addLog],
-  )
-
-  const handleReconnect = useCallback(() => {
-    if (instance) {
-      setConnectError(null)
-      checkStatusWithTimeout(instance, 'get_qr')
-    }
-  }, [instance, checkStatusWithTimeout])
-
-  const handleForceSync = useCallback(() => {
-    if (instance) {
-      setConnectError(null)
-      checkStatusWithTimeout(instance, 'get_status')
-    }
-  }, [instance, checkStatusWithTimeout])
-
-  const fetchInstance = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return
     setLoading(true)
-
-    if (!navigator.onLine) {
-      toast.error('Sem conexão com a internet. Verifique sua rede.')
-      setLoading(false)
-      return
-    }
-
-    try {
-      let { data, error } = await supabase
-        .from('whatsapp_instances')
-        .select(
-          'id, user_id, status, qrcode, last_connection, phone, instance_name, instance_token, server_url',
-        )
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle()
-
-      if (error) {
-        console.error('[DEBUG_WHATSAPP] Error fetching instance:', error)
-        toast.error('Falha ao conectar com o banco de dados. Tentando novamente em breve.')
-        return
-      }
-
-      if (!data) {
-        setInstance(null)
-        setLoading(false)
-        return
-      }
-
-      if (data) {
-        if (data.qrcode && (typeof data.qrcode !== 'string' || data.qrcode.length < 10)) {
-          data.qrcode = null
-        }
-
-        let initialCountdown = null
-        if (
-          (data.status === 'connecting' || data.status === 'qrcode' || data.status === 'waiting') &&
-          data.qrcode
-        ) {
-          const updatedAt = data.updated_at
-            ? new Date(data.updated_at).getTime()
-            : new Date().getTime()
-          const now = new Date().getTime()
-          const diffSeconds = Math.floor((now - updatedAt) / 1000)
-          if (diffSeconds >= 0 && diffSeconds < 600) {
-            initialCountdown = 600 - diffSeconds
-          } else {
-            initialCountdown = 0
-          }
-        }
-
-        setInstance(data)
-        if (initialCountdown !== null) {
-          setQrCountdown(initialCountdown)
-        } else if (data.status === 'disconnected' || data.status === 'waiting') {
-          checkStatusWithTimeout(data, 'get_qr')
-        }
-
-        setConfigData({
-          instance_name: data.instance_name || '',
-          server_url: data.server_url || 'https://apiwhatsvexaview.uazapi.com',
-          instance_token: data.instance_token || '',
-        })
+    const { data: cfg } = await whatsappMetaService.getConfig(user.id)
+    setConfig(cfg)
+    if (cfg) {
+      const { data: inst } = await whatsappMetaService.getInstance(user.id)
+      if (inst) {
+        setInstance(inst)
       } else {
-        setInstance(null)
+        const { data: newInst } = await whatsappMetaService.ensureInstance(
+          user.id,
+          cfg.phone_number_id,
+        )
+        setInstance(newInst)
       }
-    } catch (e) {
-      console.error('[DEBUG_WHATSAPP] Error in fetchInstance:', e)
-      toast.error('Erro ao buscar dados da instância.')
-    } finally {
-      setLoading(false)
+      setFormData({
+        phone_number_id: cfg.phone_number_id,
+        waba_id: cfg.waba_id,
+        access_token: cfg.access_token,
+      })
     }
-  }, [user, checkStatusWithTimeout])
+    setLoading(false)
+  }, [user])
 
-  const handleSaveConfig = async () => {
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const handleSave = async () => {
     if (!user) return
-    if (!configData.instance_name || !configData.server_url || !configData.instance_token) {
+    if (!formData.phone_number_id || !formData.waba_id || !formData.access_token) {
       toast.error('Preencha todos os campos.')
       return
     }
-
-    setSavingConfig(true)
+    setSaving(true)
     try {
-      const hasValidId = instance?.id && isValidUUID(instance.id)
-
-      const payload = {
+      const { data, error } = await whatsappMetaService.saveConfig({
         user_id: user.id,
-        instance_name: configData.instance_name,
-        server_url: configData.server_url,
-        instance_token: configData.instance_token,
-        status: instance?.status || 'disconnected',
-        updated_at: new Date().toISOString(),
-      }
-
-      let response
-      if (hasValidId) {
-        response = await supabase
-          .from('whatsapp_instances')
-          .update(payload)
-          .eq('id', instance.id)
-          .select()
-          .single()
-      } else {
-        response = await supabase.from('whatsapp_instances').insert(payload).select().single()
-      }
-
-      const { data, error } = response
-
-      if (error) {
-        const errorMsg = error?.message || error?.details || ''
-        const errorCode = error?.code || ''
-        const status = (error as any)?.status
-
-        if (
-          errorCode === '23505' ||
-          errorMsg.includes('whatsapp_instances_instance_name_key') ||
-          errorMsg.includes('duplicate key value') ||
-          status === 409
-        ) {
-          toast.error(
-            'Este nome de instância já está em uso. Por favor, escolha um nome diferente.',
-          )
-          return
-        }
-
-        throw error
-      }
-
-      toast.success('Configurações salvas com sucesso!')
+        phone_number_id: formData.phone_number_id,
+        waba_id: formData.waba_id,
+        access_token: formData.access_token,
+      })
+      if (error) throw error
+      const { data: inst } = await whatsappMetaService.ensureInstance(
+        user.id,
+        formData.phone_number_id,
+      )
+      setConfig(data)
+      setInstance(inst)
       setConfigOpen(false)
-
-      if (data) {
-        setInstance(data)
-        checkStatusWithTimeout(data, 'get_qr')
-      } else {
-        fetchInstance()
-      }
-    } catch (error: any) {
-      const errorMsg = error?.message || error?.details || ''
-      const errorCode = error?.code || ''
-      if (
-        errorCode === '23505' ||
-        errorMsg.includes('whatsapp_instances_instance_name_key') ||
-        errorMsg.includes('duplicate key value') ||
-        error?.status === 409
-      ) {
-        toast.error('Este nome de instância já está em uso. Por favor, escolha um nome diferente.')
-      } else {
-        toast.error(
-          `Erro ao salvar configurações: ${errorMsg || error?.message || 'Erro desconhecido'}`,
-        )
-      }
+      toast.success('Configuração salva com sucesso!')
+    } catch (err: any) {
+      toast.error(`Erro ao salvar: ${err.message}`)
     } finally {
-      setSavingConfig(false)
+      setSaving(false)
     }
   }
-
-  useEffect(() => {
-    if (instance?.status === 'open' || instance?.status === 'connected') {
-      setQrCountdown(null)
-      setConnectError(null)
-    } else if (
-      instance?.status === 'unauthorized' ||
-      instance?.status === 'not_found' ||
-      instance?.status === 'rate_limited' ||
-      instance?.status === 'timeout'
-    ) {
-      if (instance.last_error) {
-        setConnectError(instance.last_error)
-      }
-    }
-  }, [instance?.status, instance?.last_error])
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    let syncTimer: NodeJS.Timeout
-
-    if (qrCountdown !== null && qrCountdown > 0) {
-      timer = setInterval(() => {
-        setQrCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0))
-      }, 1000)
-
-      let isPollingPaused = false
-
-      syncTimer = setInterval(() => {
-        if (isPollingPaused) return
-
-        if (
-          instance &&
-          instance.id &&
-          instance.instance_name &&
-          instance.instance_token &&
-          (instance.status === 'connecting' ||
-            instance.status === 'qrcode' ||
-            instance.status === 'waiting')
-        ) {
-          const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
-            body: {
-              action: 'get_status',
-              instanceId: instance.id,
-              instanceName: instance.instance_name,
-              instanceToken: instance.instance_token,
-              serverUrl: instance.server_url,
-            },
-          })
-
-          const pollTimeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) => {
-            setTimeout(() => reject(new Error('TIMEOUT')), 15000)
-          })
-
-          Promise.race([invokePromise, pollTimeoutPromise])
-            .catch((err) => {
-              console.error('[DEBUG_WHATSAPP] Safely caught polling invoke exception:', err, {
-                message: err.message,
-                status: err.status,
-              })
-              return { data: null, error: err }
-            })
-            .then(async (res) => {
-              if (!res) return
-              const { data, error } = res
-
-              // Try to parse body if possible
-              let errBody: any = null
-              let statusCode = error ? (error as any).status : undefined
-
-              if (
-                error &&
-                (error.name === 'FunctionsHttpError' ||
-                  error.name === 'FunctionsRelayError' ||
-                  error.name === 'FunctionsFetchError')
-              ) {
-                if ((error as any).context) {
-                  statusCode = statusCode || (error as any).context.status
-                  if (typeof (error as any).context.json === 'function') {
-                    try {
-                      errBody = await (error as any).context.clone().json()
-                    } catch (e) {
-                      // ignore
-                    }
-                  }
-                }
-              }
-
-              const isRateLimited =
-                statusCode === 429 ||
-                error?.message?.includes('429') ||
-                error?.message?.includes('Fetch Error: HTTP 429') ||
-                data?.code === 'RATE_LIMIT_REACHED' ||
-                errBody?.code === 'RATE_LIMIT_REACHED'
-
-              const isUnauthorized =
-                statusCode === 401 ||
-                error?.message?.includes('401') ||
-                error?.message?.includes('Fetch Error: HTTP 401') ||
-                data?.code === 'UNAUTHORIZED' ||
-                errBody?.code === 'UNAUTHORIZED'
-
-              if (isUnauthorized) {
-                isPollingPaused = true
-                const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-                setConnectError(msg)
-                setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-                setQrCountdown(null)
-                toast.error(msg)
-                return
-              }
-
-              if (isRateLimited) {
-                isPollingPaused = true
-                const msg =
-                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-                setConnectError(msg)
-                setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-                setQrCountdown(null)
-                toast.error(msg)
-
-                setTimeout(() => {
-                  isPollingPaused = false
-                }, 30000)
-                return
-              }
-
-              if (error) {
-                console.warn('[DEBUG_WHATSAPP] Polling sync error intercepted:', error)
-                if (error.name === 'FunctionsHttpError') {
-                  // Ignore general HTTP errors silently during polling to maintain UI resilience
-                } else if (error.name === 'FunctionsFetchError') {
-                  // Network error, also ignore silently during polling
-                }
-                return
-              }
-              if (
-                data &&
-                (data.state === 'open' || data.state === 'connected' || data.status === 'connected')
-              ) {
-                setQrCountdown(null)
-                fetchInstance()
-              }
-            })
-            .catch((e) => {
-              const isRateLimited =
-                e?.message?.includes('429') ||
-                e?.status === 429 ||
-                e?.message?.includes('Fetch Error: HTTP 429')
-
-              const isUnauthorized =
-                e?.message?.includes('401') ||
-                e?.status === 401 ||
-                e?.message?.includes('Fetch Error: HTTP 401')
-
-              if (isUnauthorized) {
-                isPollingPaused = true
-                const msg = 'Erro ao conectar com Uazapi. Verifique suas credenciais.'
-                setConnectError(msg)
-                setInstance((prev: any) => (prev ? { ...prev, status: 'unauthorized' } : prev))
-                setQrCountdown(null)
-                toast.error(msg)
-              } else if (isRateLimited) {
-                isPollingPaused = true
-                const msg =
-                  'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.'
-                setConnectError(msg)
-                setInstance((prev: any) => (prev ? { ...prev, status: 'rate_limited' } : prev))
-                setQrCountdown(null)
-                toast.error(msg)
-
-                setTimeout(() => {
-                  isPollingPaused = false
-                }, 30000)
-              } else {
-                console.warn('[DEBUG_WHATSAPP] Safely caught polling sync exception:', e)
-              }
-            })
-        }
-      }, 10000)
-    } else if (qrCountdown === 0) {
-      if (
-        instance?.id &&
-        instance?.instance_name &&
-        instance?.instance_token &&
-        (instance?.status === 'connecting' ||
-          instance?.status === 'qrcode' ||
-          instance?.status === 'waiting')
-      ) {
-        // Auto-refresh the QR Code
-        setConnectError(null)
-        setInstance((prev: any) =>
-          prev ? { ...prev, status: 'connecting', last_error: null } : prev,
-        )
-        const invokePromise = supabase.functions
-          .invoke('whatsapp-uazapi', {
-            body: {
-              action: 'get_qr',
-              instanceId: instance.id,
-              instanceName: instance.instance_name,
-              instanceToken: instance.instance_token,
-              serverUrl: instance.server_url,
-            },
-          })
-          .catch((err) => {
-            console.error('[DEBUG_WHATSAPP] Error invoking get_qr auto-refresh:', err)
-            return { data: null, error: err }
-          })
-        const qrTimeoutPromise = new Promise<any>((_, reject) => {
-          setTimeout(() => reject(new Error('TIMEOUT')), 15000)
-        })
-
-        Promise.race([invokePromise, qrTimeoutPromise])
-          .then((res) => {
-            if (res?.data?.qrcode || res?.data?.base64 || res?.data?.success) {
-              setQrCountdown(600)
-              fetchInstance()
-            } else {
-              setQrCountdown(600) // Fallback retry
-            }
-          })
-          .catch((e) => {
-            console.warn('[DEBUG_WHATSAPP] Auto-refresh QR error:', e)
-            setQrCountdown(60) // retry later in 1 min if error
-          })
-      } else {
-        setQrCountdown(null)
-      }
-    }
-
-    return () => {
-      clearInterval(timer)
-      clearInterval(syncTimer)
-    }
-  }, [
-    qrCountdown,
-    instance?.id,
-    instance?.status,
-    instance?.instance_name,
-    instance?.instance_token,
-    fetchInstance,
-  ])
-
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true
-      fetchInstance()
-    }
-
-    if (user) {
-      const channel = supabase
-        .channel('whatsapp_instances_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'whatsapp_instances',
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            if (payload.new) {
-              setInstance((prev: any) => ({ ...prev, ...payload.new }))
-            }
-          },
-        )
-        .subscribe()
-
-      return () => {
-        supabase.removeChannel(channel)
-      }
-    }
-  }, [fetchInstance, user])
 
   const handleDisconnect = async () => {
-    setActionLoading(true)
-    addLog('Iniciando desconexão...')
+    if (!user || !instance) return
+    setSaving(true)
     try {
-      if (!navigator.onLine) {
-        throw new Error('Sem conexão com a internet.')
-      }
-
-      if (instance?.id && isValidUUID(instance.id)) {
-        const { error } = await supabase
-          .from('whatsapp_instances')
-          .update({
-            status: 'disconnected',
-            qrcode: null,
-            phone: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', instance.id)
-        if (error) throw error
-      }
-
-      addLog('Instância desconectada e deletada com sucesso.')
-      toast.success('WhatsApp desconectado.')
-      setInstance((prev: any) => (prev ? { ...prev, status: 'disconnected', qrcode: null } : null))
-    } catch (error: any) {
-      addLog(`Erro ao desconectar: ${error.message}`)
-      toast.error(`Erro ao desconectar: ${error.message}`)
+      await whatsappMetaService.deleteConfig(user.id)
+      await supabase
+        .from('whatsapp_instances')
+        .update({ status: 'disconnected' })
+        .eq('id', instance.id)
+      setConfig(null)
+      setInstance(null)
+      setFormData({ phone_number_id: '', waba_id: '', access_token: '' })
+      toast.success('Configuração removida.')
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`)
     } finally {
-      setActionLoading(false)
+      setSaving(false)
     }
   }
 
-  const isInitializing = loading && !instance
-  const isConnected = instance?.status === 'open' || instance?.status === 'connected'
-  const isQRCodeAvailable = Boolean(
-    instance?.qrcode && typeof instance.qrcode === 'string' && instance.qrcode.length > 10,
-  )
-
-  useEffect(() => {
-    if (isQRCodeAvailable) {
-      console.log('Render Trigger: React state updated with new QR data, isQRCodeAvailable is true')
-    }
-  }, [isQRCodeAvailable])
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+        <p className="text-sm text-slate-500">Carregando...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -775,167 +115,111 @@ export default function WhatsApp() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp Integration</h1>
           <p className="text-slate-500 text-sm">
-            Vincule seu WhatsApp para sincronizar suas conversas no CRM.
+            Configure a Meta Cloud API para sincronizar suas conversas.
           </p>
         </div>
       </div>
 
-      {isInitializing ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          <h2 className="text-xl font-medium text-slate-700 animate-pulse">
-            Carregando Instância...
-          </h2>
-          <p className="text-sm text-slate-500">Verificando o ambiente de conexão.</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="xl:col-span-3 space-y-4">
-              {!instance ? (
-                <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl flex flex-col md:flex-row items-center justify-between shadow-sm gap-4">
-                  <div>
-                    <h3 className="text-blue-900 font-semibold text-lg">
-                      Nenhuma instância encontrada
-                    </h3>
-                    <p className="text-sm text-blue-700 mt-1 max-w-lg">
-                      Você ainda não possui uma instância do WhatsApp vinculada à sua conta. Para
-                      começar a sincronizar suas mensagens e gerenciar conversas diretamente pelo
-                      CRM, crie e inicialize uma nova instância.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={() => setConfigOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-                  >
-                    Criar / Inicializar Instância
-                  </Button>
-                </div>
-              ) : !isConnected ? (
-                <ConnectionStatus
-                  instance={instance}
-                  uazapiUrl={uazapiUrl}
-                  actionLoading={actionLoading}
-                  onConnect={() => setConfigOpen(true)}
-                  onReconnect={handleReconnect}
-                  onDisconnect={handleDisconnect}
-                  onForceSync={handleForceSync}
-                  onConfig={() => setConfigOpen(true)}
-                  error={connectError}
-                  countdown={countdown}
-                  qrCountdown={qrCountdown}
-                />
-              ) : (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                    <div>
-                      <h3 className="font-semibold text-slate-900">
-                        Conectado como {instance.phone || instance.instance_name}
-                      </h3>
-                      <p className="text-sm text-slate-500">Sincronizado e pronto para uso.</p>
-                    </div>
-                    <button
-                      onClick={handleDisconnect}
-                      disabled={actionLoading}
-                      className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors flex items-center gap-2"
-                    >
-                      {actionLoading ? 'Desconectando...' : 'Desconectar'}
-                    </button>
-                  </div>
-                  {instance?.id && <WhatsAppChat instanceId={instance.id} />}
-                </div>
-              )}
+      {config && instance ? (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+              <div>
+                <h3 className="font-semibold text-slate-900">Meta Cloud API Conectado</h3>
+                <p className="text-sm text-slate-500">Phone Number ID: {config.phone_number_id}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
+                <Settings className="h-4 w-4 mr-2" /> Editar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={saving}>
+                <LogOut className="h-4 w-4 mr-2" /> Desconectar
+              </Button>
             </div>
           </div>
+          <WhatsAppChat instanceId={instance.id} />
         </div>
-      )}
-
-      {logs.length > 0 && (
-        <div className="mt-8 bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400 overflow-hidden">
-          <h3 className="text-slate-100 font-bold mb-2">Logs de Depuração da API</h3>
-          <div className="space-y-1">
-            {logs.map((log, i) => (
-              <div key={i} className="break-all">
-                {log}
-              </div>
-            ))}
+      ) : (
+        <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl flex flex-col md:flex-row items-center justify-between shadow-sm gap-4">
+          <div>
+            <h3 className="text-blue-900 font-semibold text-lg">Nenhuma configuração Meta</h3>
+            <p className="text-sm text-blue-700 mt-1 max-w-lg">
+              Configure suas credenciais da Meta Cloud API (phone_number_id, waba_id, access_token)
+              para começar a usar o WhatsApp no CRM.
+            </p>
           </div>
+          <Button
+            onClick={() => setConfigOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4 mr-2" /> Configurar
+          </Button>
         </div>
       )}
 
       {configOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Configurar Instância</h2>
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => !saving && setConfigOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Configurar Meta Cloud API</h2>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="instance_name">Nome / ID da Instância</Label>
+                <Label htmlFor="phone_number_id">Phone Number ID</Label>
                 <Input
-                  id="instance_name"
-                  placeholder="ex: teste"
-                  value={configData.instance_name}
-                  onChange={(e) =>
-                    setConfigData((prev) => ({ ...prev, instance_name: e.target.value }))
-                  }
+                  id="phone_number_id"
+                  placeholder="106540000000000"
+                  value={formData.phone_number_id}
+                  onChange={(e) => setFormData((p) => ({ ...p, phone_number_id: e.target.value }))}
                 />
               </div>
               <div>
-                <Label htmlFor="server_url">Server URL</Label>
+                <Label htmlFor="waba_id">WhatsApp Business Account ID</Label>
                 <Input
-                  id="server_url"
-                  placeholder="https://apiwhatsvexaview.uazapi.com"
-                  value={configData.server_url}
-                  onChange={(e) =>
-                    setConfigData((prev) => ({ ...prev, server_url: e.target.value }))
-                  }
+                  id="waba_id"
+                  placeholder="100000000000000"
+                  value={formData.waba_id}
+                  onChange={(e) => setFormData((p) => ({ ...p, waba_id: e.target.value }))}
                 />
               </div>
               <div>
-                <Label htmlFor="instance_token">Instance Token / API Key</Label>
+                <Label htmlFor="access_token">Access Token</Label>
                 <Input
-                  id="instance_token"
-                  placeholder="Cole o token UUID da instancia Uazapi"
-                  value={configData.instance_token}
-                  onChange={(e) =>
-                    setConfigData((prev) => ({ ...prev, instance_token: e.target.value }))
-                  }
+                  id="access_token"
+                  placeholder="EAA..."
+                  value={formData.access_token}
+                  onChange={(e) => setFormData((p) => ({ ...p, access_token: e.target.value }))}
                 />
               </div>
-              <div className="mt-4 p-4 bg-slate-50 border rounded-md">
-                <Label>Webhook URL (Global)</Label>
+              <div className="p-4 bg-slate-50 border rounded-md">
+                <Label>Webhook URL</Label>
                 <Input
                   readOnly
-                  value="https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-uazapi"
+                  value="https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/whatsapp-meta"
                   className="bg-white mt-1 font-mono text-sm"
                 />
                 <p className="text-xs text-slate-500 mt-2">
-                  Configure esta URL no painel da Uazapi (Global Webhook) para receber atualizações
-                  em tempo real via Webhook e evitar bloqueios de requisições GET recorrentes.
-                  <br />
-                  <br />
-                  <strong>Dica:</strong> Habilite as opções "addUrlEvents" e "addUrlTypesMessages"
-                  na Uazapi para que a URL final fique como{' '}
-                  <code>
-                    /whatsapp-uazapi/{`{evento}`}/{`{tipodemensagem}`}
-                  </code>
-                  .
+                  Configure esta URL no Meta App Dashboard. Verify Token e App Secret são
+                  gerenciados via Supabase Secrets (META_VERIFY_TOKEN, META_APP_SECRET).
                 </p>
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setConfigOpen(false)}
-                disabled={savingConfig}
-              >
+              <Button variant="outline" onClick={() => setConfigOpen(false)} disabled={saving}>
                 Cancelar
               </Button>
               <Button
-                onClick={handleSaveConfig}
-                disabled={savingConfig}
+                onClick={handleSave}
+                disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {savingConfig ? 'Salvando...' : 'Salvar'}
+                {saving ? 'Salvando...' : 'Salvar'}
               </Button>
             </div>
           </div>

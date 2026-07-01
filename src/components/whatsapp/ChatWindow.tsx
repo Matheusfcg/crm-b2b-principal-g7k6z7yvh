@@ -120,50 +120,16 @@ export function ChatWindow({
     }
 
     try {
-      const { data: instanceData } = await supabase
-        .from('whatsapp_instances')
-        .select('instance_name, instance_token, server_url')
-        .eq('id', instance.id)
-        .single()
-
-      if (!instanceData?.instance_token || !instanceData?.instance_name) {
-        throw new Error(
-          'Configuração da instância incompleta. Verifique o token e nome da instância.',
-        )
-      }
-
-      const invokePromise = supabase.functions.invoke('whatsapp-uazapi', {
+      const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
         body: {
           action: 'send_message',
-          instanceName: instanceData.instance_name,
-          instanceToken: instanceData.instance_token,
-          serverUrl: instanceData.server_url,
-          remoteJid: contact.remote_jid,
+          instanceId: instance.id,
+          to: contact.remote_jid,
           text,
         },
       })
-      const timeoutPromise = new Promise<any>((_, reject) => {
-        setTimeout(() => reject(new Error('TIMEOUT')), 15000)
-      })
 
-      const res = await Promise.race([invokePromise, timeoutPromise])
-      const { data, error } = res as any
-
-      const isRateLimited =
-        (error as any)?.status === 429 ||
-        error?.message?.includes('429') ||
-        (error?.name === 'FunctionsHttpError' && (error as any).context?.status === 429) ||
-        data?.code === 'RATE_LIMIT_REACHED'
-
-      if (isRateLimited) {
-        toast.error(
-          'Limite de requisições ou instâncias atingido (429). Por favor, verifique seu plano na Uazapi.',
-        )
-        setInput(text)
-        return
-      }
-
-      if (error) throw new Error(error.message || 'Erro ao comunicar com a API')
+      if (error) throw new Error(error.message || 'Erro ao enviar mensagem')
       if (data?.error) throw new Error(data.error)
       scrollToBottom(true)
     } catch (err: any) {
