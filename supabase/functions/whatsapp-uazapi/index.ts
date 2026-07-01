@@ -1,14 +1,28 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+const allowedOrigins = [
+  'https://crm-b2b-principal-462cb--preview.goskip.app',
+  'https://crm-vexa.goskip.app',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://localhost:3000',
+]
+
+const getCorsHeaders = (req: Request) => {
+  const origin = req.headers.get('Origin')
+  const isAllowed = origin && allowedOrigins.includes(origin)
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  }
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -24,160 +38,184 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const url = new URL(req.url)
+    console.log('[Webhook URL]', url.pathname)
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Handle Webhooks from Uazapi
-    const isWebhook = body.event && body.instance
-    if (isWebhook) {
-      const { event, instance: instanceName, data } = body
+    const urlEvent = url.pathname.includes('/whatsapp-uazapi/')
+      ? url.pathname.split('/whatsapp-uazapi/')[1]?.replace(/\//g, '.')
+      : null
 
-      const { data: inst } = await supabase
-        .from('whatsapp_instances')
-        .select('id')
-        .eq('instance_name', instanceName)
-        .single()
+    const isWebhook =
+      (body.event && body.instance) || (urlEvent && (body.instance || body.instanceName || body.id))
 
-      if (!inst) {
-        return new Response('Instance not found', { status: 200, headers: corsHeaders })
-      }
+    if (isWebhook || req.method === 'POST') {
+      const event = body.event || urlEvent
+      const instanceName = body.instance || body.instanceName || url.pathname.split('/').pop()
+      const data = body.data || body
 
-      try {
-        if (event === 'qrcode.updated' || event === 'connection.update') {
-          if (data?.qrcode?.base64 || data?.base64) {
-            await supabase
-              .from('whatsapp_instances')
-              .update({
-                qrcode: data.qrcode?.base64 || data.base64,
-                status: 'qrcode',
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', inst.id)
-          } else if (data?.state || data?.status) {
-            const state = data.state || data.status
-            const statusMap: Record<string, string> = {
-              open: 'connected',
-              close: 'disconnected',
-              connecting: 'connecting',
-            }
-            await supabase
-              .from('whatsapp_instances')
-              .update({
-                status: statusMap[state] || state,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', inst.id)
-          }
+      // If it looks like a webhook payload
+      if (event && instanceName) {
+        console.log(`[Webhook Event] ${event} for instance ${instanceName}`)
+
+        const { data: inst } = await supabase
+          .from('whatsapp_instances')
+          .select('id')
+          .eq('instance_name', instanceName)
+          .single()
+
+        if (!inst) {
+          console.warn(`[Webhook] Instance not found: ${instanceName}`)
+          // We must return 200 OK so Uazapi stops retrying if instance was deleted
+          return new Response('Instance not found', { status: 200, headers: corsHeaders })
         }
 
-        if (
-          event === 'messages.upsert' ||
-          event === 'messages.update' ||
-          event === 'messages' ||
-          event.includes('message')
-        ) {
-          const msgs = Array.isArray(data) ? data : data?.messages ? data.messages : [data]
+        try {
+          if (
+            event === 'qrcode.updated' ||
+            event === 'connection.update' ||
+            event.includes('connection')
+          ) {
+            const qrData = data?.qrcode?.base64 || data?.base64 || data?.qrcode || body.qrcode
+            const stateData = data?.state || data?.status || body.state || body.status
 
-          for (const msg of msgs) {
-            if (!msg) continue
+            const updatePayload: any = { updated_at: new Date().toISOString() }
 
-            const remoteJid = msg.key?.remoteJid || msg.remoteJid || msg.id
-            if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast')
-              continue
+            if (qrData && typeof qrData === 'string') {
+              updatePayload.qrcode = qrData
+              updatePayload.status = 'qrcode'
+            } else if (stateData) {
+              const state = String(stateData).toLowerCase()
+              const statusMap: Record<string, string> = {
+                open: 'connected',
+                close: 'disconnected',
+                connecting: 'connecting',
+              }
+              updatePayload.status = statusMap[state] || state
+            }
 
-            const fromMe = msg.key?.fromMe || msg.fromMe || false
-            const messageId = msg.key?.id || msg.messageId || msg.id
-            const pushName = msg.pushName || ''
+            if (Object.keys(updatePayload).length > 1) {
+              await supabase.from('whatsapp_instances').update(updatePayload).eq('id', inst.id)
+            }
+          }
 
-            let content = ''
-            if (msg.message?.conversation) content = msg.message.conversation
-            else if (msg.message?.extendedTextMessage?.text)
-              content = msg.message.extendedTextMessage.text
-            else if (msg.message?.imageMessage?.caption)
-              content = msg.message.imageMessage.caption || 'Imagem'
-            else if (msg.text) content = msg.text
-            else content = 'Mensagem de mídia/outro'
+          if (
+            event === 'messages.upsert' ||
+            event === 'messages.update' ||
+            event === 'messages' ||
+            event.includes('message')
+          ) {
+            const msgs = Array.isArray(data) ? data : data?.messages ? data.messages : [data]
 
-            const timestamp = msg.messageTimestamp
-              ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
-              : new Date().toISOString()
+            for (const msg of msgs) {
+              if (!msg) continue
 
-            // 1. Ensure contact
-            const { data: contact } = await supabase
-              .from('contacts')
-              .upsert(
-                {
-                  instance_id: inst.id,
-                  remote_jid: remoteJid,
-                  push_name: pushName,
-                },
-                { onConflict: 'instance_id,remote_jid' },
-              )
-              .select('id')
-              .single()
+              const remoteJid = msg.key?.remoteJid || msg.remoteJid || msg.id
+              if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast')
+                continue
 
-            if (contact && messageId) {
-              // 2. Ensure conversation
-              const { data: conv } = await supabase
-                .from('conversations')
+              const fromMe = msg.key?.fromMe || msg.fromMe || false
+              const messageId = msg.key?.id || msg.messageId || msg.id
+              const pushName = msg.pushName || ''
+
+              let content = ''
+              if (msg.message?.conversation) content = msg.message.conversation
+              else if (msg.message?.extendedTextMessage?.text)
+                content = msg.message.extendedTextMessage.text
+              else if (msg.message?.imageMessage?.caption)
+                content = msg.message.imageMessage.caption || 'Imagem'
+              else if (msg.text) content = msg.text
+              else content = 'Mensagem de mídia/outro'
+
+              const timestamp = msg.messageTimestamp
+                ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+                : new Date().toISOString()
+
+              // 1. Ensure contact
+              const { data: contact } = await supabase
+                .from('contacts')
                 .upsert(
                   {
                     instance_id: inst.id,
-                    contact_id: contact.id,
-                    last_message: content.substring(0, 255),
-                    updated_at: timestamp,
+                    remote_jid: remoteJid,
+                    push_name: pushName,
                   },
-                  { onConflict: 'instance_id,contact_id' },
+                  { onConflict: 'instance_id,remote_jid' },
                 )
                 .select('id')
                 .single()
 
-              if (conv) {
-                // 3. Insert message
-                await supabase.from('messages').upsert(
-                  {
-                    conversation_id: conv.id,
-                    message_id: messageId,
-                    from_me: fromMe,
-                    content: content,
-                    type: 'text',
-                    timestamp: timestamp,
-                    status: 'received',
-                  },
-                  { onConflict: 'message_id' },
-                )
+              if (contact && messageId) {
+                // 2. Ensure conversation
+                const { data: conv } = await supabase
+                  .from('conversations')
+                  .upsert(
+                    {
+                      instance_id: inst.id,
+                      contact_id: contact.id,
+                      last_message: content.substring(0, 255),
+                      updated_at: timestamp,
+                    },
+                    { onConflict: 'instance_id,contact_id' },
+                  )
+                  .select('id')
+                  .single()
+
+                if (conv) {
+                  // 3. Insert message
+                  await supabase.from('messages').upsert(
+                    {
+                      conversation_id: conv.id,
+                      message_id: messageId,
+                      from_me: fromMe,
+                      content: content,
+                      type: 'text',
+                      timestamp: timestamp,
+                      status: 'received',
+                    },
+                    { onConflict: 'message_id' },
+                  )
+                }
               }
             }
           }
-        }
 
-        if (event === 'contacts.upsert' || event === 'contacts.update' || event === 'contacts') {
-          const contacts = Array.isArray(data) ? data : [data]
-          for (const c of contacts) {
-            if (!c) continue
-            const remoteJid = c.id || c.remoteJid
-            if (!remoteJid) continue
-            const pushName = c.name || c.pushName || c.notify || ''
-            const profilePic = c.profilePictureUrl || c.profilePic || null
+          if (
+            event === 'contacts.upsert' ||
+            event === 'contacts.update' ||
+            event === 'contacts' ||
+            event.includes('contact')
+          ) {
+            const contacts = Array.isArray(data) ? data : [data]
+            for (const c of contacts) {
+              if (!c) continue
+              const remoteJid = c.id || c.remoteJid
+              if (!remoteJid) continue
+              const pushName = c.name || c.pushName || c.notify || ''
+              const profilePic = c.profilePictureUrl || c.profilePic || null
 
-            await supabase.from('contacts').upsert(
-              {
-                instance_id: inst.id,
-                remote_jid: remoteJid,
-                push_name: pushName,
-                profile_picture: profilePic,
-              },
-              { onConflict: 'instance_id,remote_jid' },
-            )
+              await supabase.from('contacts').upsert(
+                {
+                  instance_id: inst.id,
+                  remote_jid: remoteJid,
+                  push_name: pushName,
+                  profile_picture: profilePic,
+                },
+                { onConflict: 'instance_id,remote_jid' },
+              )
+            }
           }
+        } catch (err) {
+          console.error('Webhook processing error:', err)
         }
-      } catch (err) {
-        console.error('Webhook processing error:', err)
-      }
 
-      // Always return 200 OK immediately for webhooks
-      return new Response('OK', { status: 200, headers: corsHeaders })
+        // Always return 200 OK immediately for webhooks
+        return new Response('OK', { status: 200, headers: corsHeaders })
+      }
     }
 
     const { action, instanceId, instanceName, remoteJid, text } = body
@@ -216,7 +254,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const serverUrl = body.serverUrl || instance.server_url || 'https://apiwhatsvexaview.uazapi.com'
-
     const apikey = body.instanceToken || instance.instance_token
 
     if (!apikey) {
@@ -240,9 +277,9 @@ Deno.serve(async (req: Request) => {
       }
 
       const cleanServerUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl
-      const url = `${cleanServerUrl}${endpoint}`
+      const apiUrl = `${cleanServerUrl}${endpoint}`
 
-      console.log(`[Uazapi Request] URL: ${url} | Method: ${method}`)
+      console.log(`[Uazapi Request] URL: ${apiUrl} | Method: ${method}`)
       console.log(`[Uazapi Request] Headers:`, {
         'Content-Type': 'application/json',
         apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING',
@@ -251,7 +288,7 @@ Deno.serve(async (req: Request) => {
         console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload))
       }
 
-      const res = await fetch(url, {
+      const res = await fetch(apiUrl, {
         method,
         headers: { 'Content-Type': 'application/json', apikey },
         body: payload ? JSON.stringify(payload) : undefined,
@@ -447,7 +484,7 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(req) },
       },
     )
   }

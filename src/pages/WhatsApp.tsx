@@ -911,6 +911,14 @@ export default function WhatsApp() {
                 <p className="text-xs text-slate-500 mt-2">
                   Configure esta URL no painel da Uazapi (Global Webhook) para receber atualizações
                   em tempo real via Webhook e evitar bloqueios de requisições GET recorrentes.
+                  <br />
+                  <br />
+                  <strong>Dica:</strong> Habilite as opções "addUrlEvents" e "addUrlTypesMessages"
+                  na Uazapi para que a URL final fique como{' '}
+                  <code>
+                    /whatsapp-uazapi/{`{evento}`}/{`{tipodemensagem}`}
+                  </code>
+                  .
                 </p>
               </div>
             </div>
