@@ -116,7 +116,7 @@ export function useMetaSdk() {
         window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
         window.removeEventListener('error', suppressResourceError, true)
       }
-    }    }
+    }
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     let resolved = false
@@ -162,7 +162,10 @@ export function useMetaSdk() {
       if (isFacebookSdkResourceUrl(url)) {
         return originalFetch
           .apply(this, args)
-          .catch(() => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+          .catch(
+            () =>
+              new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+          )
       }
       return originalFetch.apply(this, args)
     }
@@ -170,7 +173,7 @@ export function useMetaSdk() {
     const originalXhrOpen = XMLHttpRequest.prototype.open
     const originalXhrSend = XMLHttpRequest.prototype.send
     XMLHttpRequest.prototype.open = function (method: string, url: string, ...rest: any[]) {
-      (this as any).__fbTelemetryUrl = url
+      ;(this as any).__fbTelemetryUrl = url
       return originalXhrOpen.call(this, method, url, ...rest)
     }
     XMLHttpRequest.prototype.send = function (...sendArgs: any[]) {
