@@ -4,39 +4,17 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Send, Loader2, Image as ImageIcon, Music, FileText, Video, Sticker } from 'lucide-react'
+import { Send, Loader2, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, isToday, isYesterday } from 'date-fns'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/use-auth'
+import { ContactAvatar } from './ContactAvatar'
+import { MessageBubble } from './MessageBubble'
+import { WallpaperSettings } from './WallpaperSettings'
 
-const isValidUUID = (id: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
-}
-
-function ContactAvatar({ contact, className }: { contact: any; className?: string }) {
-  let src = null
-  try {
-    if (contact?.profile_picture && contact.profile_picture.startsWith('http')) {
-      new URL(contact.profile_picture)
-      src = contact.profile_picture
-    }
-  } catch (e) {
-    src = null
-  }
-
-  const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Desconhecido'
-
-  return (
-    <Avatar className={cn('border border-slate-200 shadow-sm shrink-0', className)}>
-      <AvatarImage src={src || undefined} alt={name} />
-      <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
-        {name.substring(0, 2).toUpperCase()}
-      </AvatarFallback>
-    </Avatar>
-  )
-}
+const isValidUUID = (id: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
 
 export function ChatWindow({
   instance,
@@ -50,7 +28,6 @@ export function ChatWindow({
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
-
   const bottomRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
 
@@ -62,16 +39,14 @@ export function ChatWindow({
       .eq('id', conversationId)
       .single()
     if (conv) setContact(conv.contact)
-
     const { data: msgs } = await supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
       .order('timestamp', { ascending: true })
-
     if (msgs) setMessages(msgs)
     setLoading(false)
-    setTimeout(() => scrollToBottom(false), 100)
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'auto' }), 100)
   }
 
   useEffect(() => {
@@ -92,35 +67,28 @@ export function ChatWindow({
             const newMsgs = [...prev, payload.new].sort(
               (a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime(),
             )
-            setTimeout(() => scrollToBottom(true), 100)
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
             return newMsgs
           })
         },
       )
       .subscribe()
-
     return () => {
       supabase.removeChannel(channel)
     }
   }, [conversationId])
-
-  const scrollToBottom = (smooth = true) => {
-    bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
-  }
 
   const handleSend = async () => {
     if (!input.trim() || !contact) return
     const text = input.trim()
     setInput('')
     setSending(true)
-
     if (!instance?.id || !isValidUUID(instance.id)) {
       toast.error('ID da instância inválido.')
       setSending(false)
       setInput(text)
       return
     }
-
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
         body: {
@@ -130,10 +98,9 @@ export function ChatWindow({
           text,
         },
       })
-
       if (error) throw new Error(error.message || 'Erro ao enviar mensagem')
       if (data?.error) throw new Error(data.error)
-      scrollToBottom(true)
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     } catch (err: any) {
       toast.error(`Erro ao enviar: ${err.message}`)
       setInput(text)
@@ -142,74 +109,46 @@ export function ChatWindow({
     }
   }
 
-  const formatMessageTime = (dateStr: string | null) => {
-    if (!dateStr) return ''
-    return format(new Date(dateStr), 'HH:mm')
-  }
-
-  const renderMessageContent = (msg: any) => {
-    const type = msg.type || 'text'
-    if (type === 'image')
-      return (
-        <div className="flex items-center gap-2">
-          <ImageIcon className="h-4 w-4 shrink-0 text-slate-500" /> <span>{msg.content}</span>
-        </div>
-      )
-    if (type === 'audio')
-      return (
-        <div className="flex items-center gap-2">
-          <Music className="h-4 w-4 shrink-0 text-slate-500" /> <span>{msg.content}</span>
-        </div>
-      )
-    if (type === 'document')
-      return (
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-slate-500" /> <span>{msg.content}</span>
-        </div>
-      )
-    if (type === 'video')
-      return (
-        <div className="flex items-center gap-2">
-          <Video className="h-4 w-4 shrink-0 text-slate-500" /> <span>{msg.content}</span>
-        </div>
-      )
-    if (type === 'sticker')
-      return (
-        <div className="flex items-center gap-2">
-          <Sticker className="h-4 w-4 shrink-0 text-slate-500" /> <span>{msg.content}</span>
-        </div>
-      )
-
-    return <span>{msg.content}</span>
-  }
-
+  const wallpaper = profile?.chat_wallpaper
+  const isSolid = wallpaper?.startsWith('solid:')
+  const solidColor = isSolid ? wallpaper!.replace('solid:', '') : null
+  const imageUrl = wallpaper && !isSolid ? wallpaper : null
+  const defaultBg = 'https://img.usecurling.com/p/200/200?q=doodle&color=gray'
   const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Contato'
 
   return (
-    <div className="flex flex-col h-full bg-[#EFEAE2] relative z-0">
-      <div
-        className={cn(
-          'absolute inset-0 z-0 pointer-events-none',
-          profile?.chat_wallpaper ? 'opacity-20' : 'opacity-40',
-        )}
-        style={{
-          backgroundImage: profile?.chat_wallpaper
-            ? `url("${profile.chat_wallpaper}")`
-            : 'url("https://img.usecurling.com/p/200/200?q=doodle&color=gray")',
-          backgroundRepeat: profile?.chat_wallpaper ? 'no-repeat' : 'repeat',
-          backgroundSize: profile?.chat_wallpaper ? 'cover' : '150px',
-          backgroundPosition: 'center',
-        }}
-      />
-
-      <div className="px-6 py-3 bg-white border-b border-slate-200 flex items-center gap-4 shadow-sm z-10 relative">
+    <div
+      className="flex flex-col h-full relative z-0"
+      style={solidColor ? { backgroundColor: solidColor } : undefined}
+    >
+      {!solidColor && (
+        <div
+          className={cn(
+            'absolute inset-0 z-0 pointer-events-none',
+            imageUrl ? 'opacity-20' : 'opacity-40',
+          )}
+          style={{
+            backgroundImage: `url("${imageUrl || defaultBg}")`,
+            backgroundRepeat: imageUrl ? 'no-repeat' : 'repeat',
+            backgroundSize: imageUrl ? 'cover' : '150px',
+            backgroundPosition: 'center',
+          }}
+        />
+      )}
+      <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center gap-3 shadow-sm z-10 relative">
         <ContactAvatar contact={contact} className="h-10 w-10" />
-        <div className="flex flex-col">
-          <span className="font-semibold text-slate-800">{name}</span>
-          <span className="text-xs text-slate-500">{contact?.remote_jid?.split('@')[0]}</span>
+        <div className="flex flex-col flex-1 min-w-0">
+          <span className="font-semibold text-slate-800 truncate">{name}</span>
+          <span className="text-xs text-slate-500 truncate">
+            {contact?.remote_jid?.split('@')[0]}
+          </span>
         </div>
+        <WallpaperSettings>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+            <Palette className="h-4 w-4 text-slate-500" />
+          </Button>
+        </WallpaperSettings>
       </div>
-
       <ScrollArea className="flex-1 px-4 py-6 z-10 relative">
         <div className="flex flex-col space-y-3 pb-4 max-w-4xl mx-auto">
           {loading ? (
@@ -227,11 +166,10 @@ export function ChatWindow({
           ) : (
             messages.map((msg, index) => {
               const msgDate = new Date(msg.timestamp || 0)
-              const prevMsgDate = index > 0 ? new Date(messages[index - 1].timestamp || 0) : null
+              const prevDate = index > 0 ? new Date(messages[index - 1].timestamp || 0) : null
               const showDate =
                 index === 0 ||
-                format(msgDate, 'dd/MM/yyyy') !== format(prevMsgDate as Date, 'dd/MM/yyyy')
-
+                format(msgDate, 'dd/MM/yyyy') !== format(prevDate as Date, 'dd/MM/yyyy')
               return (
                 <div key={msg.id} className="flex flex-col">
                   {showDate && (
@@ -245,21 +183,7 @@ export function ChatWindow({
                       </span>
                     </div>
                   )}
-                  <div
-                    className={cn(
-                      'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-2 shadow-sm text-[15px] break-words whitespace-pre-wrap relative group',
-                      msg.from_me
-                        ? 'bg-[#D9FDD3] text-slate-800 self-end rounded-tr-none'
-                        : 'bg-white text-slate-800 self-start rounded-tl-none',
-                    )}
-                  >
-                    <div className="pb-3 pr-6 leading-relaxed">{renderMessageContent(msg)}</div>
-                    <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
-                      <span className="text-[10px] text-slate-500/80 font-medium select-none">
-                        {formatMessageTime(msg.timestamp)}
-                      </span>
-                    </div>
-                  </div>
+                  <MessageBubble msg={msg} />
                 </div>
               )
             })
@@ -267,7 +191,6 @@ export function ChatWindow({
           <div ref={bottomRef} className="h-1" />
         </div>
       </ScrollArea>
-
       <div className="p-4 bg-[#F0F2F5] flex items-center gap-3 z-10 relative border-t border-slate-200/50">
         <Input
           value={input}

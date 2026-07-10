@@ -1,4 +1,9 @@
-export async function processProposalAutomation(sb: any, remoteJid: string, content: string, userId: string | null) {
+export async function processProposalAutomation(
+  sb: any,
+  remoteJid: string,
+  content: string,
+  userId: string | null,
+) {
   if (!content) return
   const lowerContent = content.toLowerCase()
   const isProposal = lowerContent.includes('proposta') || lowerContent.includes('orçamento')
@@ -12,7 +17,7 @@ export async function processProposalAutomation(sb: any, remoteJid: string, cont
     .from('leads')
     .select('id, created_by, status')
     .or(`telefone.ilike.%${phoneDigits}%,whatsapp_external_id.eq.${remoteJid}`)
-  
+
   if (error) {
     console.error('[Automation] Error fetching leads:', error)
     return
@@ -20,7 +25,7 @@ export async function processProposalAutomation(sb: any, remoteJid: string, cont
 
   if (leads && leads.length > 0) {
     const lead = leads[0]
-    
+
     // Check if proposal exists recently
     const { data: existingProposal } = await sb
       .from('proposals')
@@ -36,7 +41,7 @@ export async function processProposalAutomation(sb: any, remoteJid: string, cont
         titulo: 'Proposta via WhatsApp',
         valor: 0,
         status: 'Aberto',
-        descricao: `Detectado automaticamente: "${content.substring(0, 150)}..."`
+        descricao: `Detectado automaticamente: "${content.substring(0, 150)}..."`,
       })
     }
 
@@ -49,7 +54,7 @@ export async function processProposalAutomation(sb: any, remoteJid: string, cont
       lead_id: lead.id,
       user_id: lead.created_by,
       tipo: 'WhatsApp',
-      descricao: `Proposta/Orçamento mencionado: ${content.substring(0, 100)}`
+      descricao: `Proposta/Orçamento mencionado: ${content.substring(0, 100)}`,
     })
   }
 }
