@@ -43,4 +43,12 @@ export const leadsService = {
 
     if (error) throw error
   },
+
+  subscribeToChanges(callback: () => void) {
+    return supabase
+      .channel('leads_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, callback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, callback)
+      .subscribe()
+  },
 }

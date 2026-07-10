@@ -80,7 +80,10 @@ export function AppHeader() {
             >
               <Avatar className="h-8 w-8 rounded-full border border-slate-200 dark:border-slate-800">
                 <AvatarImage
-                  src={`https://img.usecurling.com/ppl/thumbnail?seed=${session?.user?.id}`}
+                  src={
+                    profile?.avatar_url ||
+                    `https://img.usecurling.com/ppl/thumbnail?seed=${session?.user?.id}`
+                  }
                 />
                 <AvatarFallback className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
                   {userName.substring(0, 2).toUpperCase()}

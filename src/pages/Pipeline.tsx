@@ -21,14 +21,28 @@ export default function PipelinePage() {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const fetchData = async () => {
+    try {
+      const [l, p] = await Promise.all([leadsService.getLeads(), proposalsService.getProposals()])
+      setLeads(l)
+      setProposals(p)
+    } catch {
+      toast.error('Erro ao carregar dados do pipeline')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    Promise.all([leadsService.getLeads(), proposalsService.getProposals()])
-      .then(([l, p]) => {
-        setLeads(l)
-        setProposals(p)
-      })
-      .catch(() => toast.error('Erro ao carregar dados do pipeline'))
-      .finally(() => setLoading(false))
+    fetchData()
+
+    const channel = leadsService.subscribeToChanges(() => {
+      fetchData()
+    })
+
+    return () => {
+      if (channel) channel.unsubscribe()
+    }
   }, [])
 
   const formatCurrency = (val: number) =>

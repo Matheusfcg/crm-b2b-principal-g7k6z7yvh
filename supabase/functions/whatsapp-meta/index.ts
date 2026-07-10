@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders as sharedCors } from '../_shared/cors.ts'
+import { processProposalAutomation } from '../_shared/automation.ts'
 
 const ALLOWED_ORIGINS = [
   'https://crm-b2b-principal-462cb--preview.goskip.app',
@@ -20,9 +21,19 @@ function getCors(req: Request) {
 
 async function verifySig(rawBody: string, sig: string | null, secret: string): Promise<boolean> {
   if (!sig || !secret || !sig.startsWith('sha256=')) return false
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const computed = 'sha256=' + Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('')
+  const computed =
+    'sha256=' +
+    Array.from(new Uint8Array(mac))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
   return sig === computed
 }
 
@@ -49,7 +60,7 @@ async function ensureInstance(sb: any, userId: string, phoneNumberId: string) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', inst.id)
-        .select('id')
+        .select('id, user_id')
         .single()
       return updated
     }
@@ -65,7 +76,7 @@ async function ensureInstance(sb: any, userId: string, phoneNumberId: string) {
       server_url: 'https://graph.facebook.com',
       status: 'connected',
     })
-    .select('id')
+    .select('id, user_id')
     .single()
 
   return newInst
@@ -150,25 +161,25 @@ async function processWebhook(body: any, sb: any) {
           .single()
         if (!conv) continue
 
-        await sb
-          .from('messages')
-          .upsert(
-            {
-              conversation_id: conv.id,
-              message_id: msg.id,
-              from_me: false,
-              content,
-              type: msg.type || 'text',
-              timestamp: ts,
-              status: 'received',
-            },
-            { onConflict: 'message_id' },
-          )
+        await sb.from('messages').upsert(
+          {
+            conversation_id: conv.id,
+            message_id: msg.id,
+            from_me: false,
+            content,
+            type: msg.type || 'text',
+            timestamp: ts,
+            status: 'received',
+          },
+          { onConflict: 'message_id' },
+        )
 
         await sb
           .from('conversations')
           .update({ unread_count: (conv.unread_count || 0) + 1 })
           .eq('id', conv.id)
+
+        await processProposalAutomation(sb, from, content, instance.user_id)
       }
     }
   }
@@ -267,6 +278,8 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', conv.id)
+
+      await processProposalAutomation(sb, to, text, instance.user_id)
     }
   }
 
@@ -287,10 +300,12 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
   try {
     const appId = '2113443072550231'
     const appSecret = Deno.env.get('META_APP_SECRET') || ''
-    
+
     let finalToken = accessToken
     if (appSecret) {
-      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${accessToken}`)
+      const tokenRes = await fetch(
+        `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${accessToken}`,
+      )
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json()
         if (tokenData.access_token) {
@@ -303,18 +318,21 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     let phoneNumberId = null
 
     const bizRes = await fetch(`https://graph.facebook.com/v19.0/me/businesses`, {
-      headers: { Authorization: `Bearer ${finalToken}` }
+      headers: { Authorization: `Bearer ${finalToken}` },
     })
-    
+
     if (bizRes.ok) {
       const bizData = await bizRes.json()
       if (bizData.data) {
         for (const biz of bizData.data) {
-          const ownedRes = await fetch(`https://graph.facebook.com/v19.0/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`, {
-            headers: { Authorization: `Bearer ${finalToken}` }
-          })
+          const ownedRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
           const ownedData = ownedRes.ok ? await ownedRes.json() : { data: [] }
-          
+
           if (ownedData.data && ownedData.data.length > 0) {
             const waba = ownedData.data[0]
             const phones = waba.phone_numbers?.data
@@ -324,14 +342,17 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
               break
             }
           }
-          
+
           if (wabaId) break
 
-          const clientRes = await fetch(`https://graph.facebook.com/v19.0/${biz.id}/client_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`, {
-            headers: { Authorization: `Bearer ${finalToken}` }
-          })
+          const clientRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/client_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
           const clientData = clientRes.ok ? await clientRes.json() : { data: [] }
-          
+
           if (clientData.data && clientData.data.length > 0) {
             const waba = clientData.data[0]
             const phones = waba.phone_numbers?.data
@@ -347,10 +368,16 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     }
 
     if (!wabaId || !phoneNumberId) {
-      return new Response(JSON.stringify({ error: 'Nenhuma conta do WhatsApp Business associada com um número de telefone foi encontrada no seu perfil. Verifique as permissões concedidas.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...ch },
-      })
+      return new Response(
+        JSON.stringify({
+          error:
+            'Nenhuma conta do WhatsApp Business associada com um número de telefone foi encontrada no seu perfil. Verifique as permissões concedidas.',
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...ch },
+        },
+      )
     }
 
     const { data: existing } = await sb
@@ -360,11 +387,14 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
       .maybeSingle()
 
     if (existing) {
-      await sb.from('configuracoes_whatsapp').update({
-        phone_number_id: phoneNumberId,
-        waba_id: wabaId,
-        access_token: finalToken,
-      }).eq('id', existing.id)
+      await sb
+        .from('configuracoes_whatsapp')
+        .update({
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          access_token: finalToken,
+        })
+        .eq('id', existing.id)
     } else {
       await sb.from('configuracoes_whatsapp').insert({
         user_id: userId,
@@ -379,7 +409,6 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     return new Response(JSON.stringify({ success: true, wabaId, phoneNumberId }), {
       headers: { 'Content-Type': 'application/json', ...ch },
     })
-
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
@@ -419,11 +448,11 @@ Deno.serve(async (req: Request) => {
 
   if (body.object === 'whatsapp_business_account' || req.headers.get('X-Hub-Signature-256')) {
     if (
-      !await verifySig(
+      !(await verifySig(
         rawBody,
         req.headers.get('X-Hub-Signature-256'),
         Deno.env.get('META_APP_SECRET') || '',
-      )
+      ))
     ) {
       return new Response('Unauthorized', { status: 401, headers: ch })
     }

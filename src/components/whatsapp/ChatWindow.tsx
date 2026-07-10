@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, isToday, isYesterday } from 'date-fns'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useAuth } from '@/hooks/use-auth'
 
 const isValidUUID = (id: string) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
@@ -51,6 +52,7 @@ export function ChatWindow({
   const [loading, setLoading] = useState(true)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const { profile } = useAuth()
 
   const fetchData = async () => {
     setLoading(true)
@@ -186,11 +188,17 @@ export function ChatWindow({
   return (
     <div className="flex flex-col h-full bg-[#EFEAE2] relative z-0">
       <div
-        className="absolute inset-0 z-0 opacity-40 pointer-events-none"
+        className={cn(
+          'absolute inset-0 z-0 pointer-events-none',
+          profile?.chat_wallpaper ? 'opacity-20' : 'opacity-40',
+        )}
         style={{
-          backgroundImage: 'url("https://img.usecurling.com/p/200/200?q=doodle&color=gray")',
-          backgroundRepeat: 'repeat',
-          backgroundSize: '150px',
+          backgroundImage: profile?.chat_wallpaper
+            ? `url("${profile.chat_wallpaper}")`
+            : 'url("https://img.usecurling.com/p/200/200?q=doodle&color=gray")',
+          backgroundRepeat: profile?.chat_wallpaper ? 'no-repeat' : 'repeat',
+          backgroundSize: profile?.chat_wallpaper ? 'cover' : '150px',
+          backgroundPosition: 'center',
         }}
       />
 
