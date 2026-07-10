@@ -1,34 +1,102 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 
 const META_APP_ID = '2113443072550231'
+const SDK_TIMEOUT_MS = 15000
+
+const FB_NOISE_PATTERNS = [
+  'impression.php',
+  'logLoginEvent',
+  'fbstatic-a.akamaihd.net',
+  'connect.facebook.net',
+  'graph.facebook.com',
+]
+
+function isFacebookSdkNoise(message: string): boolean {
+  return FB_NOISE_PATTERNS.some((p) => message.toLowerCase().includes(p.toLowerCase()))
+}
 
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
   const [loading, setLoading] = useState(false)
+  const initTimedOut = useRef(false)
 
   useEffect(() => {
+    const suppressSdkErrors = (event: ErrorEvent) => {
+      const msg = event?.message || ''
+      const filename = event?.filename || ''
+      if (isFacebookSdkNoise(msg) || isFacebookSdkNoise(filename)) {
+        event.preventDefault()
+        event.stopPropagation()
+        return true
+      }
+      return false
+    }
+
+    const suppressUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = typeof event?.reason === 'string' ? event.reason : ''
+      if (isFacebookSdkNoise(reason)) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    window.addEventListener('error', suppressSdkErrors, true)
+    window.addEventListener('unhandledrejection', suppressUnhandledRejection)
+
     if (document.getElementById('facebook-jssdk')) {
       if ((window as any).FB) setSdkReady(true)
-      return
+      return () => {
+        window.removeEventListener('error', suppressSdkErrors, true)
+        window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
+      }
     }
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+    let resolved = false
+
+    const finish = (success: boolean) => {
+      if (resolved) return
+      resolved = true
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+      setSdkReady(success)
+    }
+
+    timeoutHandle = setTimeout(() => {
+      initTimedOut.current = true
+      finish(false)
+    }, SDK_TIMEOUT_MS)
+
+    ;(window as any).fbAsyncInit = function () {
+      try {
+        ;(window as any).FB.init({
+          appId: META_APP_ID,
+          cookie: true,
+          xfbml: true,
+          version: 'v19.0',
+        })
+        finish(true)
+      } catch {
+        finish(false)
+      }
+    }
+
     const script = document.createElement('script')
     script.id = 'facebook-jssdk'
     script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
     script.async = true
     script.defer = true
     script.crossOrigin = 'anonymous'
+    script.onerror = () => {
+      finish(false)
+    }
     document.body.appendChild(script)
 
-    ;(window as any).fbAsyncInit = function () {
-      ;(window as any).FB.init({
-        appId: META_APP_ID,
-        cookie: true,
-        xfbml: true,
-        version: 'v19.0',
-      })
-      setSdkReady(true)
+    return () => {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+      window.removeEventListener('error', suppressSdkErrors, true)
+      window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
     }
   }, [])
 
@@ -38,24 +106,33 @@ export function useMetaSdk() {
         toast.error('Usuário não autenticado.')
         return
       }
-      if (!(window as any).FB) {
-        toast.error('O Facebook SDK ainda não foi carregado. Tente novamente em instantes.')
+
+      const fb = (window as any).FB
+      if (!fb || typeof fb.login !== 'function') {
+        const reason = initTimedOut.current
+          ? 'O Facebook SDK não pôde ser carregado (tempo limite). Verifique sua conexão ou bloqueadores de rastreamento.'
+          : 'O Facebook SDK ainda não foi carregado. Tente novamente em instantes.'
+        toast.error(reason)
         return
       }
 
-      ;(window as any).FB.login(
-        (response: any) => {
-          if (response.authResponse) {
-            exchangeToken(response.authResponse.accessToken, userId, onSuccess)
-          } else {
-            toast.error('Login com Meta cancelado ou permissões não concedidas.')
-          }
-        },
-        {
-          scope: 'whatsapp_business_management,whatsapp_business_messaging',
-          extras: { feature: 'whatsapp_embedded_signup' },
-        },
-      )
+      try {
+        fb.login(
+          (response: any) => {
+            if (response && response.authResponse) {
+              exchangeToken(response.authResponse.accessToken, userId, onSuccess)
+            } else {
+              toast.error('Login com Meta cancelado ou permissões não concedidas.')
+            }
+          },
+          {
+            scope: 'whatsapp_business_management,whatsapp_business_messaging',
+            extras: { feature: 'whatsapp_embedded_signup' },
+          },
+        )
+      } catch {
+        toast.error('Não foi possível abrir o popup do Meta. Verifique bloqueadores de popup.')
+      }
     },
     [],
   )
