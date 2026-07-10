@@ -202,27 +202,7 @@ export function useMetaSdk() {
     window.fetch = function (this: typeof window, ...args: Parameters<typeof fetch>) {
       const url = extractFetchUrl(args[0])
       if (isTelemetryUrl(url)) {
-        try {
-          return originalFetch
-            .apply(this, args)
-            .then(
-              (response: Response) => {
-                if (
-                  !response ||
-                  response.status === 0 ||
-                  response.type === 'opaque' ||
-                  response.type === 'error'
-                ) {
-                  return FAKE_OK_RESPONSE()
-                }
-                return response
-              },
-              () => FAKE_OK_RESPONSE(),
-            )
-            .catch(() => FAKE_OK_RESPONSE())
-        } catch {
-          return Promise.resolve(FAKE_OK_RESPONSE())
-        }
+        return Promise.resolve(FAKE_OK_RESPONSE())
       }
       return originalFetch.apply(this, args)
     }
