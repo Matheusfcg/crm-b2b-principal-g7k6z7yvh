@@ -172,15 +172,27 @@ export function useMetaSdk() {
     window.fetch = function (this: typeof window, ...args: Parameters<typeof fetch>) {
       const url = extractFetchUrl(args[0])
       if (isFacebookSdkResourceUrl(url)) {
-        return originalFetch.apply(this, args).then(
-          (response: Response) => {
-            if (response.status === 0 || response.type === 'opaque' || response.type === 'error') {
-              return FAKE_OK_RESPONSE()
-            }
-            return response
-          },
-          () => FAKE_OK_RESPONSE(),
-        )
+        try {
+          return originalFetch
+            .apply(this, args)
+            .then(
+              (response: Response) => {
+                if (
+                  !response ||
+                  response.status === 0 ||
+                  response.type === 'opaque' ||
+                  response.type === 'error'
+                ) {
+                  return FAKE_OK_RESPONSE()
+                }
+                return response
+              },
+              () => FAKE_OK_RESPONSE(),
+            )
+            .catch(() => FAKE_OK_RESPONSE())
+        } catch {
+          return Promise.resolve(FAKE_OK_RESPONSE())
+        }
       }
       return originalFetch.apply(this, args)
     }
@@ -194,12 +206,48 @@ export function useMetaSdk() {
     XMLHttpRequest.prototype.send = function (...sendArgs: any[]) {
       const telemetryUrl = (this as any).__fbTelemetryUrl as string
       if (telemetryUrl && isFacebookSdkResourceUrl(telemetryUrl)) {
+        const xhr = this
         this.addEventListener('error', (e: Event) => {
           e.stopPropagation()
           e.preventDefault()
         })
+        this.addEventListener('abort', (e: Event) => {
+          e.stopPropagation()
+          e.preventDefault()
+        })
+        setTimeout(() => {
+          try {
+            Object.defineProperty(xhr, 'readyState', { value: 2, configurable: true })
+            xhr.dispatchEvent(new Event('readystatechange'))
+            Object.defineProperty(xhr, 'readyState', { value: 3, configurable: true })
+            xhr.dispatchEvent(new Event('readystatechange'))
+            Object.defineProperty(xhr, 'status', { value: 200, configurable: true })
+            Object.defineProperty(xhr, 'statusText', { value: 'OK', configurable: true })
+            Object.defineProperty(xhr, 'responseText', { value: '{}', configurable: true })
+            Object.defineProperty(xhr, 'response', { value: '{}', configurable: true })
+            Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true })
+            xhr.dispatchEvent(new Event('readystatechange'))
+            xhr.dispatchEvent(new Event('load'))
+            xhr.dispatchEvent(new Event('loadend'))
+          } catch {
+            // ignore property definition errors
+          }
+        }, 0)
+        return
       }
       return originalXhrSend.apply(this, sendArgs)
+    }
+
+    const originalSendBeacon = navigator.sendBeacon
+      ? navigator.sendBeacon.bind(navigator)
+      : undefined
+    if (originalSendBeacon) {
+      ;(navigator as any).sendBeacon = function (url: string, data?: any): boolean {
+        if (isFacebookSdkResourceUrl(url)) {
+          return true
+        }
+        return originalSendBeacon(url, data)
+      }
     }
 
     return () => {
@@ -210,6 +258,9 @@ export function useMetaSdk() {
       window.fetch = originalFetch
       XMLHttpRequest.prototype.open = originalXhrOpen
       XMLHttpRequest.prototype.send = originalXhrSend
+      if (originalSendBeacon) {
+        ;(navigator as any).sendBeacon = originalSendBeacon
+      }
     }
   }, [])
 
