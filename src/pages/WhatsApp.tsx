@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 
 export default function WhatsApp() {
   const { user } = useAuth()
-  const { loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
+  const { sdkReady, loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
   const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [instance, setInstance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -106,12 +106,18 @@ export default function WhatsApp() {
         <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
           <MessageCircle className="h-6 w-6" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp</h1>
           <p className="text-slate-500 text-sm">
             Gerencie suas conversas e integrações com WhatsApp Business.
           </p>
         </div>
+        {!sdkReady && (
+          <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="hidden sm:inline">Carregando Meta SDK...</span>
+          </div>
+        )}
       </div>
       <WhatsAppChat
         instanceId={instance?.id || null}
@@ -120,6 +126,7 @@ export default function WhatsApp() {
         onOpenConfig={() => setConfigOpen(true)}
         onDisconnect={handleDisconnect}
         hasConfig={!!config}
+        sdkReady={sdkReady}
       />
       <ManualConfigDialog
         open={configOpen}

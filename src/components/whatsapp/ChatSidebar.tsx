@@ -22,6 +22,7 @@ interface ChatSidebarProps {
   onOpenConfig: () => void
   onDisconnect: () => void
   hasConfig: boolean
+  sdkReady: boolean
 }
 
 export function ChatSidebar({
@@ -33,6 +34,7 @@ export function ChatSidebar({
   onOpenConfig,
   onDisconnect,
   hasConfig,
+  sdkReady,
 }: ChatSidebarProps) {
   const [conversations, setConversations] = useState<any[]>([])
   const [loading, setLoading] = useState(!!instance)
@@ -86,6 +88,13 @@ export function ChatSidebar({
     await supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId)
   }
 
+  const addDisabled = addingNumber || !sdkReady
+  const addLabel = !sdkReady
+    ? 'Carregando SDK...'
+    : addingNumber
+      ? 'Conectando...'
+      : 'Adicionar Número'
+
   return (
     <div className="flex flex-col h-full bg-white">
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50">
@@ -100,8 +109,8 @@ export function ChatSidebar({
               size="icon"
               className="h-8 w-8"
               onClick={onAddNumber}
-              disabled={addingNumber}
-              title="Adicionar Número"
+              disabled={addDisabled}
+              title={addLabel}
             >
               {addingNumber ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -147,7 +156,7 @@ export function ChatSidebar({
               <p className="text-slate-400 text-sm">Nenhum número conectado.</p>
               <Button
                 onClick={onAddNumber}
-                disabled={addingNumber}
+                disabled={addDisabled}
                 className="bg-[#25D366] hover:bg-[#1da851] text-white"
               >
                 {addingNumber ? (
@@ -155,7 +164,7 @@ export function ChatSidebar({
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
-                Adicionar Número
+                {addLabel}
               </Button>
             </div>
           ) : loading ? (

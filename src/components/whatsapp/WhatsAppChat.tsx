@@ -10,6 +10,7 @@ interface WhatsAppChatProps {
   onOpenConfig: () => void
   onDisconnect: () => void
   hasConfig: boolean
+  sdkReady: boolean
 }
 
 export function WhatsAppChat({
@@ -19,6 +20,7 @@ export function WhatsAppChat({
   onOpenConfig,
   onDisconnect,
   hasConfig,
+  sdkReady,
 }: WhatsAppChatProps) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
 
@@ -34,6 +36,7 @@ export function WhatsAppChat({
           onOpenConfig={onOpenConfig}
           onDisconnect={onDisconnect}
           hasConfig={hasConfig}
+          sdkReady={sdkReady}
         />
       </div>
       <div className="md:col-span-2 flex flex-col h-full bg-slate-50 overflow-hidden">

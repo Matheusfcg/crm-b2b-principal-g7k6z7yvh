@@ -9,12 +9,15 @@ const FB_NOISE_PATTERNS = [
   'impression.php',
   'logLoginEvent',
   'fbstatic-a.akamaihd.net',
-  'connect.facebook.net',
-  'graph.facebook.com',
+  'connect.facebook.net/en_US',
+  'connect.facebook.net/pt_BR',
+  'graph.facebook.com/oauth',
 ]
 
 function isFacebookSdkNoise(message: string): boolean {
-  return FB_NOISE_PATTERNS.some((p) => message.toLowerCase().includes(p.toLowerCase()))
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return FB_NOISE_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
 }
 
 export function useMetaSdk() {
@@ -88,9 +91,7 @@ export function useMetaSdk() {
     script.async = true
     script.defer = true
     script.crossOrigin = 'anonymous'
-    script.onerror = () => {
-      finish(false)
-    }
+    script.onerror = () => finish(false)
     document.body.appendChild(script)
 
     return () => {
@@ -99,6 +100,26 @@ export function useMetaSdk() {
       window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
     }
   }, [])
+
+  const exchangeToken = useCallback(
+    async (accessToken: string, userId: string, onSuccess?: () => void) => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
+          body: { action: 'setup_embedded_signup', accessToken, userId },
+        })
+        if (error) throw error
+        if (data?.error) throw new Error(data.error)
+        toast.success('WhatsApp Business conectado com sucesso!')
+        onSuccess?.()
+      } catch (err: any) {
+        toast.error(`Falha ao configurar via Meta: ${err.message}`)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [],
+  )
 
   const startEmbeddedSignup = useCallback(
     async (userId: string | undefined, onSuccess?: () => void) => {
@@ -119,8 +140,10 @@ export function useMetaSdk() {
       try {
         fb.login(
           (response: any) => {
-            if (response && response.authResponse) {
+            if (response?.authResponse) {
               exchangeToken(response.authResponse.accessToken, userId, onSuccess)
+            } else if (response?.status === 'closed') {
+              toast.info('Login com Meta cancelado pelo usuário.')
             } else {
               toast.error('Login com Meta cancelado ou permissões não concedidas.')
             }
@@ -134,25 +157,8 @@ export function useMetaSdk() {
         toast.error('Não foi possível abrir o popup do Meta. Verifique bloqueadores de popup.')
       }
     },
-    [],
+    [exchangeToken],
   )
-
-  const exchangeToken = async (accessToken: string, userId: string, onSuccess?: () => void) => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
-        body: { action: 'setup_embedded_signup', accessToken, userId },
-      })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
-      toast.success('WhatsApp Business conectado com sucesso!')
-      onSuccess?.()
-    } catch (err: any) {
-      toast.error(`Falha ao configurar via Meta: ${err.message}`)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return { sdkReady, loading, startEmbeddedSignup }
 }
