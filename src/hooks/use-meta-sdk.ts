@@ -203,10 +203,27 @@ export function useMetaSdk() {
       ;(this as any).__fbTelemetryUrl = url
       return originalXhrOpen.call(this, method, url, ...rest)
     }
-    XMLHttpRequest.prototype.send = function (...sendArgs: any[]) {
+    XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...sendArgs: any[]) {
       const telemetryUrl = (this as any).__fbTelemetryUrl as string
       if (telemetryUrl && isFacebookSdkResourceUrl(telemetryUrl)) {
-        const xhr = this
+        const dispatchSpoofedLoad = (target: XMLHttpRequest) => () => {
+          try {
+            Object.defineProperty(target, 'readyState', { value: 2, configurable: true })
+            target.dispatchEvent(new Event('readystatechange'))
+            Object.defineProperty(target, 'readyState', { value: 3, configurable: true })
+            target.dispatchEvent(new Event('readystatechange'))
+            Object.defineProperty(target, 'status', { value: 200, configurable: true })
+            Object.defineProperty(target, 'statusText', { value: 'OK', configurable: true })
+            Object.defineProperty(target, 'responseText', { value: '{}', configurable: true })
+            Object.defineProperty(target, 'response', { value: '{}', configurable: true })
+            Object.defineProperty(target, 'readyState', { value: 4, configurable: true })
+            target.dispatchEvent(new Event('readystatechange'))
+            target.dispatchEvent(new Event('load'))
+            target.dispatchEvent(new Event('loadend'))
+          } catch {
+            // ignore property definition errors
+          }
+        }
         this.addEventListener('error', (e: Event) => {
           e.stopPropagation()
           e.preventDefault()
@@ -215,24 +232,7 @@ export function useMetaSdk() {
           e.stopPropagation()
           e.preventDefault()
         })
-        setTimeout(() => {
-          try {
-            Object.defineProperty(xhr, 'readyState', { value: 2, configurable: true })
-            xhr.dispatchEvent(new Event('readystatechange'))
-            Object.defineProperty(xhr, 'readyState', { value: 3, configurable: true })
-            xhr.dispatchEvent(new Event('readystatechange'))
-            Object.defineProperty(xhr, 'status', { value: 200, configurable: true })
-            Object.defineProperty(xhr, 'statusText', { value: 'OK', configurable: true })
-            Object.defineProperty(xhr, 'responseText', { value: '{}', configurable: true })
-            Object.defineProperty(xhr, 'response', { value: '{}', configurable: true })
-            Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true })
-            xhr.dispatchEvent(new Event('readystatechange'))
-            xhr.dispatchEvent(new Event('load'))
-            xhr.dispatchEvent(new Event('loadend'))
-          } catch {
-            // ignore property definition errors
-          }
-        }, 0)
+        setTimeout(dispatchSpoofedLoad(this), 0)
         return
       }
       return originalXhrSend.apply(this, sendArgs)
