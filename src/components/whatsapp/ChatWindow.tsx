@@ -4,11 +4,12 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Send, Loader2, Palette } from 'lucide-react'
+import { Send, Loader2, Palette, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, isToday, isYesterday } from 'date-fns'
 import { useAuth } from '@/hooks/use-auth'
+import { useMediaUpload } from '@/hooks/use-media-upload'
 import { ContactAvatar } from './ContactAvatar'
 import { MessageBubble } from './MessageBubble'
 import { WallpaperSettings } from './WallpaperSettings'
@@ -29,7 +30,9 @@ export function ChatWindow({
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { profile } = useAuth()
+  const { uploading, upload } = useMediaUpload()
 
   const fetchData = async () => {
     setLoading(true)
@@ -78,35 +81,50 @@ export function ChatWindow({
     }
   }, [conversationId])
 
-  const handleSend = async () => {
-    if (!input.trim() || !contact) return
+  const handleSend = async (media?: { url: string; type: string; filename: string }) => {
     const text = input.trim()
+    if (!text && !media) return
+    if (!contact) return
     setInput('')
     setSending(true)
     if (!instance?.id || !isValidUUID(instance.id)) {
       toast.error('ID da instância inválido.')
       setSending(false)
-      setInput(text)
+      if (text) setInput(text)
       return
     }
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
-        body: {
-          action: 'send_message',
-          instanceId: instance.id,
-          to: contact.remote_jid,
-          text,
-        },
-      })
+      const body: any = {
+        action: 'send_message',
+        instanceId: instance.id,
+        to: contact.remote_jid,
+        text,
+      }
+      if (media) {
+        body.mediaType = media.type
+        body.mediaUrl = media.url
+        body.mediaFilename = media.filename
+      }
+      const { data, error } = await supabase.functions.invoke('whatsapp-meta', { body })
       if (error) throw new Error(error.message || 'Erro ao enviar mensagem')
       if (data?.error) throw new Error(data.error)
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     } catch (err: any) {
       toast.error(`Erro ao enviar: ${err.message}`)
-      setInput(text)
+      if (text) setInput(text)
     } finally {
       setSending(false)
     }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const media = await upload(file)
+    if (media) {
+      await handleSend(media)
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const wallpaper = profile?.chat_wallpaper
@@ -115,6 +133,7 @@ export function ChatWindow({
   const imageUrl = wallpaper && !isSolid ? wallpaper : null
   const defaultBg = 'https://img.usecurling.com/p/200/200?q=doodle&color=gray'
   const name = contact?.push_name || contact?.remote_jid?.split('@')[0] || 'Contato'
+  const isDisabled = sending || loading || uploading
 
   return (
     <div
@@ -191,18 +210,38 @@ export function ChatWindow({
           <div ref={bottomRef} className="h-1" />
         </div>
       </ScrollArea>
-      <div className="p-4 bg-[#F0F2F5] flex items-center gap-3 z-10 relative border-t border-slate-200/50">
+      <div className="p-4 bg-[#F0F2F5] flex items-center gap-2 z-10 relative border-t border-slate-200/50">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt,.zip"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isDisabled}
+          className="rounded-full h-11 w-11 shrink-0 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+        >
+          {uploading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Paperclip className="h-5 w-5" />
+          )}
+        </Button>
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
           placeholder="Digite uma mensagem"
           className="flex-1 bg-white border-0 shadow-sm focus-visible:ring-1 focus-visible:ring-green-500 rounded-full h-11 px-5"
-          disabled={sending || loading}
+          disabled={isDisabled}
         />
         <Button
           size="icon"
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={!input.trim() || sending || loading}
           className="bg-green-600 hover:bg-green-700 text-white rounded-full h-11 w-11 shrink-0 shadow-sm transition-all disabled:opacity-50"
         >

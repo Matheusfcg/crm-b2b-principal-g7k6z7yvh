@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { Image as ImageIcon, Music, FileText, Video, Sticker } from 'lucide-react'
+import { Image as ImageIcon, Music, FileText, Video, Download, Sticker } from 'lucide-react'
 
 function formatTime(dateStr: string | null) {
   if (!dateStr) return ''
@@ -9,48 +9,84 @@ function formatTime(dateStr: string | null) {
 
 export function MessageBubble({ msg }: { msg: any }) {
   const type = msg.type || 'text'
+  const mediaUrl = msg.media_url
+  const filename = msg.media_filename
 
   const renderContent = () => {
     switch (type) {
       case 'image':
-        return (
+        return mediaUrl ? (
+          <div className="flex flex-col gap-1">
+            <img
+              src={mediaUrl}
+              alt="Imagem"
+              className="rounded-lg max-w-full max-h-72 object-cover cursor-pointer"
+              onClick={() => window.open(mediaUrl, '_blank')}
+            />
+            {msg.content && <span className="text-sm">{msg.content}</span>}
+          </div>
+        ) : (
           <div className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4 shrink-0 text-slate-500" />
-            <span>{msg.content}</span>
+            <span>{msg.content || 'Imagem'}</span>
           </div>
         )
       case 'audio':
-        return (
+        return mediaUrl ? (
+          <audio controls className="w-full max-w-[240px] h-9">
+            <source src={mediaUrl} />
+          </audio>
+        ) : (
           <div className="flex items-center gap-2">
             <Music className="h-4 w-4 shrink-0 text-slate-500" />
-            <span>{msg.content}</span>
+            <span>{msg.content || 'Áudio'}</span>
           </div>
         )
       case 'document':
-        return (
+        return mediaUrl ? (
+          <a
+            href={mediaUrl}
+            download={filename}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-blue-600 hover:underline min-w-[180px]"
+          >
+            <FileText className="h-5 w-5 shrink-0" />
+            <span className="truncate">{filename || 'Documento'}</span>
+            <Download className="h-4 w-4 shrink-0" />
+          </a>
+        ) : (
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 shrink-0 text-slate-500" />
-            <span>{msg.content}</span>
+            <span>{msg.content || filename || 'Documento'}</span>
           </div>
         )
       case 'video':
-        return (
+        return mediaUrl ? (
+          <video controls className="rounded-lg max-w-full max-h-72">
+            <source src={mediaUrl} />
+          </video>
+        ) : (
           <div className="flex items-center gap-2">
             <Video className="h-4 w-4 shrink-0 text-slate-500" />
-            <span>{msg.content}</span>
+            <span>{msg.content || 'Vídeo'}</span>
           </div>
         )
       case 'sticker':
-        return (
+        return mediaUrl ? (
+          <img src={mediaUrl} alt="Sticker" className="max-w-32 max-h-32 object-contain" />
+        ) : (
           <div className="flex items-center gap-2">
             <Sticker className="h-4 w-4 shrink-0 text-slate-500" />
-            <span>{msg.content}</span>
+            <span>{msg.content || 'Sticker'}</span>
           </div>
         )
       default:
         return <span>{msg.content}</span>
     }
   }
+
+  const hasVisualMedia = mediaUrl && ['image', 'video'].includes(type)
 
   return (
     <div
@@ -61,7 +97,9 @@ export function MessageBubble({ msg }: { msg: any }) {
           : 'bg-white text-slate-800 self-start rounded-tl-none',
       )}
     >
-      <div className="pb-3 pr-6 leading-relaxed">{renderContent()}</div>
+      <div className={cn('pb-3 pr-6 leading-relaxed', hasVisualMedia && 'p-1')}>
+        {renderContent()}
+      </div>
       <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
         <span className="text-[10px] text-slate-500/80 font-medium select-none">
           {formatTime(msg.timestamp)}

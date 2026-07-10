@@ -27,9 +27,19 @@ function getCors(req: Request) {
 
 async function verifySig(rawBody: string, sig: string | null, secret: string): Promise<boolean> {
   if (!sig || !secret || !sig.startsWith('sha256=')) return false
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const computed = 'sha256=' + Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('')
+  const computed =
+    'sha256=' +
+    Array.from(new Uint8Array(mac))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
   return sig === computed
 }
 
@@ -78,6 +88,19 @@ async function ensureInstance(sb: any, userId: string, phoneNumberId: string) {
   return newInst
 }
 
+async function resolveMediaUrl(mediaId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.url || null
+  } catch {
+    return null
+  }
+}
+
 async function processWebhook(body: any, sb: any) {
   for (const entry of body.entry || []) {
     for (const change of entry.changes || []) {
@@ -88,7 +111,7 @@ async function processWebhook(body: any, sb: any) {
 
       const { data: config, error: configError } = await sb
         .from('configuracoes_whatsapp')
-        .select('user_id')
+        .select('user_id, access_token')
         .eq('phone_number_id', phoneNumberId)
         .maybeSingle()
 
@@ -130,13 +153,40 @@ async function processWebhook(body: any, sb: any) {
           .single()
         if (!contact) continue
 
-        let content = 'Mensagem'
-        if (msg.type === 'text') content = msg.text?.body || ''
-        else if (msg.type === 'image') content = msg.image?.caption || 'Imagem'
-        else if (msg.type === 'audio') content = 'Audio'
-        else if (msg.type === 'document') content = msg.document?.filename || 'Documento'
-        else if (msg.type === 'video') content = 'Video'
-        else if (msg.type === 'sticker') content = 'Sticker'
+        let content = msg.type === 'text' ? msg.text?.body || '' : ''
+        let mediaUrl: string | null = null
+        let mediaFilename: string | null = null
+        let mediaMimetype: string | null = null
+
+        if (msg.type === 'image') {
+          content = msg.image?.caption || ''
+          mediaMimetype = msg.image?.mime_type || 'image/jpeg'
+          if (msg.image?.id && config?.access_token) {
+            mediaUrl = await resolveMediaUrl(msg.image.id, config.access_token)
+          }
+        } else if (msg.type === 'audio') {
+          mediaMimetype = msg.audio?.mime_type || 'audio/ogg'
+          if (msg.audio?.id && config?.access_token) {
+            mediaUrl = await resolveMediaUrl(msg.audio.id, config.access_token)
+          }
+        } else if (msg.type === 'document') {
+          content = msg.document?.caption || ''
+          mediaFilename = msg.document?.filename || 'Documento'
+          mediaMimetype = msg.document?.mime_type || 'application/octet-stream'
+          if (msg.document?.id && config?.access_token) {
+            mediaUrl = await resolveMediaUrl(msg.document.id, config.access_token)
+          }
+        } else if (msg.type === 'video') {
+          content = msg.video?.caption || ''
+          mediaMimetype = msg.video?.mime_type || 'video/mp4'
+          if (msg.video?.id && config?.access_token) {
+            mediaUrl = await resolveMediaUrl(msg.video.id, config.access_token)
+          }
+        } else if (msg.type === 'sticker') {
+          if (msg.sticker?.id && config?.access_token) {
+            mediaUrl = await resolveMediaUrl(msg.sticker.id, config.access_token)
+          }
+        }
 
         const ts = msg.timestamp
           ? new Date(Number(msg.timestamp) * 1000).toISOString()
@@ -148,7 +198,9 @@ async function processWebhook(body: any, sb: any) {
             {
               instance_id: instance.id,
               contact_id: contact.id,
-              last_message: content.substring(0, 255),
+              last_message: (
+                content || (msg.type && msg.type !== 'text' ? msg.type : 'Mensagem')
+              ).substring(0, 255),
               updated_at: ts,
             },
             { onConflict: 'instance_id,contact_id' },
@@ -157,26 +209,26 @@ async function processWebhook(body: any, sb: any) {
           .single()
         if (!conv) continue
 
-        await sb
-          .from('messages')
-          .upsert(
-            {
-              conversation_id: conv.id,
-              message_id: msg.id,
-              from_me: false,
-              content,
-              type: msg.type || 'text',
-              timestamp: ts,
-              status: 'received',
-            },
-            { onConflict: 'message_id' },
-          )
-
+        await sb.from('messages').upsert(
+          {
+            conversation_id: conv.id,
+            message_id: msg.id,
+            from_me: false,
+            content,
+            type: msg.type || 'text',
+            timestamp: ts,
+            status: 'received',
+            media_url: mediaUrl,
+            media_filename: mediaFilename,
+            media_mimetype: mediaMimetype,
+          },
+          { onConflict: 'message_id' },
+        )
         await sb
           .from('conversations')
           .update({ unread_count: (conv.unread_count || 0) + 1 })
           .eq('id', conv.id)
-          
+
         await processProposalAutomation(sb, from, content, instance.user_id)
       }
     }
@@ -184,8 +236,8 @@ async function processWebhook(body: any, sb: any) {
 }
 
 async function handleSend(body: any, sb: any, ch: Record<string, string>) {
-  const { instanceId, to, text } = body
-  if (!instanceId || !to || !text) {
+  const { instanceId, to, text, mediaType, mediaUrl, mediaFilename } = body
+  if (!instanceId || !to || (!text && !mediaUrl)) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json', ...ch },
@@ -218,16 +270,31 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
     })
   }
 
+  const payload: any = { messaging_product: 'whatsapp', recipient_type: 'individual', to }
+  if (mediaUrl && mediaType) {
+    payload.type = mediaType
+    if (mediaType === 'image') payload.image = { link: mediaUrl, caption: text || undefined }
+    else if (mediaType === 'audio') payload.audio = { link: mediaUrl }
+    else if (mediaType === 'document')
+      payload.document = {
+        link: mediaUrl,
+        filename: mediaFilename || 'document',
+        caption: text || undefined,
+      }
+    else if (mediaType === 'video') payload.video = { link: mediaUrl, caption: text || undefined }
+    else {
+      payload.type = 'text'
+      payload.text = { body: text || '' }
+    }
+  } else {
+    payload.type = 'text'
+    payload.text = { body: text || '' }
+  }
+
   const res = await fetch(`https://graph.facebook.com/v19.0/${config.phone_number_id}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${config.access_token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      type: 'text',
-      text: { body: text },
-    }),
+    body: JSON.stringify(payload),
   })
 
   if (!res.ok) {
@@ -240,6 +307,13 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
 
   const data = await res.json()
   const messageId = data.messages?.[0]?.id || `sent_${Date.now()}`
+
+  await sb.from('whatsapp_logs').insert({
+    endpoint: `graph.facebook.com/v19.0/${config.phone_number_id}/messages`,
+    payload: payload,
+    response: data,
+    user_id: instance.user_id,
+  })
 
   const { data: contact } = await sb
     .from('contacts')
@@ -257,27 +331,41 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
       .maybeSingle()
 
     if (conv) {
+      const msgType = mediaType || 'text'
       await sb.from('messages').upsert(
         {
           conversation_id: conv.id,
           message_id: messageId,
           from_me: true,
-          content: text,
-          type: 'text',
+          content: text || '',
+          type: msgType,
           timestamp: new Date().toISOString(),
           status: 'sent',
+          media_url: mediaUrl || null,
+          media_filename: mediaFilename || null,
         },
         { onConflict: 'message_id' },
       )
+      const lastMsgPreview = mediaUrl
+        ? msgType === 'image'
+          ? '📷 Imagem'
+          : msgType === 'audio'
+            ? '🎵 Áudio'
+            : msgType === 'document'
+              ? '📄 Documento'
+              : msgType === 'video'
+                ? '🎬 Vídeo'
+                : '📎 Mídia'
+        : text.substring(0, 255)
       await sb
         .from('conversations')
         .update({
-          last_message: text.substring(0, 255),
+          last_message: lastMsgPreview,
           updated_at: new Date().toISOString(),
         })
         .eq('id', conv.id)
-        
-      await processProposalAutomation(sb, to, text, instance.user_id)
+
+      await processProposalAutomation(sb, to, text || '', instance.user_id)
     }
   }
 
@@ -298,10 +386,12 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
   try {
     const appId = '2113443072550231'
     const appSecret = Deno.env.get('META_APP_SECRET') || ''
-    
+
     let finalToken = accessToken
     if (appSecret) {
-      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${accessToken}`)
+      const tokenRes = await fetch(
+        `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${accessToken}`,
+      )
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json()
         if (tokenData.access_token) {
@@ -314,18 +404,21 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     let phoneNumberId = null
 
     const bizRes = await fetch(`https://graph.facebook.com/v19.0/me/businesses`, {
-      headers: { Authorization: `Bearer ${finalToken}` }
+      headers: { Authorization: `Bearer ${finalToken}` },
     })
-    
+
     if (bizRes.ok) {
       const bizData = await bizRes.json()
       if (bizData.data) {
         for (const biz of bizData.data) {
-          const ownedRes = await fetch(`https://graph.facebook.com/v19.0/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`, {
-            headers: { Authorization: `Bearer ${finalToken}` }
-          })
+          const ownedRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
           const ownedData = ownedRes.ok ? await ownedRes.json() : { data: [] }
-          
+
           if (ownedData.data && ownedData.data.length > 0) {
             const waba = ownedData.data[0]
             const phones = waba.phone_numbers?.data
@@ -335,14 +428,17 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
               break
             }
           }
-          
+
           if (wabaId) break
 
-          const clientRes = await fetch(`https://graph.facebook.com/v19.0/${biz.id}/client_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`, {
-            headers: { Authorization: `Bearer ${finalToken}` }
-          })
+          const clientRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/client_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
           const clientData = clientRes.ok ? await clientRes.json() : { data: [] }
-          
+
           if (clientData.data && clientData.data.length > 0) {
             const waba = clientData.data[0]
             const phones = waba.phone_numbers?.data
@@ -358,10 +454,16 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     }
 
     if (!wabaId || !phoneNumberId) {
-      return new Response(JSON.stringify({ error: 'Nenhuma conta do WhatsApp Business associada com um número de telefone foi encontrada no seu perfil. Verifique as permissões concedidas.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...ch },
-      })
+      return new Response(
+        JSON.stringify({
+          error:
+            'Nenhuma conta do WhatsApp Business associada com um número de telefone foi encontrada no seu perfil. Verifique as permissões concedidas.',
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...ch },
+        },
+      )
     }
 
     const { data: existing, error: existingErr } = await sb
@@ -371,19 +473,25 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
       .maybeSingle()
 
     if (existingErr) {
-      return new Response(JSON.stringify({ error: `Erro ao buscar configuração: ${existingErr.message}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...ch },
-      })
+      return new Response(
+        JSON.stringify({ error: `Erro ao buscar configuração: ${existingErr.message}` }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...ch },
+        },
+      )
     }
 
     let configError = null
     if (existing) {
-      const { error: updateErr } = await sb.from('configuracoes_whatsapp').update({
-        phone_number_id: phoneNumberId,
-        waba_id: wabaId,
-        access_token: finalToken,
-      }).eq('id', existing.id)
+      const { error: updateErr } = await sb
+        .from('configuracoes_whatsapp')
+        .update({
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          access_token: finalToken,
+        })
+        .eq('id', existing.id)
       configError = updateErr
     } else {
       const { error: insertErr } = await sb.from('configuracoes_whatsapp').insert({
@@ -396,10 +504,13 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     }
 
     if (configError) {
-      return new Response(JSON.stringify({ error: `Erro ao salvar configuração: ${configError.message}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...ch },
-      })
+      return new Response(
+        JSON.stringify({ error: `Erro ao salvar configuração: ${configError.message}` }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...ch },
+        },
+      )
     }
 
     const instance = await ensureInstance(sb, userId, phoneNumberId)
@@ -413,7 +524,6 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
     return new Response(JSON.stringify({ success: true, wabaId, phoneNumberId }), {
       headers: { 'Content-Type': 'application/json', ...ch },
     })
-
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
@@ -453,11 +563,11 @@ Deno.serve(async (req: Request) => {
 
   if (body.object === 'whatsapp_business_account' || req.headers.get('X-Hub-Signature-256')) {
     if (
-      !await verifySig(
+      !(await verifySig(
         rawBody,
         req.headers.get('X-Hub-Signature-256'),
         Deno.env.get('META_APP_SECRET') || '',
-      )
+      ))
     ) {
       return new Response('Unauthorized', { status: 401, headers: ch })
     }
