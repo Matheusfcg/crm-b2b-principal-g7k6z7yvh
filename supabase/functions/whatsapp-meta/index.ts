@@ -1,6 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { corsHeaders as sharedCors } from '../_shared/cors.ts'
 import { processProposalAutomation } from '../_shared/automation.ts'
 
 const ALLOWED_ORIGINS = [
@@ -11,10 +10,17 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ]
 
+const BASE_CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+}
+
 function getCors(req: Request) {
   const origin = req.headers.get('Origin')
   return {
-    ...sharedCors,
+    ...BASE_CORS_HEADERS,
     'Access-Control-Allow-Origin': origin && ALLOWED_ORIGINS.includes(origin) ? origin : '*',
   }
 }
