@@ -1,16 +1,31 @@
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { Image as ImageIcon, Music, FileText, Video, Download, Sticker } from 'lucide-react'
+import {
+  Image as ImageIcon,
+  Music,
+  FileText,
+  Video,
+  Download,
+  Sticker,
+  Clock,
+  Check,
+  CheckCheck,
+  AlertCircle,
+  RotateCw,
+} from 'lucide-react'
 
 function formatTime(dateStr: string | null) {
   if (!dateStr) return ''
   return format(new Date(dateStr), 'HH:mm')
 }
 
-export function MessageBubble({ msg }: { msg: any }) {
+export function MessageBubble({ msg, onRetry }: { msg: any; onRetry?: () => void }) {
   const type = msg.type || 'text'
   const mediaUrl = msg.media_url
   const filename = msg.media_filename
+  const status = msg.status || 'sent'
+  const isFailed = status === 'failed'
+  const isSending = status === 'sending'
 
   const renderContent = () => {
     switch (type) {
@@ -88,23 +103,44 @@ export function MessageBubble({ msg }: { msg: any }) {
 
   const hasVisualMedia = mediaUrl && ['image', 'video'].includes(type)
 
+  const renderStatus = () => {
+    if (!msg.from_me) return null
+    if (isFailed) return <AlertCircle className="h-3 w-3 text-red-500" />
+    if (isSending) return <Clock className="h-3 w-3 text-slate-400" />
+    if (status === 'read' || status === 'delivered')
+      return <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+    return <Check className="h-3.5 w-3.5 text-slate-400" />
+  }
+
   return (
-    <div
-      className={cn(
-        'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-2 shadow-sm text-[15px] break-words whitespace-pre-wrap relative group',
-        msg.from_me
-          ? 'bg-[#D9FDD3] text-slate-800 self-end rounded-tr-none'
-          : 'bg-white text-slate-800 self-start rounded-tl-none',
+    <div className="flex flex-col">
+      <div
+        className={cn(
+          'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-2 shadow-sm text-[15px] break-words whitespace-pre-wrap relative group',
+          msg.from_me
+            ? 'bg-[#D9FDD3] text-slate-800 self-end rounded-tr-none'
+            : 'bg-white text-slate-800 self-start rounded-tl-none',
+          isFailed && 'bg-red-50 border border-red-200',
+        )}
+      >
+        <div className={cn('pb-3 pr-6 leading-relaxed', hasVisualMedia && 'p-1')}>
+          {renderContent()}
+        </div>
+        <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
+          <span className="text-[10px] text-slate-500/80 font-medium select-none">
+            {formatTime(msg.timestamp)}
+          </span>
+          {renderStatus()}
+        </div>
+      </div>
+      {isFailed && onRetry && (
+        <button
+          onClick={onRetry}
+          className="self-end mt-1 mr-1 flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+        >
+          <RotateCw className="h-3 w-3" /> Tentar novamente
+        </button>
       )}
-    >
-      <div className={cn('pb-3 pr-6 leading-relaxed', hasVisualMedia && 'p-1')}>
-        {renderContent()}
-      </div>
-      <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
-        <span className="text-[10px] text-slate-500/80 font-medium select-none">
-          {formatTime(msg.timestamp)}
-        </span>
-      </div>
     </div>
   )
 }

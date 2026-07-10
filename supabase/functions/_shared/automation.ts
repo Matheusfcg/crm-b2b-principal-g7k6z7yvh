@@ -2,7 +2,7 @@ export async function processProposalAutomation(
   sb: any,
   phoneNumber: string,
   messageContent: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   if (!phoneNumber || !userId) return
 
@@ -36,7 +36,11 @@ export async function processProposalAutomation(
       }
     }
 
-    if (lowerContent === 'aceito' || lowerContent === 'aceitar' || lowerContent.includes('aceito proposta')) {
+    if (
+      lowerContent === 'aceito' ||
+      lowerContent === 'aceitar' ||
+      lowerContent.includes('aceito proposta')
+    ) {
       const { data: openProposals } = await sb
         .from('proposals')
         .select('id, titulo')
@@ -46,10 +50,7 @@ export async function processProposalAutomation(
         .limit(1)
 
       if (openProposals && openProposals.length > 0) {
-        await sb
-          .from('proposals')
-          .update({ status: 'Aceito' })
-          .eq('id', openProposals[0].id)
+        await sb.from('proposals').update({ status: 'Aceito' }).eq('id', openProposals[0].id)
 
         await sb.from('interactions').insert({
           lead_id: lead.id,
