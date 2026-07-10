@@ -120,7 +120,7 @@ export default function WhatsApp() {
         )}
       </div>
       <WhatsAppChat
-        instanceId={instance?.id || null}
+        instance={instance}
         onAddNumber={handleAddNumber}
         addingNumber={sdkLoading || saving}
         onOpenConfig={() => setConfigOpen(true)}

@@ -248,7 +248,7 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
     .from('whatsapp_instances')
     .select('user_id')
     .eq('id', instanceId)
-    .single()
+    .maybeSingle()
 
   if (!instance) {
     return new Response(JSON.stringify({ error: 'Instance not found' }), {
@@ -261,7 +261,7 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
     .from('configuracoes_whatsapp')
     .select('phone_number_id, access_token')
     .eq('user_id', instance.user_id)
-    .single()
+    .maybeSingle()
 
   if (!config) {
     return new Response(JSON.stringify({ error: 'Meta config not found' }), {

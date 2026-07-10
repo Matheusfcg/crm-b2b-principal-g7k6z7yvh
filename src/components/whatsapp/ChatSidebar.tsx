@@ -85,7 +85,11 @@ export function ChatSidebar({
   const handleSelect = async (convId: string) => {
     onSelect(convId)
     setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c)))
-    await supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId)
+    const { error } = await supabase
+      .from('conversations')
+      .update({ unread_count: 0 })
+      .eq('id', convId)
+    if (error) console.error('Failed to mark conversation as read:', error.message)
   }
 
   const addDisabled = addingNumber || !sdkReady
@@ -137,6 +141,12 @@ export function ChatSidebar({
             )}
           </div>
         </div>
+        {instance?.phone && (
+          <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            {instance.phone}
+          </div>
+        )}
         {instance && (
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />

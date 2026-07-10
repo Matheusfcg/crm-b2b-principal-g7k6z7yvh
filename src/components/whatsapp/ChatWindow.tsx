@@ -166,13 +166,15 @@ export function ChatWindow({
       if (error) throw new Error(error.message)
       if (data?.error) throw new Error(data.error)
       const realId = data?.data?.messages?.[0]?.id
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev) => {
+        const hasReal = realId && prev.some((m) => m.message_id === realId)
+        if (hasReal) return prev.filter((m) => m.message_id !== msg.message_id)
+        return prev.map((m) =>
           m.message_id === msg.message_id
             ? { ...m, message_id: realId || msg.message_id, status: 'sent' }
             : m,
-        ),
-      )
+        )
+      })
     } catch (err: any) {
       setMessages((prev) =>
         prev.map((m) => (m.message_id === msg.message_id ? { ...m, status: 'failed' } : m)),
