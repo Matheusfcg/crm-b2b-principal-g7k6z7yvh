@@ -18,6 +18,70 @@ export default function WhatsApp() {
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({ phone_number_id: '', waba_id: '', access_token: '' })
 
+  useEffect(() => {
+    if (document.getElementById('facebook-jssdk')) return
+    const script = document.createElement('script')
+    script.id = 'facebook-jssdk'
+    script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
+    script.async = true
+    script.defer = true
+    script.crossOrigin = 'anonymous'
+    document.body.appendChild(script)
+
+    ;(window as any).fbAsyncInit = function () {
+      ;(window as any).FB.init({
+        appId: '2113443072550231',
+        cookie: true,
+        xfbml: true,
+        version: 'v19.0',
+      })
+    }
+  }, [])
+
+  const handleEmbeddedSignup = () => {
+    if (!(window as any).FB) {
+      toast.error('O Facebook SDK ainda não foi carregado. Tente novamente em instantes.')
+      return
+    }
+
+    ;(window as any).FB.login(
+      (response: any) => {
+        if (response.authResponse) {
+          const accessToken = response.authResponse.accessToken
+          exchangeTokenAndSave(accessToken)
+        } else {
+          toast.error('Login com Meta cancelado ou permissões não concedidas.')
+        }
+      },
+      {
+        scope: 'whatsapp_business_management,whatsapp_business_messaging',
+        extras: {
+          feature: 'whatsapp_embedded_signup',
+        },
+      },
+    )
+  }
+
+  const exchangeTokenAndSave = async (accessToken: string) => {
+    if (!user) return
+    setSaving(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
+        body: { action: 'setup_embedded_signup', accessToken, userId: user.id },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+
+      toast.success('WhatsApp Business conectado com sucesso!')
+      fetchData()
+    } catch (err: any) {
+      toast.error(`Falha ao configurar via Meta: ${err.message}`)
+      setConfigOpen(true) // Fallback to manual
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const fetchData = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -144,18 +208,40 @@ export default function WhatsApp() {
       ) : (
         <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl flex flex-col md:flex-row items-center justify-between shadow-sm gap-4">
           <div>
-            <h3 className="text-blue-900 font-semibold text-lg">Nenhuma configuração Meta</h3>
+            <h3 className="text-blue-900 font-semibold text-lg">Conecte seu WhatsApp Business</h3>
             <p className="text-sm text-blue-700 mt-1 max-w-lg">
-              Configure suas credenciais da Meta Cloud API (phone_number_id, waba_id, access_token)
-              para começar a usar o WhatsApp no CRM.
+              Integre sua conta do WhatsApp rapidamente usando o login oficial da Meta, ou configure
+              manualmente suas credenciais.
             </p>
           </div>
-          <Button
-            onClick={() => setConfigOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4 mr-2" /> Configurar
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={handleEmbeddedSignup}
+              disabled={saving}
+              className="bg-[#1877F2] hover:bg-[#1864D9] text-white whitespace-nowrap"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <svg
+                  className="w-4 h-4 mr-2 fill-current"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+              )}
+              Conectar com WhatsApp
+            </Button>
+            <Button
+              onClick={() => setConfigOpen(true)}
+              variant="outline"
+              disabled={saving}
+              className="whitespace-nowrap"
+            >
+              Configuração Manual
+            </Button>
+          </div>
         </div>
       )}
 

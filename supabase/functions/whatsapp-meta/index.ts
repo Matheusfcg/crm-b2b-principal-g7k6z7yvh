@@ -20,9 +20,19 @@ function getCors(req: Request) {
 
 async function verifySig(rawBody: string, sig: string | null, secret: string): Promise<boolean> {
   if (!sig || !secret || !sig.startsWith('sha256=')) return false
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const computed = 'sha256=' + Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('')
+  const computed =
+    'sha256=' +
+    Array.from(new Uint8Array(mac))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
   return sig === computed
 }
 
@@ -150,20 +160,18 @@ async function processWebhook(body: any, sb: any) {
           .single()
         if (!conv) continue
 
-        await sb
-          .from('messages')
-          .upsert(
-            {
-              conversation_id: conv.id,
-              message_id: msg.id,
-              from_me: false,
-              content,
-              type: msg.type || 'text',
-              timestamp: ts,
-              status: 'received',
-            },
-            { onConflict: 'message_id' },
-          )
+        await sb.from('messages').upsert(
+          {
+            conversation_id: conv.id,
+            message_id: msg.id,
+            from_me: false,
+            content,
+            type: msg.type || 'text',
+            timestamp: ts,
+            status: 'received',
+          },
+          { onConflict: 'message_id' },
+        )
 
         await sb
           .from('conversations')
@@ -275,6 +283,135 @@ async function handleSend(body: any, sb: any, ch: Record<string, string>) {
   })
 }
 
+async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, string>) {
+  const { accessToken, userId } = body
+  if (!accessToken || !userId) {
+    return new Response(JSON.stringify({ error: 'Missing access token or user ID' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...ch },
+    })
+  }
+
+  try {
+    const appId = '2113443072550231'
+    const appSecret = Deno.env.get('META_APP_SECRET') || ''
+
+    let finalToken = accessToken
+    if (appSecret) {
+      const tokenRes = await fetch(
+        `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${accessToken}`,
+      )
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json()
+        if (tokenData.access_token) {
+          finalToken = tokenData.access_token
+        }
+      }
+    }
+
+    let wabaId = null
+    let phoneNumberId = null
+
+    const bizRes = await fetch(`https://graph.facebook.com/v19.0/me/businesses`, {
+      headers: { Authorization: `Bearer ${finalToken}` },
+    })
+
+    if (bizRes.ok) {
+      const bizData = await bizRes.json()
+      if (bizData.data) {
+        for (const biz of bizData.data) {
+          const ownedRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
+          const ownedData = ownedRes.ok ? await ownedRes.json() : { data: [] }
+
+          if (ownedData.data && ownedData.data.length > 0) {
+            const waba = ownedData.data[0]
+            const phones = waba.phone_numbers?.data
+            if (phones && phones.length > 0) {
+              wabaId = waba.id
+              phoneNumberId = phones[0].id
+              break
+            }
+          }
+
+          if (wabaId) break
+
+          const clientRes = await fetch(
+            `https://graph.facebook.com/v19.0/${biz.id}/client_whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number}`,
+            {
+              headers: { Authorization: `Bearer ${finalToken}` },
+            },
+          )
+          const clientData = clientRes.ok ? await clientRes.json() : { data: [] }
+
+          if (clientData.data && clientData.data.length > 0) {
+            const waba = clientData.data[0]
+            const phones = waba.phone_numbers?.data
+            if (phones && phones.length > 0) {
+              wabaId = waba.id
+              phoneNumberId = phones[0].id
+              break
+            }
+          }
+          if (wabaId) break
+        }
+      }
+    }
+
+    if (!wabaId || !phoneNumberId) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'Nenhuma conta do WhatsApp Business associada com um número de telefone foi encontrada no seu perfil. Verifique as permissões concedidas.',
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...ch },
+        },
+      )
+    }
+
+    const { data: existing } = await sb
+      .from('configuracoes_whatsapp')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existing) {
+      await sb
+        .from('configuracoes_whatsapp')
+        .update({
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          access_token: finalToken,
+        })
+        .eq('id', existing.id)
+    } else {
+      await sb.from('configuracoes_whatsapp').insert({
+        user_id: userId,
+        phone_number_id: phoneNumberId,
+        waba_id: wabaId,
+        access_token: finalToken,
+      })
+    }
+
+    await ensureInstance(sb, userId, phoneNumberId)
+
+    return new Response(JSON.stringify({ success: true, wabaId, phoneNumberId }), {
+      headers: { 'Content-Type': 'application/json', ...ch },
+    })
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...ch },
+    })
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const ch = getCors(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: ch })
@@ -306,11 +443,11 @@ Deno.serve(async (req: Request) => {
 
   if (body.object === 'whatsapp_business_account' || req.headers.get('X-Hub-Signature-256')) {
     if (
-      !await verifySig(
+      !(await verifySig(
         rawBody,
         req.headers.get('X-Hub-Signature-256'),
         Deno.env.get('META_APP_SECRET') || '',
-      )
+      ))
     ) {
       return new Response('Unauthorized', { status: 401, headers: ch })
     }
@@ -323,6 +460,10 @@ Deno.serve(async (req: Request) => {
   }
 
   if (body.action === 'send_message') return await handleSend(body, sb, ch)
+
+  if (body.action === 'setup_embedded_signup') {
+    return await handleEmbeddedSignup(body, sb, ch)
+  }
 
   return new Response(JSON.stringify({ success: true }), {
     headers: { 'Content-Type': 'application/json', ...ch },

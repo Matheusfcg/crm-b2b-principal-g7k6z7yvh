@@ -6,7 +6,7 @@ const allowedOrigins = [
   'https://crm-vexa.goskip.app',
   'http://localhost:5173',
   'http://localhost:4173',
-  'http://localhost:3000'
+  'http://localhost:3000',
 ]
 
 const getCorsHeaders = (req: Request) => {
@@ -15,13 +15,14 @@ const getCorsHeaders = (req: Request) => {
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
   }
 }
 
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req)
-  
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -45,12 +46,13 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Handle Webhooks from Uazapi
-    const urlEvent = url.pathname.includes('/whatsapp-uazapi/') 
-      ? url.pathname.split('/whatsapp-uazapi/')[1]?.replace(/\//g, '.') 
+    const urlEvent = url.pathname.includes('/whatsapp-uazapi/')
+      ? url.pathname.split('/whatsapp-uazapi/')[1]?.replace(/\//g, '.')
       : null
 
-    const isWebhook = (body.event && body.instance) || (urlEvent && (body.instance || body.instanceName || body.id))
-    
+    const isWebhook =
+      (body.event && body.instance) || (urlEvent && (body.instance || body.instanceName || body.id))
+
     if (isWebhook || req.method === 'POST') {
       const event = body.event || urlEvent
       const instanceName = body.instance || body.instanceName || url.pathname.split('/').pop()
@@ -73,10 +75,14 @@ Deno.serve(async (req: Request) => {
         }
 
         try {
-          if (event === 'qrcode.updated' || event === 'connection.update' || event.includes('connection')) {
+          if (
+            event === 'qrcode.updated' ||
+            event === 'connection.update' ||
+            event.includes('connection')
+          ) {
             const qrData = data?.qrcode?.base64 || data?.base64 || data?.qrcode || body.qrcode
             const stateData = data?.state || data?.status || body.state || body.status
-            
+
             const updatePayload: any = { updated_at: new Date().toISOString() }
 
             if (qrData && typeof qrData === 'string') {
@@ -93,10 +99,7 @@ Deno.serve(async (req: Request) => {
             }
 
             if (Object.keys(updatePayload).length > 1) {
-               await supabase
-                .from('whatsapp_instances')
-                .update(updatePayload)
-                .eq('id', inst.id)
+              await supabase.from('whatsapp_instances').update(updatePayload).eq('id', inst.id)
             }
           }
 
@@ -181,7 +184,12 @@ Deno.serve(async (req: Request) => {
             }
           }
 
-          if (event === 'contacts.upsert' || event === 'contacts.update' || event === 'contacts' || event.includes('contact')) {
+          if (
+            event === 'contacts.upsert' ||
+            event === 'contacts.update' ||
+            event === 'contacts' ||
+            event.includes('contact')
+          ) {
             const contacts = Array.isArray(data) ? data : [data]
             for (const c of contacts) {
               if (!c) continue
@@ -226,9 +234,18 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (instanceError || !instance || !instance.instance_name) {
-      console.error('Instance fetch error or missing instance_name:', instanceError, 'for id/name:', instanceId || instanceName)
+      console.error(
+        'Instance fetch error or missing instance_name:',
+        instanceError,
+        'for id/name:',
+        instanceId || instanceName,
+      )
       return new Response(
-        JSON.stringify({ code: 'INSTANCE_NOT_FOUND', error: 'Instance not found or missing instance_name', details: instanceError }),
+        JSON.stringify({
+          code: 'INSTANCE_NOT_FOUND',
+          error: 'Instance not found or missing instance_name',
+          details: instanceError,
+        }),
         {
           status: 404,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
@@ -261,14 +278,14 @@ Deno.serve(async (req: Request) => {
 
       const cleanServerUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl
       const apiUrl = `${cleanServerUrl}${endpoint}`
-      
-      console.log(`[Uazapi Request] URL: ${apiUrl} | Method: ${method}`);
-      console.log(`[Uazapi Request] Headers:`, { 
-        'Content-Type': 'application/json', 
-        apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING' 
-      });
+
+      console.log(`[Uazapi Request] URL: ${apiUrl} | Method: ${method}`)
+      console.log(`[Uazapi Request] Headers:`, {
+        'Content-Type': 'application/json',
+        apikey: apikey ? `***${apikey.slice(-4)}` : 'MISSING',
+      })
       if (payload) {
-        console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload));
+        console.log(`[Uazapi Request] Payload:`, JSON.stringify(payload))
       }
 
       const res = await fetch(apiUrl, {
@@ -277,35 +294,37 @@ Deno.serve(async (req: Request) => {
         body: payload ? JSON.stringify(payload) : undefined,
       })
 
-      console.log(`[Uazapi Response] Status: ${res.status} ${res.statusText}`);
+      console.log(`[Uazapi Response] Status: ${res.status} ${res.statusText}`)
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => '')
         console.error(`[Uazapi Error] Endpoint returned ${res.status}:`, errorText)
-        let parsedError;
+        let parsedError
         try {
-          parsedError = JSON.parse(errorText);
+          parsedError = JSON.parse(errorText)
         } catch (e) {
           // ignore
         }
-        
+
         if (res.status === 401 || res.status === 403) {
-          const err = new Error('UNAUTHORIZED');
-          (err as any).status = res.status;
-          (err as any).body = parsedError || errorText;
-          throw err;
+          const err = new Error('UNAUTHORIZED')
+          ;(err as any).status = res.status
+          ;(err as any).body = parsedError || errorText
+          throw err
         }
         if (res.status === 429) {
-          const err = new Error('RATE_LIMIT_REACHED');
-          (err as any).status = 429;
-          (err as any).body = parsedError || errorText;
-          throw err;
+          const err = new Error('RATE_LIMIT_REACHED')
+          ;(err as any).status = 429
+          ;(err as any).body = parsedError || errorText
+          throw err
         }
-        
-        const err = new Error(`API Error (${res.status}): ${parsedError?.message || errorText || res.statusText}`);
-        (err as any).status = res.status;
-        (err as any).body = parsedError || errorText;
-        throw err;
+
+        const err = new Error(
+          `API Error (${res.status}): ${parsedError?.message || errorText || res.statusText}`,
+        )
+        ;(err as any).status = res.status
+        ;(err as any).body = parsedError || errorText
+        throw err
       }
 
       const textData = await res.text()
@@ -321,9 +340,9 @@ Deno.serve(async (req: Request) => {
         }
         return { success: res.ok, status: res.status }
       } catch (e: any) {
-        const err = new Error(`JSON Parse Error: ${e.message}`);
-        (err as any).status = 500;
-        throw err;
+        const err = new Error(`JSON Parse Error: ${e.message}`)
+        ;(err as any).status = 500
+        throw err
       }
     }
 
@@ -448,19 +467,25 @@ Deno.serve(async (req: Request) => {
     })
   } catch (error: any) {
     console.error('[whatsapp-uazapi] Unhandled error:', error)
-    
+
     const status = error.status || 500
-    const code = error.message === 'UNAUTHORIZED' ? 'UNAUTHORIZED' : 
-                 error.message === 'RATE_LIMIT_REACHED' ? 'RATE_LIMIT_REACHED' : 
-                 'INTERNAL_ERROR'
-                 
-    return new Response(JSON.stringify({ 
-      error: error.message, 
-      code,
-      details: error.body 
-    }), {
-      status,
-      headers: { 'Content-Type': 'application/json', ...getCorsHeaders(req) },
-    })
+    const code =
+      error.message === 'UNAUTHORIZED'
+        ? 'UNAUTHORIZED'
+        : error.message === 'RATE_LIMIT_REACHED'
+          ? 'RATE_LIMIT_REACHED'
+          : 'INTERNAL_ERROR'
+
+    return new Response(
+      JSON.stringify({
+        error: error.message,
+        code,
+        details: error.body,
+      }),
+      {
+        status,
+        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(req) },
+      },
+    )
   }
 })
