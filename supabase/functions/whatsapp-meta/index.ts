@@ -20,19 +20,9 @@ function getCors(req: Request) {
 
 async function verifySig(rawBody: string, sig: string | null, secret: string): Promise<boolean> {
   if (!sig || !secret || !sig.startsWith('sha256=')) return false
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
-  const computed =
-    'sha256=' +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
+  const computed = 'sha256=' + Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('')
   return sig === computed
 }
 
@@ -160,18 +150,20 @@ async function processWebhook(body: any, sb: any) {
           .single()
         if (!conv) continue
 
-        await sb.from('messages').upsert(
-          {
-            conversation_id: conv.id,
-            message_id: msg.id,
-            from_me: false,
-            content,
-            type: msg.type || 'text',
-            timestamp: ts,
-            status: 'received',
-          },
-          { onConflict: 'message_id' },
-        )
+        await sb
+          .from('messages')
+          .upsert(
+            {
+              conversation_id: conv.id,
+              message_id: msg.id,
+              from_me: false,
+              content,
+              type: msg.type || 'text',
+              timestamp: ts,
+              status: 'received',
+            },
+            { onConflict: 'message_id' },
+          )
 
         await sb
           .from('conversations')
@@ -314,11 +306,11 @@ Deno.serve(async (req: Request) => {
 
   if (body.object === 'whatsapp_business_account' || req.headers.get('X-Hub-Signature-256')) {
     if (
-      !(await verifySig(
+      !await verifySig(
         rawBody,
         req.headers.get('X-Hub-Signature-256'),
         Deno.env.get('META_APP_SECRET') || '',
-      ))
+      )
     ) {
       return new Response('Unauthorized', { status: 401, headers: ch })
     }
