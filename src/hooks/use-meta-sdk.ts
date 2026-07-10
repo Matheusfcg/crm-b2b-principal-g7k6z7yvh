@@ -28,6 +28,7 @@ const FB_NOISE_URL_PATTERNS = [
   'graph.facebook.com/oauth',
   'facebook.net/en_US/fbevents',
   'fbevents.js',
+  'impression.php',
 ]
 
 function isFacebookSdkNoise(message: string): boolean {
@@ -50,6 +51,17 @@ function extractResourceUrl(event: Event): string | null {
   if (target?.currentSrc && typeof target.currentSrc === 'string') return target.currentSrc
   return null
 }
+
+function extractFetchUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.href
+  if (input instanceof Request) return input.url
+  if (input && typeof input === 'object' && 'url' in input) return String((input as any).url)
+  return ''
+}
+
+const FAKE_OK_RESPONSE = () =>
+  new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
 
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
@@ -157,15 +169,18 @@ export function useMetaSdk() {
     document.body.appendChild(script)
 
     const originalFetch = window.fetch
-    window.fetch = function (...args: Parameters<typeof fetch>) {
-      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url || ''
+    window.fetch = function (this: typeof window, ...args: Parameters<typeof fetch>) {
+      const url = extractFetchUrl(args[0])
       if (isFacebookSdkResourceUrl(url)) {
-        return originalFetch
-          .apply(this, args)
-          .catch(
-            () =>
-              new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
-          )
+        return originalFetch.apply(this, args).then(
+          (response: Response) => {
+            if (response.status === 0 || response.type === 'opaque' || response.type === 'error') {
+              return FAKE_OK_RESPONSE()
+            }
+            return response
+          },
+          () => FAKE_OK_RESPONSE(),
+        )
       }
       return originalFetch.apply(this, args)
     }
@@ -192,6 +207,9 @@ export function useMetaSdk() {
       window.removeEventListener('error', suppressSdkErrors, true)
       window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
       window.removeEventListener('error', suppressResourceError, true)
+      window.fetch = originalFetch
+      XMLHttpRequest.prototype.open = originalXhrOpen
+      XMLHttpRequest.prototype.send = originalXhrSend
     }
   }, [])
 
