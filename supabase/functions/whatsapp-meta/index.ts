@@ -44,8 +44,20 @@ async function processWebhook(body: any, sb: any) {
       const phoneNumberId = value.metadata?.phone_number_id
       if (!phoneNumberId) continue
 
-      const { data: config } = await sb.from('configuracoes_whatsapp').select('user_id').eq('phone_number_id', phoneNumberId).single()
-      if (!config) continue
+      const { data: config, error } = await sb
+  .from('configuracoes_whatsapp')
+  .select('user_id')
+  .eq('phone_number_id', phoneNumberId)
+  .single();
+
+console.log("PHONE NUMBER ID:", phoneNumberId);
+console.log("CONFIG:", config);
+console.log("ERROR:", error);
+
+if (!config) {
+  console.error("Configuração não encontrada para o Phone Number ID:", phoneNumberId);
+  continue;
+}
 
       const instance = await ensureInstance(sb, config.user_id, phoneNumberId)
       if (!instance) continue
