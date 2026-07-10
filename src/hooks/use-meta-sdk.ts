@@ -5,13 +5,23 @@ import { supabase } from '@/lib/supabase/client'
 const META_APP_ID = '2113443072550231'
 const SDK_TIMEOUT_MS = 15000
 
-const FB_NOISE_PATTERNS = [
+const TELEMETRY_PATTERNS = [
+  'impression.php',
+  'facebook.com/platform/impression',
+  'www.facebook.com/platform/impression',
+  'facebook.com/tr/',
+  'fbevents.js',
+  'facebook.net/en_US/fbevents',
+  'fbstatic-a.akamaihd.net',
+  'logLoginEvent',
+]
+
+const NOISE_MESSAGE_PATTERNS = [
   'impression.php',
   'logLoginEvent',
   'fbstatic-a.akamaihd.net',
   'connect.facebook.net/en_US',
   'connect.facebook.net/pt_BR',
-  'graph.facebook.com/oauth',
   'facebook.com/platform/impression',
   'www.facebook.com/platform/impression',
   'facebook.com/tr/',
@@ -19,28 +29,29 @@ const FB_NOISE_PATTERNS = [
   'fbevents.js',
 ]
 
-const FB_NOISE_URL_PATTERNS = [
-  'facebook.com/platform/impression',
-  'www.facebook.com/platform/impression',
-  'facebook.com/tr/',
-  'connect.facebook.net',
-  'fbstatic-a.akamaihd.net',
-  'graph.facebook.com/oauth',
-  'facebook.net/en_US/fbevents',
-  'fbevents.js',
-  'impression.php',
+const FETCH_CANCEL_PATTERNS = [
+  'error retrieving login status',
+  'fetch cancelled',
+  'failed to fetch',
+  'networkerror',
 ]
 
-function isFacebookSdkNoise(message: string): boolean {
-  if (!message) return false
-  const lower = message.toLowerCase()
-  return FB_NOISE_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
-}
-
-function isFacebookSdkResourceUrl(url: string): boolean {
+function isTelemetryUrl(url: string): boolean {
   if (!url) return false
   const lower = url.toLowerCase()
-  return FB_NOISE_URL_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+  return TELEMETRY_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+}
+
+function isNoiseMessage(message: string): boolean {
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return NOISE_MESSAGE_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+}
+
+function isFetchCancelError(message: string): boolean {
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return FETCH_CANCEL_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
 }
 
 function extractResourceUrl(event: Event): string | null {
@@ -74,14 +85,20 @@ export function useMetaSdk() {
       const msg = errorEvent?.message || ''
       const filename = errorEvent?.filename || ''
 
-      if (isFacebookSdkNoise(msg) || isFacebookSdkNoise(filename)) {
+      if (isNoiseMessage(msg) || isNoiseMessage(filename)) {
+        event.preventDefault()
+        event.stopPropagation()
+        return true
+      }
+
+      if (isFetchCancelError(msg)) {
         event.preventDefault()
         event.stopPropagation()
         return true
       }
 
       const resourceUrl = extractResourceUrl(event)
-      if (resourceUrl && isFacebookSdkResourceUrl(resourceUrl)) {
+      if (resourceUrl && isTelemetryUrl(resourceUrl)) {
         event.preventDefault()
         event.stopPropagation()
         return true
@@ -93,14 +110,14 @@ export function useMetaSdk() {
     const suppressUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event?.reason
       const reasonStr = typeof reason === 'string' ? reason : ''
-      if (isFacebookSdkNoise(reasonStr)) {
+      if (isNoiseMessage(reasonStr) || isFetchCancelError(reasonStr)) {
         event.preventDefault()
         event.stopPropagation()
         return
       }
       if (reason && typeof reason === 'object') {
         const reasonText = JSON.stringify(reason).toLowerCase()
-        if (isFacebookSdkNoise(reasonText)) {
+        if (isNoiseMessage(reasonText) || isFetchCancelError(reasonText)) {
           event.preventDefault()
           event.stopPropagation()
         }
@@ -109,7 +126,7 @@ export function useMetaSdk() {
 
     const suppressResourceError = (event: Event) => {
       const resourceUrl = extractResourceUrl(event)
-      if (resourceUrl && isFacebookSdkResourceUrl(resourceUrl)) {
+      if (resourceUrl && isTelemetryUrl(resourceUrl)) {
         event.preventDefault()
         event.stopPropagation()
         return true
@@ -121,12 +138,25 @@ export function useMetaSdk() {
     window.addEventListener('unhandledrejection', suppressUnhandledRejection)
     window.addEventListener('error', suppressResourceError, true)
 
+    const originalConsoleError = console.error
+    console.error = function (...args: any[]) {
+      const combined = args
+        .map((a) => (typeof a === 'string' ? a : a?.message || ''))
+        .join(' ')
+        .toLowerCase()
+      if (isFetchCancelError(combined) || isNoiseMessage(combined)) {
+        return
+      }
+      return originalConsoleError.apply(console, args)
+    }
+
     if (document.getElementById('facebook-jssdk')) {
       if ((window as any).FB) setSdkReady(true)
       return () => {
         window.removeEventListener('error', suppressSdkErrors, true)
         window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
         window.removeEventListener('error', suppressResourceError, true)
+        console.error = originalConsoleError
       }
     }
 
@@ -171,7 +201,7 @@ export function useMetaSdk() {
     const originalFetch = window.fetch
     window.fetch = function (this: typeof window, ...args: Parameters<typeof fetch>) {
       const url = extractFetchUrl(args[0])
-      if (isFacebookSdkResourceUrl(url)) {
+      if (isTelemetryUrl(url)) {
         try {
           return originalFetch
             .apply(this, args)
@@ -205,7 +235,7 @@ export function useMetaSdk() {
     }
     XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...sendArgs: any[]) {
       const telemetryUrl = (this as any).__fbTelemetryUrl as string
-      if (telemetryUrl && isFacebookSdkResourceUrl(telemetryUrl)) {
+      if (telemetryUrl && isTelemetryUrl(telemetryUrl)) {
         const dispatchSpoofedLoad = (target: XMLHttpRequest) => () => {
           try {
             Object.defineProperty(target, 'readyState', { value: 2, configurable: true })
@@ -243,7 +273,7 @@ export function useMetaSdk() {
       : undefined
     if (originalSendBeacon) {
       ;(navigator as any).sendBeacon = function (url: string, data?: any): boolean {
-        if (isFacebookSdkResourceUrl(url)) {
+        if (isTelemetryUrl(url)) {
           return true
         }
         return originalSendBeacon(url, data)
@@ -255,6 +285,7 @@ export function useMetaSdk() {
       window.removeEventListener('error', suppressSdkErrors, true)
       window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
       window.removeEventListener('error', suppressResourceError, true)
+      console.error = originalConsoleError
       window.fetch = originalFetch
       XMLHttpRequest.prototype.open = originalXhrOpen
       XMLHttpRequest.prototype.send = originalXhrSend
