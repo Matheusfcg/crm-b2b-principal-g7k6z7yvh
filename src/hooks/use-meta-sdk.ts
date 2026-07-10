@@ -12,6 +12,22 @@ const FB_NOISE_PATTERNS = [
   'connect.facebook.net/en_US',
   'connect.facebook.net/pt_BR',
   'graph.facebook.com/oauth',
+  'facebook.com/platform/impression',
+  'www.facebook.com/platform/impression',
+  'facebook.com/tr/',
+  'facebook.net/en_US/fbevents',
+  'fbevents.js',
+]
+
+const FB_NOISE_URL_PATTERNS = [
+  'facebook.com/platform/impression',
+  'www.facebook.com/platform/impression',
+  'facebook.com/tr/',
+  'connect.facebook.net',
+  'fbstatic-a.akamaihd.net',
+  'graph.facebook.com/oauth',
+  'facebook.net/en_US/fbevents',
+  'fbevents.js',
 ]
 
 function isFacebookSdkNoise(message: string): boolean {
@@ -20,16 +36,68 @@ function isFacebookSdkNoise(message: string): boolean {
   return FB_NOISE_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
 }
 
+function isFacebookSdkResourceUrl(url: string): boolean {
+  if (!url) return false
+  const lower = url.toLowerCase()
+  return FB_NOISE_URL_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+}
+
+function extractResourceUrl(event: Event): string | null {
+  const target = event.target as any
+  if (!target) return null
+  if (typeof target.src === 'string' && target.src) return target.src
+  if (typeof target.href === 'string' && target.href) return target.href
+  if (target?.currentSrc && typeof target.currentSrc === 'string') return target.currentSrc
+  return null
+}
+
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
   const [loading, setLoading] = useState(false)
   const initTimedOut = useRef(false)
 
   useEffect(() => {
-    const suppressSdkErrors = (event: ErrorEvent) => {
-      const msg = event?.message || ''
-      const filename = event?.filename || ''
+    const suppressSdkErrors = (event: Event) => {
+      const errorEvent = event as ErrorEvent
+      const msg = errorEvent?.message || ''
+      const filename = errorEvent?.filename || ''
+
       if (isFacebookSdkNoise(msg) || isFacebookSdkNoise(filename)) {
+        event.preventDefault()
+        event.stopPropagation()
+        return true
+      }
+
+      const resourceUrl = extractResourceUrl(event)
+      if (resourceUrl && isFacebookSdkResourceUrl(resourceUrl)) {
+        event.preventDefault()
+        event.stopPropagation()
+        return true
+      }
+
+      return false
+    }
+
+    const suppressUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event?.reason
+      const reasonStr = typeof reason === 'string' ? reason : ''
+      if (isFacebookSdkNoise(reasonStr)) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      if (reason && typeof reason === 'object') {
+        const reasonText = JSON.stringify(reason).toLowerCase()
+        if (isFacebookSdkNoise(reasonText)) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }
+    }
+
+    const suppressResourceError = (event: Event) => {
+      const resourceUrl = extractResourceUrl(event)
+      if (resourceUrl && isFacebookSdkResourceUrl(resourceUrl)) {
         event.preventDefault()
         event.stopPropagation()
         return true
@@ -37,24 +105,18 @@ export function useMetaSdk() {
       return false
     }
 
-    const suppressUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = typeof event?.reason === 'string' ? event.reason : ''
-      if (isFacebookSdkNoise(reason)) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-    }
-
     window.addEventListener('error', suppressSdkErrors, true)
     window.addEventListener('unhandledrejection', suppressUnhandledRejection)
+    window.addEventListener('error', suppressResourceError, true)
 
     if (document.getElementById('facebook-jssdk')) {
       if ((window as any).FB) setSdkReady(true)
       return () => {
         window.removeEventListener('error', suppressSdkErrors, true)
         window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
+        window.removeEventListener('error', suppressResourceError, true)
       }
-    }
+    }    }
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     let resolved = false
@@ -94,10 +156,39 @@ export function useMetaSdk() {
     script.onerror = () => finish(false)
     document.body.appendChild(script)
 
+    const originalFetch = window.fetch
+    window.fetch = function (...args: Parameters<typeof fetch>) {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url || ''
+      if (isFacebookSdkResourceUrl(url)) {
+        return originalFetch
+          .apply(this, args)
+          .catch(() => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      }
+      return originalFetch.apply(this, args)
+    }
+
+    const originalXhrOpen = XMLHttpRequest.prototype.open
+    const originalXhrSend = XMLHttpRequest.prototype.send
+    XMLHttpRequest.prototype.open = function (method: string, url: string, ...rest: any[]) {
+      (this as any).__fbTelemetryUrl = url
+      return originalXhrOpen.call(this, method, url, ...rest)
+    }
+    XMLHttpRequest.prototype.send = function (...sendArgs: any[]) {
+      const telemetryUrl = (this as any).__fbTelemetryUrl as string
+      if (telemetryUrl && isFacebookSdkResourceUrl(telemetryUrl)) {
+        this.addEventListener('error', (e: Event) => {
+          e.stopPropagation()
+          e.preventDefault()
+        })
+      }
+      return originalXhrSend.apply(this, sendArgs)
+    }
+
     return () => {
       if (timeoutHandle) clearTimeout(timeoutHandle)
       window.removeEventListener('error', suppressSdkErrors, true)
       window.removeEventListener('unhandledrejection', suppressUnhandledRejection)
+      window.removeEventListener('error', suppressResourceError, true)
     }
   }, [])
 
