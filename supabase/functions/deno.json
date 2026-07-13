@@ -1,6 +1,7 @@
 {
   "_versions": {
     "whatsapp-uazapi": 154,
-    "whatsapp-meta": 27
+    "whatsapp-meta": 27,
+    "meta-embedded-signup": 1
   }
 }
