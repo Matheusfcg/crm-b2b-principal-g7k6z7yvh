@@ -74,6 +74,7 @@ export function useMetaSdk() {
           config_id: META_CONFIG_ID,
           response_type: 'code',
           override_default_response_type: true,
+          scope: 'whatsapp_business_management,whatsapp_business_messaging',
           extras: {
             feature: 'whatsapp_embedded_signup',
             sessionInfoVersion: 3,
