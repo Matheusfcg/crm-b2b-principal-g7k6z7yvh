@@ -59,25 +59,45 @@ function installErrorSuppression() {
 
   const originalFetch = window.fetch
   window.fetch = function (...args) {
-    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''
+    let url = ''
+    try {
+      url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''
+    } catch {
+      return originalFetch.apply(this, args)
+    }
 
     if (isTelemetryPing(url)) {
-      return originalFetch
-        .apply(this, args)
-        .then((response) => {
-          if (response.status === 0) {
-            return new Response('{}', { status: 200 })
-          }
-          return response
-        })
-        .catch(() => new Response('{}', { status: 200 }))
+      try {
+        return originalFetch
+          .apply(this, args)
+          .then((response) => {
+            if (!response || response.status === 0) {
+              return new Response('{}', { status: 200 })
+            }
+            return response
+          })
+          .catch(() => new Response('{}', { status: 200 }))
+      } catch {
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      }
     }
 
     if (isMetaSdkError(url)) {
-      return originalFetch.apply(this, args).catch(() => new Response('{}', { status: 200 }))
+      try {
+        return originalFetch.apply(this, args).catch(() => new Response('{}', { status: 200 }))
+      } catch {
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      }
     }
 
-    return originalFetch.apply(this, args)
+    try {
+      return originalFetch.apply(this, args)
+    } catch (err) {
+      if (isMetaSdkError(String(err))) {
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      }
+      throw err
+    }
   }
 }
 
