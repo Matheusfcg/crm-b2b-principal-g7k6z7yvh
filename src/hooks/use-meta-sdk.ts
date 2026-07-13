@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
+import { installMetaErrorGuard } from '@/lib/meta-error-guard'
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string
 const META_CONFIG_ID = import.meta.env.VITE_META_CONFIG_ID as string
@@ -13,93 +14,6 @@ declare global {
 
 let globalInitCalled = false
 let globalInitSucceeded = false
-let errorSuppressionInstalled = false
-
-const SDK_ERROR_PATTERNS = [
-  'impression.php',
-  'connect.facebook.net',
-  'fbcdn',
-  'facebook.com',
-  'fbq',
-  'fbevents',
-]
-
-function isMetaSdkError(text: string): boolean {
-  const lower = (text || '').toLowerCase()
-  return SDK_ERROR_PATTERNS.some((p) => lower.includes(p))
-}
-
-function isTelemetryPing(url: string): boolean {
-  return url.toLowerCase().includes('facebook.com/platform/impression.php')
-}
-
-function installErrorSuppression() {
-  if (errorSuppressionInstalled) return
-  errorSuppressionInstalled = true
-
-  const originalOnError = window.onerror
-  window.onerror = function (message, source, lineno, colno, error) {
-    const msg = typeof message === 'string' ? message : ''
-    const src = source || ''
-    if (isMetaSdkError(msg) || isMetaSdkError(src)) return true
-    if (originalOnError) {
-      return originalOnError.call(this, message, source, lineno, colno, error)
-    }
-    return false
-  }
-
-  window.addEventListener('unhandledrejection', (event) => {
-    const reason = event.reason
-    const reasonStr = typeof reason === 'string' ? reason : reason?.message || reason?.stack || ''
-    if (isMetaSdkError(reasonStr)) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  })
-
-  const originalFetch = window.fetch
-  window.fetch = function (...args) {
-    let url = ''
-    try {
-      url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''
-    } catch {
-      return originalFetch.apply(this, args)
-    }
-
-    if (isTelemetryPing(url)) {
-      try {
-        return originalFetch
-          .apply(this, args)
-          .then((response) => {
-            if (!response || response.status === 0) {
-              return new Response('{}', { status: 200 })
-            }
-            return response
-          })
-          .catch(() => new Response('{}', { status: 200 }))
-      } catch {
-        return Promise.resolve(new Response('{}', { status: 200 }))
-      }
-    }
-
-    if (isMetaSdkError(url)) {
-      try {
-        return originalFetch.apply(this, args).catch(() => new Response('{}', { status: 200 }))
-      } catch {
-        return Promise.resolve(new Response('{}', { status: 200 }))
-      }
-    }
-
-    try {
-      return originalFetch.apply(this, args)
-    } catch (err) {
-      if (isMetaSdkError(String(err))) {
-        return Promise.resolve(new Response('{}', { status: 200 }))
-      }
-      throw err
-    }
-  }
-}
 
 function attemptFbInit(): boolean {
   if (!window.FB) return false
@@ -161,7 +75,7 @@ export function useMetaSdk() {
 
   useEffect(() => {
     mountedRef.current = true
-    installErrorSuppression()
+    installMetaErrorGuard()
     return () => {
       mountedRef.current = false
       if (slowTimerRef.current) clearTimeout(slowTimerRef.current)
