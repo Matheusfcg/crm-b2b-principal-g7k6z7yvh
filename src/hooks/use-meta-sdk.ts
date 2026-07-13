@@ -12,14 +12,67 @@ declare global {
 }
 
 let globalInitCalled = false
+let errorSuppressionInstalled = false
+
+const SDK_ERROR_PATTERNS = [
+  'impression.php',
+  'connect.facebook.net',
+  'fbcdn',
+  'facebook.com',
+  'fbq',
+  'fbevents',
+]
+
+function isMetaSdkError(text: string): boolean {
+  const lower = text.toLowerCase()
+  return SDK_ERROR_PATTERNS.some((p) => lower.includes(p))
+}
+
+function installErrorSuppression() {
+  if (errorSuppressionInstalled) return
+  errorSuppressionInstalled = true
+
+  const originalOnError = window.onerror
+  window.onerror = function (message, source, lineno, colno, error) {
+    const msg = typeof message === 'string' ? message : ''
+    const src = source || ''
+    if (isMetaSdkError(msg) || isMetaSdkError(src)) {
+      return true
+    }
+    if (originalOnError) {
+      return originalOnError.call(this, message, source, lineno, colno, error)
+    }
+    return false
+  }
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason
+    const reasonStr = typeof reason === 'string' ? reason : reason?.message || reason?.stack || ''
+    if (isMetaSdkError(reasonStr)) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+  })
+
+  const originalFetch = window.fetch
+  window.fetch = function (...args) {
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''
+    if (isMetaSdkError(url)) {
+      return originalFetch.apply(this, args).catch(() => new Response('{}', { status: 200 }))
+    }
+    return originalFetch.apply(this, args)
+  }
+}
 
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [sdkFailed, setSdkFailed] = useState(false)
   const mountedRef = useRef(true)
 
   useEffect(() => {
     mountedRef.current = true
+    installErrorSuppression()
     return () => {
       mountedRef.current = false
     }
@@ -28,12 +81,16 @@ export function useMetaSdk() {
   useEffect(() => {
     const performInit = () => {
       if (globalInitCalled || !window.FB) return
-      window.FB.init({
-        appId: META_APP_ID,
-        cookie: true,
-        xfbml: true,
-        version: 'v21.0',
-      })
+      try {
+        window.FB.init({
+          appId: META_APP_ID,
+          cookie: true,
+          xfbml: true,
+          version: 'v21.0',
+        })
+      } catch {
+        // FB.init can throw if background tracking fails — non-critical
+      }
       globalInitCalled = true
       if (mountedRef.current) setSdkReady(true)
     }
@@ -57,6 +114,11 @@ export function useMetaSdk() {
       script.defer = true
       script.crossOrigin = 'anonymous'
       script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
+      script.onerror = () => {
+        if (mountedRef.current && !globalInitCalled) {
+          setSdkFailed(true)
+        }
+      }
       document.head.appendChild(script)
     }
 
@@ -69,7 +131,16 @@ export function useMetaSdk() {
       }
     }, 200)
 
-    return () => clearInterval(interval)
+    const timeout = setTimeout(() => {
+      if (!globalInitCalled && mountedRef.current) {
+        clearInterval(interval)
+      }
+    }, 15000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timeout)
+    }
   }, [])
 
   const startEmbeddedSignup = useCallback(
@@ -80,42 +151,52 @@ export function useMetaSdk() {
       }
 
       setLoading(true)
-      window.FB.login(
-        (response: any) => {
-          setLoading(false)
+      try {
+        window.FB.login(
+          (response: any) => {
+            setLoading(false)
 
-          if (response.status === 'unknown' || !response.authResponse) {
-            toast.error('Conexão cancelada pelo usuário.')
-            return
-          }
+            if (!response) {
+              toast.error('Resposta inválida do Facebook. Tente novamente.')
+              return
+            }
 
-          if (response.status !== 'connected') {
-            toast.error('Login cancelado.')
-            return
-          }
+            if (response.status === 'unknown' || !response.authResponse) {
+              toast.error('Conexão cancelada pelo usuário.')
+              return
+            }
 
-          const code = response.authResponse?.code
-          if (!code) {
-            toast.error('Código de autorização não recebido.')
-            return
-          }
+            if (response.status !== 'connected') {
+              toast.error('Login cancelado.')
+              return
+            }
 
-          onCode?.(code)
-        },
-        {
-          config_id: META_CONFIG_ID,
-          response_type: 'code',
-          override_default_response_type: true,
-          scope: 'whatsapp_business_management,whatsapp_business_messaging',
-          extras: {
-            feature: 'whatsapp_embedded_signup',
-            sessionInfoVersion: 3,
+            const code = response.authResponse?.code
+            if (!code) {
+              toast.error('Código de autorização não recebido.')
+              return
+            }
+
+            onCode?.(code)
           },
-        },
-      )
+          {
+            config_id: META_CONFIG_ID,
+            response_type: 'code',
+            override_default_response_type: true,
+            scope: 'whatsapp_business_management,whatsapp_business_messaging',
+            extras: {
+              feature: 'whatsapp_embedded_signup',
+              sessionInfoVersion: 3,
+            },
+          },
+        )
+      } catch {
+        setLoading(false)
+        toast.error('Erro ao iniciar conexão. Tente novamente.')
+      }
     },
     [sdkReady],
   )
 
-  return { sdkReady, loading, startEmbeddedSignup }
+  return { sdkReady, sdkFailed, loading, startEmbeddedSignup }
 }

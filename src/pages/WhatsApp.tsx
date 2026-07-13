@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 
 export default function WhatsApp() {
   const { user } = useAuth()
-  const { sdkReady, loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
+  const { sdkReady, sdkFailed, loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
   const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [account, setAccount] = useState<WhatsappAccount | null>(null)
   const [instance, setInstance] = useState<any>(null)
@@ -144,7 +144,7 @@ export default function WhatsApp() {
       <WhatsAppChat
         instance={instance}
         onAddNumber={handleEmbeddedSignup}
-        addingNumber={saving || sdkLoading || !sdkReady}
+        addingNumber={saving || sdkLoading || (!sdkReady && !sdkFailed)}
         onOpenConfig={() => setWizardOpen(true)}
         onDisconnect={handleDisconnect}
         hasConfig={!!config || !!account}
