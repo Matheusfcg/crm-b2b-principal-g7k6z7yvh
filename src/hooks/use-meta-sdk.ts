@@ -234,6 +234,7 @@ export function useMetaSdk() {
   const startEmbeddedSignup = useCallback(
     async (_userId?: string, onCode?: (code: string) => void) => {
       if (globalInitSucceeded && window.FB) {
+        // SDK already ready; proceed directly to login below.
       } else if (window.FB && !globalInitSucceeded) {
         setLoading(true)
         const ready = await waitForReady(10000)
