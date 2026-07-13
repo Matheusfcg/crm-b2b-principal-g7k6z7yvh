@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string
@@ -11,38 +11,70 @@ declare global {
   }
 }
 
+let globalInitCalled = false
+
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
   const [loading, setLoading] = useState(false)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    if (document.getElementById('facebook-jssdk')) {
-      if (window.FB) setSdkReady(true)
-      return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
     }
+  }, [])
 
-    window.fbAsyncInit = () => {
-      window.FB?.init({
+  useEffect(() => {
+    const performInit = () => {
+      if (globalInitCalled || !window.FB) return
+      window.FB.init({
         appId: META_APP_ID,
         cookie: true,
         xfbml: true,
-        version: 'v23.0',
+        version: 'v21.0',
       })
-      setSdkReady(true)
+      globalInitCalled = true
+      if (mountedRef.current) setSdkReady(true)
     }
 
-    const script = document.createElement('script')
-    script.id = 'facebook-jssdk'
-    script.async = true
-    script.defer = true
-    script.crossOrigin = 'anonymous'
-    script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
-    document.head.appendChild(script)
+    if (globalInitCalled) {
+      setSdkReady(true)
+      return
+    }
+
+    window.fbAsyncInit = performInit
+
+    if (window.FB) {
+      performInit()
+      return
+    }
+
+    if (!document.getElementById('facebook-jssdk')) {
+      const script = document.createElement('script')
+      script.id = 'facebook-jssdk'
+      script.async = true
+      script.defer = true
+      script.crossOrigin = 'anonymous'
+      script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
+      document.head.appendChild(script)
+    }
+
+    const interval = setInterval(() => {
+      if (window.FB && !globalInitCalled) {
+        performInit()
+        clearInterval(interval)
+      } else if (globalInitCalled) {
+        clearInterval(interval)
+      }
+    }, 200)
+
+    return () => clearInterval(interval)
   }, [])
 
   const startEmbeddedSignup = useCallback(
     (_userId?: string, onCode?: (code: string) => void) => {
-      if (!sdkReady || !window.FB) {
+      if (!sdkReady || !window.FB || !globalInitCalled) {
         toast.error('SDK do Facebook não carregou. Recarregue a página.')
         return
       }

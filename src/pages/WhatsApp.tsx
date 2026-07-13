@@ -144,7 +144,7 @@ export default function WhatsApp() {
       <WhatsAppChat
         instance={instance}
         onAddNumber={handleEmbeddedSignup}
-        addingNumber={saving || sdkLoading}
+        addingNumber={saving || sdkLoading || !sdkReady}
         onOpenConfig={() => setWizardOpen(true)}
         onDisconnect={handleDisconnect}
         hasConfig={!!config || !!account}
