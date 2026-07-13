@@ -11,7 +11,13 @@ import { toast } from 'sonner'
 
 export default function WhatsApp() {
   const { user } = useAuth()
-  const { sdkReady, sdkFailed, loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
+  const {
+    sdkReady,
+    sdkFailed,
+    sdkSlowLoading,
+    loading: sdkLoading,
+    startEmbeddedSignup,
+  } = useMetaSdk()
   const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [account, setAccount] = useState<WhatsappAccount | null>(null)
   const [instance, setInstance] = useState<any>(null)
@@ -149,6 +155,7 @@ export default function WhatsApp() {
         onDisconnect={handleDisconnect}
         hasConfig={!!config || !!account}
         sdkReady={sdkReady}
+        sdkSlowLoading={sdkSlowLoading}
       />
       <ConnectionWizard
         open={wizardOpen}

@@ -24,8 +24,12 @@ const SDK_ERROR_PATTERNS = [
 ]
 
 function isMetaSdkError(text: string): boolean {
-  const lower = text.toLowerCase()
+  const lower = (text || '').toLowerCase()
   return SDK_ERROR_PATTERNS.some((p) => lower.includes(p))
+}
+
+function isTelemetryPing(url: string): boolean {
+  return url.toLowerCase().includes('facebook.com/platform/impression.php')
 }
 
 function installErrorSuppression() {
@@ -36,9 +40,7 @@ function installErrorSuppression() {
   window.onerror = function (message, source, lineno, colno, error) {
     const msg = typeof message === 'string' ? message : ''
     const src = source || ''
-    if (isMetaSdkError(msg) || isMetaSdkError(src)) {
-      return true
-    }
+    if (isMetaSdkError(msg) || isMetaSdkError(src)) return true
     if (originalOnError) {
       return originalOnError.call(this, message, source, lineno, colno, error)
     }
@@ -57,24 +59,41 @@ function installErrorSuppression() {
   const originalFetch = window.fetch
   window.fetch = function (...args) {
     const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''
+
+    if (isTelemetryPing(url)) {
+      return originalFetch
+        .apply(this, args)
+        .then((response) => {
+          if (response.status === 0) {
+            return new Response('{}', { status: 200 })
+          }
+          return response
+        })
+        .catch(() => new Response('{}', { status: 200 }))
+    }
+
     if (isMetaSdkError(url)) {
       return originalFetch.apply(this, args).catch(() => new Response('{}', { status: 200 }))
     }
+
     return originalFetch.apply(this, args)
   }
 }
 
 export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(false)
+  const [sdkSlowLoading, setSdkSlowLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sdkFailed, setSdkFailed] = useState(false)
   const mountedRef = useRef(true)
+  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
     installErrorSuppression()
     return () => {
       mountedRef.current = false
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current)
     }
   }, [])
 
@@ -92,13 +111,26 @@ export function useMetaSdk() {
         // FB.init can throw if background tracking fails — non-critical
       }
       globalInitCalled = true
-      if (mountedRef.current) setSdkReady(true)
+      if (mountedRef.current) {
+        setSdkReady(true)
+        setSdkSlowLoading(false)
+        if (slowTimerRef.current) {
+          clearTimeout(slowTimerRef.current)
+          slowTimerRef.current = null
+        }
+      }
     }
 
     if (globalInitCalled) {
       setSdkReady(true)
       return
     }
+
+    slowTimerRef.current = setTimeout(() => {
+      if (mountedRef.current && !globalInitCalled) {
+        setSdkSlowLoading(true)
+      }
+    }, 3000)
 
     window.fbAsyncInit = performInit
 
@@ -117,6 +149,10 @@ export function useMetaSdk() {
       script.onerror = () => {
         if (mountedRef.current && !globalInitCalled) {
           setSdkFailed(true)
+          if (slowTimerRef.current) {
+            clearTimeout(slowTimerRef.current)
+            slowTimerRef.current = null
+          }
         }
       }
       document.head.appendChild(script)
@@ -140,6 +176,7 @@ export function useMetaSdk() {
     return () => {
       clearInterval(interval)
       clearTimeout(timeout)
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current)
     }
   }, [])
 
@@ -198,5 +235,5 @@ export function useMetaSdk() {
     [sdkReady],
   )
 
-  return { sdkReady, sdkFailed, loading, startEmbeddedSignup }
+  return { sdkReady, sdkFailed, sdkSlowLoading, loading, startEmbeddedSignup }
 }
