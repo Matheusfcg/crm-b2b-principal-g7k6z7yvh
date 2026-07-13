@@ -19,10 +19,10 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autorizado.' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      )
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
@@ -34,23 +34,20 @@ Deno.serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } },
     })
 
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser()
+    const { data: { user }, error: userError } = await userClient.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Usuário não autenticado.' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Usuário não autenticado.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      )
     }
 
     const { code } = await req.json()
     if (!code) {
-      return new Response(JSON.stringify({ error: 'Código de autorização não fornecido.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Código de autorização não fornecido.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      )
     }
 
     const tokenRes = await fetch(
@@ -72,10 +69,10 @@ Deno.serve(async (req: Request) => {
     const accessToken = tokenData.access_token
 
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: 'Token de acesso não recebido.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Token de acesso não recebido.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      )
     }
 
     const bizRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/me/businesses`, {
@@ -153,15 +150,17 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', existingAccount.id)
     } else {
-      await serviceClient.from('whatsapp_accounts').insert({
-        user_id: user.id,
-        business_id: businessId,
-        waba_id: wabaId,
-        phone_number_id: phoneNumberId,
-        display_phone_number: displayPhoneNumber,
-        access_token: accessToken,
-        token_type: tokenData.token_type || 'Bearer',
-      })
+      await serviceClient
+        .from('whatsapp_accounts')
+        .insert({
+          user_id: user.id,
+          business_id: businessId,
+          waba_id: wabaId,
+          phone_number_id: phoneNumberId,
+          display_phone_number: displayPhoneNumber,
+          access_token: accessToken,
+          token_type: tokenData.token_type || 'Bearer',
+        })
     }
 
     const { data: existingConfig } = await serviceClient
@@ -180,12 +179,14 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', existingConfig.id)
     } else {
-      await serviceClient.from('configuracoes_whatsapp').insert({
-        user_id: user.id,
-        phone_number_id: phoneNumberId,
-        waba_id: wabaId,
-        access_token: accessToken,
-      })
+      await serviceClient
+        .from('configuracoes_whatsapp')
+        .insert({
+          user_id: user.id,
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          access_token: accessToken,
+        })
     }
 
     const instanceName = `meta_${phoneNumberId}`
@@ -208,14 +209,16 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', existingInstance.id)
     } else {
-      await serviceClient.from('whatsapp_instances').insert({
-        user_id: user.id,
-        instance_name: instanceName,
-        instance_token: 'meta_cloud_api',
-        server_url: 'https://graph.facebook.com',
-        status: 'connected',
-        phone: displayPhoneNumber,
-      })
+      await serviceClient
+        .from('whatsapp_instances')
+        .insert({
+          user_id: user.id,
+          instance_name: instanceName,
+          instance_token: 'meta_cloud_api',
+          server_url: 'https://graph.facebook.com',
+          status: 'connected',
+          phone: displayPhoneNumber,
+        })
     }
 
     return new Response(
@@ -227,9 +230,9 @@ Deno.serve(async (req: Request) => {
       { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
     )
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message || 'Erro interno do servidor.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-    })
+    return new Response(
+      JSON.stringify({ error: err.message || 'Erro interno do servidor.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    )
   }
 })
