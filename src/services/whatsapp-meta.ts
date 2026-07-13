@@ -48,6 +48,17 @@ export const whatsappMetaService = {
     return { data, error }
   },
 
+  async testConnection(phoneNumberId: string, accessToken: string) {
+    const { data, error } = await supabase.functions.invoke('whatsapp-meta', {
+      body: {
+        action: 'test_connection',
+        phone_number_id: phoneNumberId,
+        access_token: accessToken,
+      },
+    })
+    return { data, error }
+  },
+
   async deleteConfig(userId: string) {
     const { error } = await supabase.from('configuracoes_whatsapp').delete().eq('user_id', userId)
     return { error }

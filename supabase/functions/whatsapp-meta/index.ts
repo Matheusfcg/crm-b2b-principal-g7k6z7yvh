@@ -532,6 +532,48 @@ async function handleEmbeddedSignup(body: any, sb: any, ch: Record<string, strin
   }
 }
 
+async function handleTestConnection(body: any, sb: any, ch: Record<string, string>) {
+  const { phone_number_id, access_token } = body
+  if (!phone_number_id || !access_token) {
+    return new Response(
+      JSON.stringify({ valid: false, error: 'Missing phone_number_id or access_token' }),
+      { status: 400, headers: { 'Content-Type': 'application/json', ...ch } },
+    )
+  }
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phone_number_id}`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    })
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      const message = errData?.error?.message || `Meta API error (${res.status})`
+      return new Response(JSON.stringify({ valid: false, error: message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...ch },
+      })
+    }
+
+    const data = await res.json()
+    return new Response(
+      JSON.stringify({
+        valid: true,
+        data: {
+          display_phone_number: data.display_phone_number,
+          verified_name: data.verified_name,
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json', ...ch } },
+    )
+  } catch (err: any) {
+    return new Response(JSON.stringify({ valid: false, error: err.message }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...ch },
+    })
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const ch = getCors(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: ch })
@@ -583,6 +625,10 @@ Deno.serve(async (req: Request) => {
 
   if (body.action === 'setup_embedded_signup') {
     return await handleEmbeddedSignup(body, sb, ch)
+  }
+
+  if (body.action === 'test_connection') {
+    return await handleTestConnection(body, sb, ch)
   }
 
   return new Response(JSON.stringify({ success: true }), {

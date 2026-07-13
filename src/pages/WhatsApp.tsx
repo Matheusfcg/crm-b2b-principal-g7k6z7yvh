@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, MessageCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { useMetaSdk } from '@/hooks/use-meta-sdk'
 import { whatsappMetaService, WhatsappConfig } from '@/services/whatsapp-meta'
 import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
-import { ManualConfigDialog } from '@/components/whatsapp/ManualConfigDialog'
+import { ConnectionWizard } from '@/components/whatsapp/ConnectionWizard'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 export default function WhatsApp() {
   const { user } = useAuth()
-  const { sdkReady, loading: sdkLoading, startEmbeddedSignup } = useMetaSdk()
   const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [instance, setInstance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [configOpen, setConfigOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -43,9 +41,11 @@ export default function WhatsApp() {
     fetchData()
   }, [fetchData])
 
-  const handleAddNumber = () => {
-    startEmbeddedSignup(user?.id, fetchData)
-  }
+  useEffect(() => {
+    if (!loading && !config && !wizardOpen) {
+      setWizardOpen(true)
+    }
+  }, [loading, config, wizardOpen])
 
   const handleSaveConfig = async (data: {
     phone_number_id: string
@@ -63,7 +63,7 @@ export default function WhatsApp() {
       const { data: inst } = await whatsappMetaService.ensureInstance(user.id, data.phone_number_id)
       setConfig(saved)
       setInstance(inst)
-      setConfigOpen(false)
+      setWizardOpen(false)
       toast.success('Configuração salva com sucesso!')
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err.message}`)
@@ -112,25 +112,19 @@ export default function WhatsApp() {
             Gerencie suas conversas e integrações com WhatsApp Business.
           </p>
         </div>
-        {!sdkReady && (
-          <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="hidden sm:inline">Carregando Meta SDK...</span>
-          </div>
-        )}
       </div>
       <WhatsAppChat
         instance={instance}
-        onAddNumber={handleAddNumber}
-        addingNumber={sdkLoading || saving}
-        onOpenConfig={() => setConfigOpen(true)}
+        onAddNumber={() => setWizardOpen(true)}
+        addingNumber={saving}
+        onOpenConfig={() => setWizardOpen(true)}
         onDisconnect={handleDisconnect}
         hasConfig={!!config}
-        sdkReady={sdkReady}
+        sdkReady={true}
       />
-      <ManualConfigDialog
-        open={configOpen}
-        onOpenChange={setConfigOpen}
+      <ConnectionWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
         initialConfig={config}
         onSave={handleSaveConfig}
         saving={saving}
