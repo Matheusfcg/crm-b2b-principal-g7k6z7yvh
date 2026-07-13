@@ -17,6 +17,7 @@ export default function WhatsApp() {
     sdkSlowLoading,
     loading: sdkLoading,
     startEmbeddedSignup,
+    waitForReady,
   } = useMetaSdk()
   const [config, setConfig] = useState<WhatsappConfig | null>(null)
   const [account, setAccount] = useState<WhatsappAccount | null>(null)
@@ -156,6 +157,7 @@ export default function WhatsApp() {
         hasConfig={!!config || !!account}
         sdkReady={sdkReady}
         sdkSlowLoading={sdkSlowLoading}
+        sdkFailed={sdkFailed}
       />
       <ConnectionWizard
         open={wizardOpen}

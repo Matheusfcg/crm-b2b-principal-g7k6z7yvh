@@ -12,6 +12,7 @@ declare global {
 }
 
 let globalInitCalled = false
+let globalInitSucceeded = false
 let errorSuppressionInstalled = false
 
 const SDK_ERROR_PATTERNS = [
@@ -80,13 +81,63 @@ function installErrorSuppression() {
   }
 }
 
+function attemptFbInit(): boolean {
+  if (!window.FB) return false
+  try {
+    window.FB.init({
+      appId: META_APP_ID,
+      cookie: true,
+      xfbml: true,
+      version: 'v21.0',
+    })
+    globalInitSucceeded = true
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function useMetaSdk() {
-  const [sdkReady, setSdkReady] = useState(false)
+  const [sdkReady, setSdkReady] = useState(globalInitSucceeded)
   const [sdkSlowLoading, setSdkSlowLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sdkFailed, setSdkFailed] = useState(false)
   const mountedRef = useRef(true)
   const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const readyResolversRef = useRef<Array<() => void>>([])
+
+  const notifyReady = useCallback(() => {
+    readyResolversRef.current.forEach((resolve) => resolve())
+    readyResolversRef.current = []
+  }, [])
+
+  const performInit = useCallback(() => {
+    if (globalInitSucceeded) {
+      if (mountedRef.current) {
+        setSdkReady(true)
+        setSdkSlowLoading(false)
+        notifyReady()
+      }
+      return
+    }
+    if (!window.FB) return
+
+    const success = attemptFbInit()
+    if (success) {
+      globalInitCalled = true
+      if (mountedRef.current) {
+        setSdkReady(true)
+        setSdkSlowLoading(false)
+        if (slowTimerRef.current) {
+          clearTimeout(slowTimerRef.current)
+          slowTimerRef.current = null
+        }
+        notifyReady()
+      }
+    } else if (!globalInitCalled) {
+      globalInitCalled = true
+    }
+  }, [notifyReady])
 
   useEffect(() => {
     mountedRef.current = true
@@ -98,36 +149,13 @@ export function useMetaSdk() {
   }, [])
 
   useEffect(() => {
-    const performInit = () => {
-      if (globalInitCalled || !window.FB) return
-      try {
-        window.FB.init({
-          appId: META_APP_ID,
-          cookie: true,
-          xfbml: true,
-          version: 'v21.0',
-        })
-      } catch {
-        // FB.init can throw if background tracking fails — non-critical
-      }
-      globalInitCalled = true
-      if (mountedRef.current) {
-        setSdkReady(true)
-        setSdkSlowLoading(false)
-        if (slowTimerRef.current) {
-          clearTimeout(slowTimerRef.current)
-          slowTimerRef.current = null
-        }
-      }
-    }
-
-    if (globalInitCalled) {
+    if (globalInitSucceeded) {
       setSdkReady(true)
       return
     }
 
     slowTimerRef.current = setTimeout(() => {
-      if (mountedRef.current && !globalInitCalled) {
+      if (mountedRef.current && !globalInitSucceeded) {
         setSdkSlowLoading(true)
       }
     }, 3000)
@@ -136,7 +164,13 @@ export function useMetaSdk() {
 
     if (window.FB) {
       performInit()
-      return
+      if (globalInitSucceeded) {
+        if (slowTimerRef.current) {
+          clearTimeout(slowTimerRef.current)
+          slowTimerRef.current = null
+        }
+        return
+      }
     }
 
     if (!document.getElementById('facebook-jssdk')) {
@@ -147,7 +181,7 @@ export function useMetaSdk() {
       script.crossOrigin = 'anonymous'
       script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
       script.onerror = () => {
-        if (mountedRef.current && !globalInitCalled) {
+        if (mountedRef.current && !globalInitSucceeded) {
           setSdkFailed(true)
           if (slowTimerRef.current) {
             clearTimeout(slowTimerRef.current)
@@ -159,17 +193,22 @@ export function useMetaSdk() {
     }
 
     const interval = setInterval(() => {
-      if (window.FB && !globalInitCalled) {
+      if (window.FB && !globalInitSucceeded) {
         performInit()
-        clearInterval(interval)
-      } else if (globalInitCalled) {
+        if (globalInitSucceeded) {
+          clearInterval(interval)
+        }
+      } else if (globalInitSucceeded) {
         clearInterval(interval)
       }
     }, 200)
 
     const timeout = setTimeout(() => {
-      if (!globalInitCalled && mountedRef.current) {
+      if (!globalInitSucceeded && mountedRef.current) {
         clearInterval(interval)
+        if (!window.FB) {
+          setSdkFailed(true)
+        }
       }
     }, 15000)
 
@@ -178,11 +217,32 @@ export function useMetaSdk() {
       clearTimeout(timeout)
       if (slowTimerRef.current) clearTimeout(slowTimerRef.current)
     }
+  }, [performInit])
+
+  const waitForReady = useCallback((timeoutMs: number = 10000): Promise<boolean> => {
+    if (globalInitSucceeded) return Promise.resolve(true)
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), timeoutMs)
+      const wrappedResolve = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      readyResolversRef.current.push(wrappedResolve)
+    })
   }, [])
 
   const startEmbeddedSignup = useCallback(
-    (_userId?: string, onCode?: (code: string) => void) => {
-      if (!sdkReady || !window.FB || !globalInitCalled) {
+    async (_userId?: string, onCode?: (code: string) => void) => {
+      if (globalInitSucceeded && window.FB) {
+      } else if (window.FB && !globalInitSucceeded) {
+        setLoading(true)
+        const ready = await waitForReady(10000)
+        setLoading(false)
+        if (!ready || !globalInitSucceeded || !window.FB) {
+          toast.error('SDK do Facebook não carregou. Recarregue a página.')
+          return
+        }
+      } else {
         toast.error('SDK do Facebook não carregou. Recarregue a página.')
         return
       }
@@ -232,8 +292,8 @@ export function useMetaSdk() {
         toast.error('Erro ao iniciar conexão. Tente novamente.')
       }
     },
-    [sdkReady],
+    [waitForReady],
   )
 
-  return { sdkReady, sdkFailed, sdkSlowLoading, loading, startEmbeddedSignup }
+  return { sdkReady, sdkFailed, sdkSlowLoading, loading, startEmbeddedSignup, waitForReady }
 }
