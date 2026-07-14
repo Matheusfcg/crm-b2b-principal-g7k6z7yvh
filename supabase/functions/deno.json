@@ -1,13 +1,14 @@
 {
   "_versions": {
-    "zapi-test-connection": 4,
-    "zapi-status": 4,
-    "zapi-qrcode": 4,
-    "zapi-connect": 4,
-    "zapi-send-message": 3,
-    "zapi-send-media": 3,
-    "zapi-webhook": 3,
-    "zapi-disconnect": 3,
-    "zapi-get-config": 1
+    "zapi-test-connection": 6,
+    "zapi-status": 6,
+    "zapi-qrcode": 6,
+    "zapi-connect": 6,
+    "zapi-send-message": 5,
+    "zapi-send-media": 5,
+    "zapi-webhook": 5,
+    "zapi-disconnect": 4,
+    "zapi-get-config": 3,
+    "zapi-save-config": 2
   }
 }

@@ -102,33 +102,15 @@ export function ZapiSettings() {
     if (!user) return
     setSaving(true)
     try {
-      if (instance) {
-        const updateData: Record<string, any> = {
+      const { error } = await supabase.functions.invoke('zapi-save-config', {
+        body: {
           instance_id: config.instance_id,
-          provider: 'z-api',
-          updated_at: new Date().toISOString(),
-        }
-        if (config.instance_token) updateData.instance_token = config.instance_token
-        if (config.client_token) updateData.client_token = config.client_token
-        if (config.webhook_token) updateData.webhook_token = config.webhook_token
-        const { error } = await supabase
-          .from('whatsapp_instances')
-          .update(updateData)
-          .eq('id', instance.id)
-        if (error) throw error
-      } else {
-        const insertData: Record<string, any> = {
-          user_id: user.id,
-          provider: 'z-api',
-          instance_id: config.instance_id,
-          status: 'disconnected',
-        }
-        if (config.instance_token) insertData.instance_token = config.instance_token
-        if (config.client_token) insertData.client_token = config.client_token
-        if (config.webhook_token) insertData.webhook_token = config.webhook_token
-        const { error } = await supabase.from('whatsapp_instances').insert(insertData)
-        if (error) throw error
-      }
+          instance_token: config.instance_token || undefined,
+          client_token: config.client_token || undefined,
+          webhook_token: config.webhook_token || undefined,
+        },
+      })
+      if (error) throw error
       toast.success('Configurações salvas com sucesso!')
       setConfig((p) => ({
         ...p,
@@ -215,7 +197,7 @@ export function ZapiSettings() {
   }
 
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm bg-background">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -253,7 +235,11 @@ export function ZapiSettings() {
 
         <div className="space-y-1.5">
           <Label>Provedor</Label>
-          <Input value="z-api" readOnly className="bg-slate-50 font-mono text-sm text-slate-500" />
+          <Input
+            value="z-api"
+            readOnly
+            className="bg-muted font-mono text-sm text-muted-foreground"
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -321,9 +307,9 @@ export function ZapiSettings() {
           </div>
         </div>
 
-        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-          <Label className="text-xs text-slate-500">Webhook URL</Label>
-          <p className="font-mono text-xs text-slate-600 mt-1 break-all">
+        <div className="p-3 bg-muted rounded-lg border border-border">
+          <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+          <p className="font-mono text-xs text-foreground mt-1 break-all">
             https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/zapi-webhook
           </p>
         </div>
@@ -378,9 +364,9 @@ export function ZapiSettings() {
               <div className="flex flex-col items-center gap-4 py-4">
                 {qrCode ? (
                   <div className="flex flex-col items-center gap-3">
-                    <div className="p-3 bg-white border-2 border-slate-100 rounded-xl shadow-sm">
+                    <div className="p-3 bg-white border-2 border-border rounded-xl shadow-sm">
                       <img src={qrCode} alt="QR Code" className="w-48 h-48 object-contain" />
-                    </div>
+                    </div>{' '}
                     <Button
                       variant="outline"
                       onClick={handleGetQr}

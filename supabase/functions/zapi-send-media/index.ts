@@ -9,46 +9,29 @@ Deno.serve(async (req: Request) => {
 
   const body = await req.json()
   const { to, mediaType, mediaUrl, caption, filename, lat, lng, name, contactPhone } = body
-  if (!to) return jsonResponse({ error: 'Parâmetro "to" é obrigatório' }, 400)
+  if (!to || !mediaType) {
+    return jsonResponse({ error: 'Parâmetros "to" e "mediaType" são obrigatórios' }, 400)
+  }
 
-  let endpoint = ''
-  const payload: any = { phone: to }
-  let type = mediaType
+  const endpointMap: Record<string, string> = {
+    image: '/send-image',
+    document: '/send-document',
+    audio: '/send-audio',
+    video: '/send-video',
+    location: '/send-location',
+    contact: '/send-contact',
+  }
 
-  switch (mediaType) {
-    case 'image':
-      endpoint = '/send-image'
-      payload.image = mediaUrl
-      if (caption) payload.caption = caption
-      break
-    case 'document':
-      endpoint = '/send-document'
-      payload.document = mediaUrl
-      if (filename) payload.fileName = filename
-      break
-    case 'audio':
-      endpoint = '/send-audio'
-      payload.audio = mediaUrl
-      break
-    case 'video':
-      endpoint = '/send-video'
-      payload.video = mediaUrl
-      if (caption) payload.caption = caption
-      break
-    case 'location':
-      endpoint = '/send-location'
-      payload.lat = lat
-      payload.lng = lng
-      if (name) payload.title = name
-      type = 'location'
-      break
-    case 'contact':
-      endpoint = '/send-contact'
-      payload.contact = { name: name || '', phone: contactPhone || '' }
-      type = 'contact'
-      break
-    default:
-      return jsonResponse({ error: 'Tipo de mídia não suportado' }, 400)
+  const endpoint = endpointMap[mediaType]
+  if (!endpoint) return jsonResponse({ error: `mediaType inválido: ${mediaType}` }, 400)
+
+  const payloadMap: Record<string, any> = {
+    image: { phone: to, image: mediaUrl, caption: caption || '' },
+    document: { phone: to, document: mediaUrl, fileName: filename || 'document' },
+    audio: { phone: to, audio: mediaUrl },
+    video: { phone: to, video: mediaUrl, caption: caption || '' },
+    location: { phone: to, lat, lng, name: name || '' },
+    contact: { phone: to, contactName: name, contactPhone },
   }
 
   const result = await callZapi(
@@ -57,9 +40,10 @@ Deno.serve(async (req: Request) => {
     instance.client_token,
     endpoint,
     'POST',
-    payload,
+    payloadMap[mediaType],
   )
-  await logApiCall(sb, user.id, instance.instance_id, endpoint, payload, result.data, result.status)
+
+  await logApiCall(sb, user.id, instance.instance_id, endpoint, body, result.data, result.status)
 
   if (result.ok && result.data?.messageId) {
     await sb.from('whatsapp_messages').insert({
@@ -69,9 +53,9 @@ Deno.serve(async (req: Request) => {
       chat_id: to,
       phone: to,
       direction: 'outgoing',
-      type,
-      text: caption || '',
-      media_url: mediaUrl || null,
+      type: mediaType,
+      text: caption || filename || '',
+      media_url: mediaUrl,
       status: 'sent',
     })
   }

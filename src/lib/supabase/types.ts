@@ -422,18 +422,12 @@ export type Database = {
       whatsapp_instances: {
         Row: {
           client_token: string | null
-          connected: boolean | null
           created_at: string | null
           id: string
           instance_id: string | null
-          instance_name: string
           instance_token: string | null
-          last_connection: string | null
-          last_error: string | null
           phone: string | null
           provider: string | null
-          qrcode: string | null
-          server_url: string | null
           status: string | null
           updated_at: string | null
           user_id: string | null
@@ -441,18 +435,12 @@ export type Database = {
         }
         Insert: {
           client_token?: string | null
-          connected?: boolean | null
           created_at?: string | null
           id?: string
           instance_id?: string | null
-          instance_name: string
           instance_token?: string | null
-          last_connection?: string | null
-          last_error?: string | null
           phone?: string | null
           provider?: string | null
-          qrcode?: string | null
-          server_url?: string | null
           status?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -460,18 +448,12 @@ export type Database = {
         }
         Update: {
           client_token?: string | null
-          connected?: boolean | null
           created_at?: string | null
           id?: string
           instance_id?: string | null
-          instance_name?: string
           instance_token?: string | null
-          last_connection?: string | null
-          last_error?: string | null
           phone?: string | null
           provider?: string | null
-          qrcode?: string | null
-          server_url?: string | null
           status?: string | null
           updated_at?: string | null
           user_id?: string | null

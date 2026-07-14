@@ -1,135 +1,90 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, jsonResponse } from '../_shared/zapi.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const sb = createClient(
-    Deno.env.get('SUPABASE_URL') || '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-  )
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  const sb = createClient(supabaseUrl, serviceKey)
 
-  let body: any = {}
+  let payload: any
   try {
-    body = await req.json()
+    payload = await req.json()
   } catch {
-    return jsonResponse({ success: true })
+    return jsonResponse({ error: 'Invalid JSON' }, 400)
   }
 
-  const url = new URL(req.url)
-  const pathSegments = url.pathname.split('/').filter(Boolean)
-  const urlInstanceId = pathSegments.length > 1 ? pathSegments[pathSegments.length - 1] : null
-  const instanceId = body.instance || body.instanceId || body.instance_id || urlInstanceId
-  if (!instanceId) return jsonResponse({ success: true })
+  const instanceId = payload.instance || payload.instanceId || payload.instance_id
+  const event = payload.event || payload.type || ''
+
+  if (!instanceId) {
+    return jsonResponse({ error: 'instance não identificado no payload' }, 400)
+  }
 
   const { data: instance } = await sb
     .from('whatsapp_instances')
-    .select('id, user_id, instance_id, webhook_token')
+    .select('id, user_id, webhook_token, instance_id')
     .eq('instance_id', instanceId)
     .eq('provider', 'z-api')
     .maybeSingle()
 
-  if (!instance) return jsonResponse({ success: true })
+  if (!instance) {
+    return jsonResponse({ error: 'Instância não encontrada' }, 404)
+  }
 
   if (instance.webhook_token) {
-    const token = req.headers.get('webhook-token') || url.searchParams.get('token')
-    if (token && token !== instance.webhook_token)
-      return jsonResponse({ error: 'Invalid token' }, 401)
-  }
-
-  const event = body.event || ''
-  const data = body.data || body
-
-  try {
-    if (event.includes('connection') || (data.connected !== undefined && !data.messageId)) {
-      const connected = data.connected ?? data.state === 'open'
-      const updateData: Record<string, any> = {
-        status: connected ? 'connected' : 'disconnected',
-        updated_at: new Date().toISOString(),
-      }
-      const phoneVal = data.phone || data.number || data.wppNumber
-      if (phoneVal) updateData.phone = phoneVal
-      await sb.from('whatsapp_instances').update(updateData).eq('id', instance.id)
-    } else if (data.messageId || data.phone || event.includes('message')) {
-      await handleMessage(sb, instance, data)
+    const providedToken = req.headers.get('webhook-token') || payload.webhookToken
+    if (providedToken !== instance.webhook_token) {
+      return jsonResponse({ error: 'Token do webhook inválido' }, 403)
     }
-  } catch (err) {
-    console.error('Webhook error:', err)
   }
 
-  return jsonResponse({ success: true })
+  const msg = payload.data || payload
+  const messageId = msg.messageId || msg.id || msg.key?.id
+  const phone = msg.phone || msg.from || msg.chatId || ''
+
+  if (event.includes('message') || event.includes('received') || msg.message) {
+    if (messageId) {
+      const { data: existing } = await sb
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('message_id', messageId)
+        .maybeSingle()
+
+      if (!existing) {
+        const text = msg.text || msg.message || msg.caption || msg.content || ''
+        const type = msg.type || (msg.mediaUrl ? 'media' : 'text')
+        const mediaUrl = msg.mediaUrl || msg.url || msg.fileUrl || null
+
+        await sb.from('whatsapp_messages').insert({
+          user_id: instance.user_id,
+          instance_id: instance.instance_id,
+          message_id: messageId,
+          chat_id: phone,
+          phone,
+          direction: 'incoming',
+          type,
+          text,
+          media_url: mediaUrl,
+          status: 'received',
+        })
+      }
+    }
+  }
+
+  if (event.includes('connection') || event.includes('status')) {
+    const connected = msg.connected ?? msg.status === 'connected'
+    await sb
+      .from('whatsapp_instances')
+      .update({
+        status: connected ? 'connected' : 'disconnected',
+        phone: msg.phone || msg.number || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', instance.id)
+  }
+
+  return jsonResponse({ received: true })
 })
-
-async function handleMessage(sb: any, instance: any, msg: any) {
-  const phone = msg.phone || msg.from || ''
-  const messageId = msg.messageId || msg.id || `msg_${Date.now()}`
-  if (!phone) return
-
-  const typeMap: Record<string, string> = {
-    texto: 'text',
-    text: 'text',
-    imagem: 'image',
-    image: 'image',
-    documento: 'document',
-    document: 'document',
-    áudio: 'audio',
-    audio: 'audio',
-    vídeo: 'video',
-    video: 'video',
-    sticker: 'sticker',
-    localização: 'location',
-    location: 'location',
-    contato: 'contact',
-    contact: 'contact',
-  }
-  const normalizedType = typeMap[(msg.type || 'text').toLowerCase()] || 'text'
-
-  let text = ''
-  let mediaUrl: string | null = null
-
-  if (normalizedType === 'text') text = msg.text || msg.message || ''
-  else if (normalizedType === 'image') {
-    text = msg.caption || ''
-    mediaUrl = msg.url || msg.image?.url || ''
-  } else if (normalizedType === 'document') {
-    text = msg.fileName || ''
-    mediaUrl = msg.url || msg.document?.url || ''
-  } else if (normalizedType === 'audio') {
-    mediaUrl = msg.url || msg.audio?.url || ''
-  } else if (normalizedType === 'video') {
-    text = msg.caption || ''
-    mediaUrl = msg.url || msg.video?.url || ''
-  } else if (normalizedType === 'sticker') {
-    mediaUrl = msg.url || msg.sticker?.url || ''
-  } else if (normalizedType === 'location') {
-    text = JSON.stringify({ lat: msg.lat, lng: msg.lng, name: msg.name })
-  } else if (normalizedType === 'contact') {
-    text = JSON.stringify({ name: msg.name, phone: msg.phone })
-  } else text = msg.text || ''
-
-  const fromMe = msg.fromMe ?? false
-  const status = msg.status || (fromMe ? 'sent' : 'received')
-
-  const { data: existing } = await sb
-    .from('whatsapp_messages')
-    .select('id')
-    .eq('message_id', messageId)
-    .maybeSingle()
-  if (existing) {
-    await sb.from('whatsapp_messages').update({ status }).eq('id', existing.id)
-  } else {
-    await sb.from('whatsapp_messages').insert({
-      user_id: instance.user_id,
-      instance_id: instance.instance_id,
-      message_id: messageId,
-      chat_id: phone,
-      phone,
-      direction: fromMe ? 'outgoing' : 'incoming',
-      type: normalizedType,
-      text,
-      media_url: mediaUrl,
-      status,
-    })
-  }
-}
