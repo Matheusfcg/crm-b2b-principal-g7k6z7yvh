@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MessageCircle } from 'lucide-react'
+import { Loader2, MessageCircle, Settings } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useMetaSdk } from '@/hooks/use-meta-sdk'
 import { whatsappMetaService, WhatsappConfig } from '@/services/whatsapp-meta'
 import { whatsappAccountsService, WhatsappAccount } from '@/services/whatsapp-accounts'
 import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
 import { ConnectionWizard } from '@/components/whatsapp/ConnectionWizard'
+import { ManualConfigSection } from '@/components/whatsapp/ManualConfigSection'
+import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
@@ -24,6 +26,7 @@ export default function WhatsApp() {
   const [instance, setInstance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -147,7 +150,18 @@ export default function WhatsApp() {
             Gerencie suas conversas e integrações com WhatsApp Business.
           </p>
         </div>
+        <Button variant="outline" onClick={() => setManualOpen((v) => !v)} className="gap-2">
+          <Settings className="h-4 w-4" />
+          {manualOpen ? 'Ocultar Configuração' : 'Configuração Manual'}
+        </Button>
       </div>
+
+      {manualOpen && (
+        <div className="mb-6">
+          <ManualConfigSection config={config} onConfigChange={fetchData} />
+        </div>
+      )}
+
       <WhatsAppChat
         instance={instance}
         onAddNumber={handleEmbeddedSignup}
