@@ -1,15 +1,15 @@
 {
   "_versions": {
-    "zapi-test-connection": 6,
+    "zapi-test-connection": 7,
     "zapi-status": 7,
     "zapi-qrcode": 7,
     "zapi-connect": 7,
     "zapi-send-message": 6,
     "zapi-send-media": 6,
-    "zapi-webhook": 6,
+    "zapi-webhook": 7,
     "zapi-disconnect": 4,
     "zapi-get-config": 3,
-    "zapi-save-config": 2,
+    "zapi-save-config": 3,
     "connect-whatsapp-instance": 1,
     "send-whatsapp-message": 1,
     "receive-whatsapp-webhook": 1,

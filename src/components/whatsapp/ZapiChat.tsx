@@ -147,7 +147,7 @@ export function ZapiChat() {
   }
 
   return (
-    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 bg-background rounded-lg shadow-sm border border-border overflow-hidden h-[calc(100vh-380px)] min-h-[400px]">
+    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 bg-background rounded-lg shadow-sm border border-border overflow-hidden min-h-[600px]">
       <div className="border-r border-border md:col-span-1 h-full overflow-hidden">
         <ScrollArea className="h-full">
           <div className="divide-y divide-border/50">

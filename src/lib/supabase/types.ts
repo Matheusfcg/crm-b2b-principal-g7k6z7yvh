@@ -249,6 +249,7 @@ export type Database = {
           phone: string | null
           provider: string | null
           status: string | null
+          token: string | null
           updated_at: string | null
           user_id: string | null
           webhook_token: string | null
@@ -262,6 +263,7 @@ export type Database = {
           phone?: string | null
           provider?: string | null
           status?: string | null
+          token?: string | null
           updated_at?: string | null
           user_id?: string | null
           webhook_token?: string | null
@@ -275,6 +277,7 @@ export type Database = {
           phone?: string | null
           provider?: string | null
           status?: string | null
+          token?: string | null
           updated_at?: string | null
           user_id?: string | null
           webhook_token?: string | null
@@ -327,6 +330,7 @@ export type Database = {
           media_url: string | null
           message_id: string | null
           phone: string | null
+          raw_payload: Json | null
           status: string | null
           text: string | null
           type: string | null
@@ -341,6 +345,7 @@ export type Database = {
           media_url?: string | null
           message_id?: string | null
           phone?: string | null
+          raw_payload?: Json | null
           status?: string | null
           text?: string | null
           type?: string | null
@@ -355,6 +360,7 @@ export type Database = {
           media_url?: string | null
           message_id?: string | null
           phone?: string | null
+          raw_payload?: Json | null
           status?: string | null
           text?: string | null
           type?: string | null
