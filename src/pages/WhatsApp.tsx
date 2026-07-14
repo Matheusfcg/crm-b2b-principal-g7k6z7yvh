@@ -161,13 +161,6 @@ export default function WhatsApp() {
 
       <div className="flex gap-2 mb-4 px-1">
         <Button
-          variant={activeProvider === 'meta' ? 'default' : 'outline'}
-          onClick={() => setActiveProvider('meta')}
-          className={activeProvider === 'meta' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-        >
-          Meta Cloud API
-        </Button>
-        <Button
           variant={activeProvider === 'zapi' ? 'default' : 'outline'}
           onClick={() => setActiveProvider('zapi')}
           className={activeProvider === 'zapi' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
