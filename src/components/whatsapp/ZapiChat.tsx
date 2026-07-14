@@ -5,9 +5,10 @@ import { ZApiProvider } from '@/providers/ZApiProvider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Send, Loader2, MessageCircle, Clock, AlertCircle } from 'lucide-react'
+import { MessageBubble } from '@/components/whatsapp/MessageBubble'
+import { Send, Loader2, MessageCircle, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, isToday, isYesterday } from 'date-fns'
 import { toast } from 'sonner'
 
 interface ZapiMessage {
@@ -25,6 +26,29 @@ interface ZapiMessage {
   created_at: string | null
 }
 
+function formatTimestamp(date: string | null): string {
+  if (!date) return ''
+  const d = new Date(date)
+  if (isToday(d)) return format(d, 'HH:mm')
+  if (isYesterday(d)) return 'Ontem'
+  return format(d, 'dd/MM/yyyy')
+}
+
+function getAvatarColor(phone: string): string {
+  const colors = [
+    'bg-emerald-600',
+    'bg-blue-600',
+    'bg-purple-600',
+    'bg-pink-600',
+    'bg-orange-600',
+    'bg-teal-600',
+    'bg-indigo-600',
+    'bg-red-600',
+  ]
+  const hash = phone.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  return colors[hash % colors.length]
+}
+
 export function ZapiChat() {
   const { user } = useAuth()
   const [messages, setMessages] = useState<ZapiMessage[]>([])
@@ -32,6 +56,7 @@ export function ZapiChat() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchMessages = useCallback(async () => {
@@ -90,6 +115,7 @@ export function ZapiChat() {
 
   const conversationList = Object.entries(conversations)
     .map(([phone, msgs]) => ({ phone, lastMessage: msgs[msgs.length - 1] }))
+    .filter(({ phone }) => phone.toLowerCase().includes(search.toLowerCase()))
     .sort(
       (a, b) =>
         new Date(b.lastMessage.created_at || 0).getTime() -
@@ -128,11 +154,11 @@ export function ZapiChat() {
       const result = await provider.sendText(selectedPhone, text)
       if (!result.success) {
         setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)))
-        toast.error(`Erro ao enviar: ${result.error}`)
+        toast.error(`Erro ao enviar mensagem: ${result.error || 'Erro desconhecido'}`)
       }
     } catch (err: any) {
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)))
-      toast.error(`Erro ao enviar: ${err.message}`)
+      toast.error(`Erro ao enviar mensagem: ${err?.message || 'Erro de conexão'}`)
     } finally {
       setSending(false)
     }
@@ -147,10 +173,24 @@ export function ZapiChat() {
   }
 
   return (
-    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 bg-background rounded-lg shadow-sm border border-border overflow-hidden min-h-[600px]">
-      <div className="border-r border-border md:col-span-1 h-full overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="divide-y divide-border/50">
+    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 rounded-lg shadow-sm overflow-hidden min-h-[600px] border border-border">
+      <div className="border-r border-border md:col-span-1 flex flex-col bg-white dark:bg-[#111b21]">
+        <div className="px-4 py-3 bg-[#075E54] dark:bg-[#202c33] flex items-center justify-between">
+          <h2 className="text-white font-semibold text-sm">Conversas</h2>
+        </div>
+        <div className="px-3 py-2 bg-[#f0f2f5] dark:bg-[#111b21]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar conversa"
+              className="pl-9 h-9 bg-white dark:bg-[#202c33] border-0 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="divide-y divide-gray-100 dark:divide-[#202c33]">
             {conversationList.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground text-sm">
                 Nenhuma conversa ainda. Conecte sua instância Z-API e envie/receba mensagens.
@@ -161,83 +201,77 @@ export function ZapiChat() {
                   key={phone}
                   onClick={() => setSelectedPhone(phone)}
                   className={cn(
-                    'w-full flex flex-col gap-1 p-4 text-left hover:bg-muted/50 transition-colors',
-                    selectedPhone === phone && 'bg-muted',
+                    'w-full flex items-center gap-3 p-3 text-left hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors',
+                    selectedPhone === phone && 'bg-[#f0f2f5] dark:bg-[#202c33]',
                   )}
                 >
-                  <span className="font-semibold text-foreground truncate">{phone}</span>
-                  <span className="text-sm text-muted-foreground truncate">
-                    {lastMessage.direction === 'outgoing' || lastMessage.direction === 'outbound'
-                      ? 'Você: '
-                      : ''}
-                    {lastMessage.text || lastMessage.type}
-                  </span>
+                  <div
+                    className={cn(
+                      'h-12 w-12 rounded-full flex items-center justify-center text-white font-medium text-sm shrink-0',
+                      getAvatarColor(phone),
+                    )}
+                  >
+                    {phone.substring(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground truncate text-sm">
+                        {phone}
+                      </span>
+                      <span className="text-xs text-gray-400 shrink-0 ml-2">
+                        {formatTimestamp(lastMessage.created_at)}
+                      </span>
+                    </div>
+                    <span className="text-sm text-muted-foreground truncate block">
+                      {lastMessage.direction === 'outgoing' || lastMessage.direction === 'outbound'
+                        ? 'Você: '
+                        : ''}
+                      {lastMessage.text || lastMessage.type || ''}
+                    </span>
+                  </div>
                 </button>
               ))
             )}
           </div>
         </ScrollArea>
       </div>
-      <div className="md:col-span-2 flex flex-col h-full bg-muted/20">
+
+      <div className="md:col-span-2 flex flex-col">
         {selectedPhone ? (
           <>
-            <div className="px-4 py-3 bg-background border-b border-border flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 font-medium">
+            <div className="px-4 py-2.5 bg-[#075E54] dark:bg-[#202c33] flex items-center gap-3 border-b border-[#054c44]">
+              <div
+                className={cn(
+                  'h-10 w-10 rounded-full flex items-center justify-center text-white font-medium text-sm',
+                  getAvatarColor(selectedPhone),
+                )}
+              >
                 {selectedPhone.substring(0, 2)}
               </div>
-              <span className="font-semibold text-foreground">{selectedPhone}</span>
+              <div className="flex-1">
+                <span className="font-semibold text-white text-sm block">{selectedPhone}</span>
+                <span className="text-xs text-[#8ed7c8] dark:text-[#8696a0]">online</span>
+              </div>
             </div>
-            <ScrollArea className="flex-1 px-4 py-4">
-              <div className="flex flex-col space-y-2 max-w-4xl mx-auto">
+
+            <ScrollArea className="flex-1 whatsapp-chat-bg">
+              <div className="flex flex-col space-y-1 p-4 max-w-4xl mx-auto min-h-full">
                 {selectedMessages.map((msg) => (
-                  <div
+                  <MessageBubble
                     key={msg.id}
-                    className={cn(
-                      'max-w-[75%] rounded-xl px-4 py-2 shadow-sm text-sm break-words',
-                      msg.direction === 'outgoing' || msg.direction === 'outbound'
-                        ? 'bg-[#D9FDD3] dark:bg-[#005c4b] text-slate-900 dark:text-white self-end rounded-tr-none'
-                        : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white self-start rounded-tl-none',
-                    )}
-                  >
-                    {msg.media_url && msg.type === 'image' && (
-                      <img
-                        src={msg.media_url}
-                        alt=""
-                        className="rounded-lg max-w-full max-h-60 mb-1"
-                      />
-                    )}
-                    {msg.media_url && msg.type === 'audio' && (
-                      <audio controls src={msg.media_url} className="w-full max-w-[240px] mb-1" />
-                    )}
-                    {msg.media_url && msg.type === 'video' && (
-                      <video
-                        controls
-                        src={msg.media_url}
-                        className="rounded-lg max-w-full max-h-60 mb-1"
-                      />
-                    )}
-                    {msg.media_url && msg.type === 'document' && (
-                      <a
-                        href={msg.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        📄 {msg.text || 'Documento'}
-                      </a>
-                    )}
-                    {msg.text && msg.type !== 'document' && <span>{msg.text}</span>}
-                    <span className="text-[10px] text-slate-500 block mt-1 flex items-center gap-1">
-                      {msg.created_at ? format(new Date(msg.created_at), 'HH:mm') : ''}
-                      {msg.status === 'sending' && <Clock className="h-3 w-3 animate-spin" />}
-                      {msg.status === 'failed' && <AlertCircle className="h-3 w-3 text-red-500" />}
-                    </span>
-                  </div>
+                    direction={msg.direction}
+                    type={msg.type}
+                    text={msg.text}
+                    mediaUrl={msg.media_url}
+                    status={msg.status}
+                    createdAt={msg.created_at}
+                  />
                 ))}
                 <div ref={bottomRef} className="h-1" />
               </div>
             </ScrollArea>
-            <div className="p-4 bg-muted/50 border-t border-border flex items-center gap-2">
+
+            <div className="p-3 bg-[#f0f2f5] dark:bg-[#202c33] flex items-center gap-2">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -245,13 +279,13 @@ export function ZapiChat() {
                   e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())
                 }
                 placeholder="Digite uma mensagem"
-                className="flex-1 bg-background rounded-full h-11 px-5"
+                className="flex-1 bg-white dark:bg-[#2a3942] rounded-full h-11 px-5 border-0 text-sm text-foreground dark:text-white placeholder:text-gray-400"
               />
               <Button
                 size="icon"
                 onClick={handleSend}
                 disabled={!input.trim() || sending}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-full h-11 w-11"
+                className="bg-[#075E54] hover:bg-[#054c44] text-white rounded-full h-11 w-11 shrink-0"
               >
                 {sending ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -262,9 +296,14 @@ export function ZapiChat() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-            <MessageCircle className="h-12 w-12 mb-3 opacity-20" />
-            <p className="text-sm">Selecione uma conversa para começar</p>
+          <div className="flex-1 flex flex-col items-center justify-center whatsapp-chat-bg text-center p-8">
+            <MessageCircle className="h-16 w-16 mb-4 text-[#075E54] opacity-30" />
+            <p className="text-[#54656f] dark:text-[#8696a0] text-lg font-light">
+              Selecione uma conversa para começar
+            </p>
+            <p className="text-[#54656f] dark:text-[#8696a0] text-sm mt-1">
+              ou inicie uma nova conversa
+            </p>
           </div>
         )}
       </div>

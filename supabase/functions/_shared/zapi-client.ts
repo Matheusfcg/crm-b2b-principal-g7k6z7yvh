@@ -80,7 +80,7 @@ export async function zapiFetch(
     ...(init.headers as Record<string, string> | undefined),
   }
 
-  if (instance.client_token && instance.client_token.trim() !== '') {
+  if (instance.client_token) {
     headers['Client-Token'] = instance.client_token
   }
 

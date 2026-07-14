@@ -3,10 +3,38 @@ import type { WhatsappProvider, SendMessageResult } from './WhatsappProvider'
 
 export class ZApiProvider implements WhatsappProvider {
   private async invoke(fn: string, body: any): Promise<SendMessageResult> {
-    const { data, error } = await supabase.functions.invoke(fn, { body })
-    if (error) return { success: false, error: error.message }
-    if (data?.error) return { success: false, error: data.error }
-    return { success: data?.success ?? false, messageId: data?.data?.messageId }
+    try {
+      const { data, error } = await supabase.functions.invoke(fn, { body })
+
+      if (error) {
+        let errorMsg = 'Erro desconhecido ao processar requisição'
+        if (
+          error.message &&
+          error.message !== 'Function returned an error' &&
+          error.message !== 'Invalid response from Function'
+        ) {
+          errorMsg = error.message
+        }
+        if (data?.error) {
+          errorMsg = typeof data.error === 'string' ? data.error : String(data.error)
+        }
+        return { success: false, error: errorMsg }
+      }
+
+      if (data?.error) {
+        const errMsg =
+          typeof data.error === 'string' ? data.error : data.error?.message || String(data.error)
+        return { success: false, error: errMsg }
+      }
+
+      if (data?.success === false) {
+        return { success: false, error: data?.message || data?.error || 'Falha ao enviar mensagem' }
+      }
+
+      return { success: data?.success ?? !!data?.data, messageId: data?.data?.messageId }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Erro de conexão com o servidor' }
+    }
   }
 
   async sendText(to: string, text: string): Promise<SendMessageResult> {

@@ -112,3 +112,82 @@
     animation: slide-in-right 0.3s ease-out;
   }
 }
+
+@layer components {
+  .whatsapp-chat-bg {
+    background-color: #efeae2;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cg fill='rgba(0,0,0,0.025)'%3E%3Ccircle cx='15' cy='15' r='4'/%3E%3Cpath d='M40 10l5 8h-10z'/%3E%3Crect x='65' y='10' width='10' height='10' rx='2'/%3E%3Ccircle cx='85' cy='15' r='3'/%3E%3Cpath d='M15 40q5-5 10 0t10 0'/%3E%3Crect x='40' y='38' width='8' height='8' rx='2'/%3E%3Ccircle cx='65' cy='40' r='4'/%3E%3Ccircle cx='15' cy='65' r='3'/%3E%3Cpath d='M40 60l5 8h-10z'/%3E%3Ccircle cx='65' cy='65' r='5'/%3E%3Crect x='85' y='62' width='8' height='8' rx='2'/%3E%3Cpath d='M15 85q5 5 10 0'/%3E%3Ccircle cx='40' cy='85' r='4'/%3E%3Cpath d='M65 85l5 8h-10z'/%3E%3Ccircle cx='85' cy='85' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .dark .whatsapp-chat-bg {
+    background-color: #0b141a;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cg fill='rgba(255,255,255,0.018)'%3E%3Ccircle cx='15' cy='15' r='4'/%3E%3Cpath d='M40 10l5 8h-10z'/%3E%3Crect x='65' y='10' width='10' height='10' rx='2'/%3E%3Ccircle cx='85' cy='15' r='3'/%3E%3Cpath d='M15 40q5-5 10 0t10 0'/%3E%3Crect x='40' y='38' width='8' height='8' rx='2'/%3E%3Ccircle cx='65' cy='40' r='4'/%3E%3Ccircle cx='15' cy='65' r='3'/%3E%3Cpath d='M40 60l5 8h-10z'/%3E%3Ccircle cx='65' cy='65' r='5'/%3E%3Crect x='85' y='62' width='8' height='8' rx='2'/%3E%3Cpath d='M15 85q5 5 10 0'/%3E%3Ccircle cx='40' cy='85' r='4'/%3E%3Cpath d='M65 85l5 8h-10z'/%3E%3Ccircle cx='85' cy='85' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .whatsapp-bubble-sent {
+    background-color: #d9fdd3;
+    color: #111b21;
+    border-radius: 0 8px 8px 8px;
+  }
+
+  .dark .whatsapp-bubble-sent {
+    background-color: #005c4b;
+    color: #fff;
+  }
+
+  .whatsapp-bubble-sent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -7px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid #d9fdd3;
+    border-right: 8px solid transparent;
+  }
+
+  .dark .whatsapp-bubble-sent::before {
+    border-top-color: #005c4b;
+  }
+
+  .whatsapp-bubble-received {
+    background-color: #fff;
+    color: #111b21;
+    border-radius: 8px 8px 8px 0;
+  }
+
+  .dark .whatsapp-bubble-received {
+    background-color: #202c33;
+    color: #fff;
+  }
+
+  .whatsapp-bubble-received::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -7px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid #fff;
+    border-left: 8px solid transparent;
+  }
+
+  .dark .whatsapp-bubble-received::before {
+    border-top-color: #202c33;
+  }
+
+  .whatsapp-msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    color: #667781;
+    justify-content: flex-end;
+    margin-top: 2px;
+    user-select: none;
+  }
+
+  .dark .whatsapp-msg-meta {
+    color: #8696a0;
+  }
+}
