@@ -7,6 +7,8 @@ import { whatsappAccountsService, WhatsappAccount } from '@/services/whatsapp-ac
 import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
 import { ConnectionWizard } from '@/components/whatsapp/ConnectionWizard'
 import { ManualConfigSection } from '@/components/whatsapp/ManualConfigSection'
+import { ZapiSettings } from '@/components/whatsapp/ZapiSettings'
+import { ZapiChat } from '@/components/whatsapp/ZapiChat'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -28,6 +30,7 @@ export default function WhatsApp() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [activeProvider, setActiveProvider] = useState<'meta' | 'zapi'>('meta')
 
   const fetchData = useCallback(async () => {
     if (!user) return
@@ -156,30 +159,56 @@ export default function WhatsApp() {
         </Button>
       </div>
 
-      {manualOpen && (
-        <div className="mb-6">
-          <ManualConfigSection config={config} onConfigChange={fetchData} />
-        </div>
-      )}
+      <div className="flex gap-2 mb-4 px-1">
+        <Button
+          variant={activeProvider === 'meta' ? 'default' : 'outline'}
+          onClick={() => setActiveProvider('meta')}
+          className={activeProvider === 'meta' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+        >
+          Meta Cloud API
+        </Button>
+        <Button
+          variant={activeProvider === 'zapi' ? 'default' : 'outline'}
+          onClick={() => setActiveProvider('zapi')}
+          className={activeProvider === 'zapi' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+        >
+          Z-API
+        </Button>
+      </div>
 
-      <WhatsAppChat
-        instance={instance}
-        onAddNumber={handleEmbeddedSignup}
-        addingNumber={saving || sdkLoading || (!sdkReady && !sdkFailed)}
-        onOpenConfig={() => setWizardOpen(true)}
-        onDisconnect={handleDisconnect}
-        hasConfig={!!config || !!account}
-        sdkReady={sdkReady}
-        sdkSlowLoading={sdkSlowLoading}
-        sdkFailed={sdkFailed}
-      />
-      <ConnectionWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        initialConfig={config}
-        onSave={handleSaveConfig}
-        saving={saving}
-      />
+      {activeProvider === 'zapi' ? (
+        <div className="flex-1 flex flex-col gap-4">
+          <ZapiSettings />
+          <ZapiChat />
+        </div>
+      ) : (
+        <>
+          {manualOpen && (
+            <div className="mb-6">
+              <ManualConfigSection config={config} onConfigChange={fetchData} />
+            </div>
+          )}
+
+          <WhatsAppChat
+            instance={instance}
+            onAddNumber={handleEmbeddedSignup}
+            addingNumber={saving || sdkLoading || (!sdkReady && !sdkFailed)}
+            onOpenConfig={() => setWizardOpen(true)}
+            onDisconnect={handleDisconnect}
+            hasConfig={!!config || !!account}
+            sdkReady={sdkReady}
+            sdkSlowLoading={sdkSlowLoading}
+            sdkFailed={sdkFailed}
+          />
+          <ConnectionWizard
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+            initialConfig={config}
+            onSave={handleSaveConfig}
+            saving={saving}
+          />
+        </>
+      )}
     </div>
   )
 }
