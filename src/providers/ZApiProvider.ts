@@ -10,7 +10,7 @@ export class ZApiProvider implements WhatsappProvider {
   }
 
   async sendText(to: string, text: string): Promise<SendMessageResult> {
-    return this.invoke('zapi-send-message', { to, text })
+    return this.invoke('send-whatsapp-message', { phone: to, message: text })
   }
 
   async sendImage(to: string, imageUrl: string, caption?: string): Promise<SendMessageResult> {

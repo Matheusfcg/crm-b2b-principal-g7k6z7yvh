@@ -9,100 +9,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      configuracoes_whatsapp: {
-        Row: {
-          access_token: string
-          created_at: string | null
-          id: string
-          phone_number_id: string
-          user_id: string
-          waba_id: string
-        }
-        Insert: {
-          access_token: string
-          created_at?: string | null
-          id?: string
-          phone_number_id: string
-          user_id: string
-          waba_id: string
-        }
-        Update: {
-          access_token?: string
-          created_at?: string | null
-          id?: string
-          phone_number_id?: string
-          user_id?: string
-          waba_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'configuracoes_whatsapp_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      contacts: {
-        Row: {
-          id: string
-          instance_id: string
-          profile_picture: string | null
-          push_name: string | null
-          remote_jid: string
-        }
-        Insert: {
-          id?: string
-          instance_id: string
-          profile_picture?: string | null
-          push_name?: string | null
-          remote_jid: string
-        }
-        Update: {
-          id?: string
-          instance_id?: string
-          profile_picture?: string | null
-          push_name?: string | null
-          remote_jid?: string
-        }
-        Relationships: []
-      }
-      conversations: {
-        Row: {
-          contact_id: string
-          id: string
-          instance_id: string
-          last_message: string | null
-          unread_count: number
-          updated_at: string | null
-        }
-        Insert: {
-          contact_id: string
-          id?: string
-          instance_id: string
-          last_message?: string | null
-          unread_count?: number
-          updated_at?: string | null
-        }
-        Update: {
-          contact_id?: string
-          id?: string
-          instance_id?: string
-          last_message?: string | null
-          unread_count?: number
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'conversations_contact_id_fkey'
-            columns: ['contact_id']
-            isOneToOne: false
-            referencedRelation: 'contacts'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       interactions: {
         Row: {
           data: string
@@ -194,56 +100,6 @@ export type Database = {
             columns: ['created_by']
             isOneToOne: false
             referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      messages: {
-        Row: {
-          content: string | null
-          conversation_id: string
-          from_me: boolean | null
-          id: string
-          media_filename: string | null
-          media_mimetype: string | null
-          media_url: string | null
-          message_id: string
-          status: string
-          timestamp: string | null
-          type: string | null
-        }
-        Insert: {
-          content?: string | null
-          conversation_id: string
-          from_me?: boolean | null
-          id?: string
-          media_filename?: string | null
-          media_mimetype?: string | null
-          media_url?: string | null
-          message_id: string
-          status?: string
-          timestamp?: string | null
-          type?: string | null
-        }
-        Update: {
-          content?: string | null
-          conversation_id?: string
-          from_me?: boolean | null
-          id?: string
-          media_filename?: string | null
-          media_mimetype?: string | null
-          media_url?: string | null
-          message_id?: string
-          status?: string
-          timestamp?: string | null
-          type?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'messages_conversation_id_fkey'
-            columns: ['conversation_id']
-            isOneToOne: false
-            referencedRelation: 'conversations'
             referencedColumns: ['id']
           },
         ]
@@ -380,42 +236,6 @@ export type Database = {
           id?: string
           name?: string
           role?: string
-        }
-        Relationships: []
-      }
-      whatsapp_accounts: {
-        Row: {
-          access_token: string
-          business_id: string
-          created_at: string | null
-          display_phone_number: string | null
-          id: string
-          phone_number_id: string
-          token_type: string | null
-          user_id: string
-          waba_id: string
-        }
-        Insert: {
-          access_token: string
-          business_id: string
-          created_at?: string | null
-          display_phone_number?: string | null
-          id?: string
-          phone_number_id: string
-          token_type?: string | null
-          user_id: string
-          waba_id: string
-        }
-        Update: {
-          access_token?: string
-          business_id?: string
-          created_at?: string | null
-          display_phone_number?: string | null
-          id?: string
-          phone_number_id?: string
-          token_type?: string | null
-          user_id?: string
-          waba_id?: string
         }
         Relationships: []
       }

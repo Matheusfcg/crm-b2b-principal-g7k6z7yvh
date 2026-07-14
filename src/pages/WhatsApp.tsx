@@ -69,11 +69,11 @@ export default function WhatsApp() {
   const handleGetQr = async () => {
     setActionLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('zapi-qrcode')
+      const { data, error } = await supabase.functions.invoke('connect-whatsapp-instance')
       if (error) throw error
-      const qr = data?.qrCode || data?.data?.value || data?.data?.qrcode
+      const qr = data?.qrcode || data?.qrCode
       setQrCode(qr)
-      if (!qr) toast.error('QR Code não disponível. Verifique se a instância está conectada.')
+      if (!qr) toast.error('QR Code não disponível. Verifique a configuração da instância.')
     } catch (err: any) {
       toast.error(`Erro ao obter QR Code: ${err.message}`)
     } finally {
@@ -84,9 +84,11 @@ export default function WhatsApp() {
   const handleConnect = async () => {
     setActionLoading(true)
     try {
-      await supabase.functions.invoke('zapi-connect')
-      toast.success('Conexão iniciada.')
-      await handleGetQr()
+      const { data, error } = await supabase.functions.invoke('connect-whatsapp-instance')
+      if (error) throw error
+      const qr = data?.qrcode || data?.qrCode
+      setQrCode(qr)
+      toast.success('QR Code gerado. Escaneie para conectar.')
       await fetchInstance()
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`)
@@ -94,6 +96,24 @@ export default function WhatsApp() {
       setActionLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!user || !qrCode || instance?.status === 'connected') return
+    const interval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('check-whatsapp-status')
+        if (error) return
+        if (data?.status === 'connected') {
+          setQrCode(null)
+          await fetchInstance()
+          toast.success('WhatsApp conectado com sucesso!')
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [user, qrCode, instance?.status, fetchInstance])
 
   const copyToClipboard = (text: string) => {
     if (!text) return

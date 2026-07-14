@@ -1,14 +1,18 @@
 {
   "_versions": {
     "zapi-test-connection": 6,
-    "zapi-status": 6,
-    "zapi-qrcode": 6,
-    "zapi-connect": 6,
-    "zapi-send-message": 5,
-    "zapi-send-media": 5,
-    "zapi-webhook": 5,
+    "zapi-status": 7,
+    "zapi-qrcode": 7,
+    "zapi-connect": 7,
+    "zapi-send-message": 6,
+    "zapi-send-media": 6,
+    "zapi-webhook": 6,
     "zapi-disconnect": 4,
     "zapi-get-config": 3,
-    "zapi-save-config": 2
+    "zapi-save-config": 2,
+    "connect-whatsapp-instance": 1,
+    "send-whatsapp-message": 1,
+    "receive-whatsapp-webhook": 1,
+    "check-whatsapp-status": 1
   }
 }

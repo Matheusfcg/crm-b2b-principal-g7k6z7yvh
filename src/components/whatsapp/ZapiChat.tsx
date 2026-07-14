@@ -62,7 +62,7 @@ export function ZapiChat() {
           setMessages((prev) => {
             if (prev.find((m) => m.message_id === payload.new.message_id)) return prev
             const newMsg = payload.new as ZapiMessage
-            if (newMsg.direction === 'outgoing') {
+            if (newMsg.direction === 'outgoing' || newMsg.direction === 'outbound') {
               const withoutTemp = prev.filter(
                 (m) => !(m.id.startsWith('temp_') && m.phone === newMsg.phone),
               )
@@ -167,7 +167,9 @@ export function ZapiChat() {
                 >
                   <span className="font-semibold text-foreground truncate">{phone}</span>
                   <span className="text-sm text-muted-foreground truncate">
-                    {lastMessage.direction === 'outgoing' ? 'Você: ' : ''}
+                    {lastMessage.direction === 'outgoing' || lastMessage.direction === 'outbound'
+                      ? 'Você: '
+                      : ''}
                     {lastMessage.text || lastMessage.type}
                   </span>
                 </button>
@@ -192,7 +194,7 @@ export function ZapiChat() {
                     key={msg.id}
                     className={cn(
                       'max-w-[75%] rounded-xl px-4 py-2 shadow-sm text-sm break-words',
-                      msg.direction === 'outgoing'
+                      msg.direction === 'outgoing' || msg.direction === 'outbound'
                         ? 'bg-[#D9FDD3] dark:bg-[#005c4b] text-slate-900 dark:text-white self-end rounded-tr-none'
                         : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white self-start rounded-tl-none',
                     )}

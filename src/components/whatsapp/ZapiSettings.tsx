@@ -129,9 +129,9 @@ export function ZapiSettings() {
   const handleTest = async () => {
     setTesting(true)
     try {
-      const { data, error } = await supabase.functions.invoke('zapi-test-connection')
+      const { data, error } = await supabase.functions.invoke('check-whatsapp-status')
       if (error) throw error
-      if (data?.connected) toast.success('Conexão validada! Z-API está ativo.')
+      if (data?.status === 'connected') toast.success('Conexão validada! Z-API está ativo.')
       else toast.error('Não foi possível conectar. Verifique as credenciais.')
       await fetchInstance()
     } catch (err: any) {
@@ -144,11 +144,11 @@ export function ZapiSettings() {
   const handleGetQr = async () => {
     setActionLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('zapi-qrcode')
+      const { data, error } = await supabase.functions.invoke('connect-whatsapp-instance')
       if (error) throw error
-      const qr = data?.qrCode || data?.data?.value || data?.data?.qrcode
+      const qr = data?.qrcode || data?.qrCode
       setQrCode(qr)
-      if (!qr) toast.error('QR Code não disponível. Verifique se a instância está conectada.')
+      if (!qr) toast.error('QR Code não disponível. Verifique a configuração da instância.')
     } catch (err: any) {
       toast.error(`Erro ao obter QR Code: ${err.message}`)
     } finally {
@@ -159,9 +159,11 @@ export function ZapiSettings() {
   const handleConnect = async () => {
     setActionLoading(true)
     try {
-      await supabase.functions.invoke('zapi-connect')
-      toast.success('Conexão iniciada.')
-      await handleGetQr()
+      const { data, error } = await supabase.functions.invoke('connect-whatsapp-instance')
+      if (error) throw error
+      const qr = data?.qrcode || data?.qrCode
+      setQrCode(qr)
+      toast.success('QR Code gerado. Escaneie para conectar.')
       await fetchInstance()
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`)
