@@ -1,146 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MessageCircle, Settings } from 'lucide-react'
-import { useAuth } from '@/hooks/use-auth'
-import { useMetaSdk } from '@/hooks/use-meta-sdk'
-import { whatsappMetaService, WhatsappConfig } from '@/services/whatsapp-meta'
-import { whatsappAccountsService, WhatsappAccount } from '@/services/whatsapp-accounts'
-import { WhatsAppChat } from '@/components/whatsapp/WhatsAppChat'
-import { ConnectionWizard } from '@/components/whatsapp/ConnectionWizard'
-import { ManualConfigSection } from '@/components/whatsapp/ManualConfigSection'
+import { MessageCircle } from 'lucide-react'
 import { ZapiSettings } from '@/components/whatsapp/ZapiSettings'
 import { ZapiChat } from '@/components/whatsapp/ZapiChat'
-import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
 
 export default function WhatsApp() {
-  const { user } = useAuth()
-  const {
-    sdkReady,
-    sdkFailed,
-    sdkSlowLoading,
-    loading: sdkLoading,
-    startEmbeddedSignup,
-    waitForReady,
-  } = useMetaSdk()
-  const [config, setConfig] = useState<WhatsappConfig | null>(null)
-  const [account, setAccount] = useState<WhatsappAccount | null>(null)
-  const [instance, setInstance] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [wizardOpen, setWizardOpen] = useState(false)
-  const [manualOpen, setManualOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [activeProvider, setActiveProvider] = useState<'meta' | 'zapi'>('meta')
-
-  const fetchData = useCallback(async () => {
-    if (!user) return
-    setLoading(true)
-    const { data: acc } = await whatsappAccountsService.getAccount(user.id)
-    setAccount(acc)
-    const { data: cfg } = await whatsappMetaService.getConfig(user.id)
-    setConfig(cfg)
-    if (cfg || acc) {
-      const { data: inst } = await whatsappMetaService.getInstance(user.id)
-      if (inst) {
-        setInstance(inst)
-      } else {
-        const phoneNumberId = acc?.phone_number_id || cfg?.phone_number_id
-        if (phoneNumberId) {
-          const { data: newInst } = await whatsappMetaService.ensureInstance(
-            user.id,
-            phoneNumberId,
-            acc?.display_phone_number || undefined,
-          )
-          setInstance(newInst)
-        }
-      }
-    } else {
-      setInstance(null)
-    }
-    setLoading(false)
-  }, [user])
-
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
-  const handleEmbeddedSignup = useCallback(() => {
-    if (!user) return
-    startEmbeddedSignup(user.id, async (code: string) => {
-      setSaving(true)
-      try {
-        const { data, error } = await whatsappAccountsService.exchangeCode(code)
-        if (error) throw error
-        if (data?.error) throw new Error(data.error)
-        toast.success(
-          `WhatsApp conectado!${data?.phone_number ? ` Número: ${data.phone_number}` : ''}`,
-        )
-        await fetchData()
-      } catch (err: any) {
-        toast.error(err.message || 'Erro ao conectar WhatsApp.')
-      } finally {
-        setSaving(false)
-      }
-    })
-  }, [user, startEmbeddedSignup, fetchData])
-
-  const handleSaveConfig = async (data: {
-    phone_number_id: string
-    waba_id: string
-    access_token: string
-  }) => {
-    if (!user) return
-    setSaving(true)
-    try {
-      const { data: saved, error } = await whatsappMetaService.saveConfig({
-        user_id: user.id,
-        ...data,
-      })
-      if (error) throw error
-      const { data: inst } = await whatsappMetaService.ensureInstance(user.id, data.phone_number_id)
-      setConfig(saved)
-      setInstance(inst)
-      setWizardOpen(false)
-      toast.success('Configuração salva com sucesso!')
-    } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDisconnect = async () => {
-    if (!user || !instance) return
-    setSaving(true)
-    try {
-      if (account) {
-        await whatsappAccountsService.deleteAccount(user.id)
-      }
-      await whatsappMetaService.deleteConfig(user.id)
-      await supabase
-        .from('whatsapp_instances')
-        .update({ status: 'disconnected' })
-        .eq('id', instance.id)
-      setConfig(null)
-      setAccount(null)
-      setInstance(null)
-      toast.success('Configuração removida.')
-    } catch (err: any) {
-      toast.error(`Erro: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-        <p className="text-sm text-slate-500">Carregando...</p>
-      </div>
-    )
-  }
-
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 mb-4 px-1">
@@ -150,58 +12,15 @@ export default function WhatsApp() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">WhatsApp</h1>
           <p className="text-slate-500 text-sm">
-            Gerencie suas conversas e integrações com WhatsApp Business.
+            Gerencie suas conversas e integração com WhatsApp via Z-API.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setManualOpen((v) => !v)} className="gap-2">
-          <Settings className="h-4 w-4" />
-          {manualOpen ? 'Ocultar Configuração' : 'Configuração Manual'}
-        </Button>
       </div>
 
-      <div className="flex gap-2 mb-4 px-1">
-        <Button
-          variant={activeProvider === 'zapi' ? 'default' : 'outline'}
-          onClick={() => setActiveProvider('zapi')}
-          className={activeProvider === 'zapi' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-        >
-          Z-API
-        </Button>
+      <div className="flex-1 flex flex-col gap-4">
+        <ZapiSettings />
+        <ZapiChat />
       </div>
-
-      {activeProvider === 'zapi' ? (
-        <div className="flex-1 flex flex-col gap-4">
-          <ZapiSettings />
-          <ZapiChat />
-        </div>
-      ) : (
-        <>
-          {manualOpen && (
-            <div className="mb-6">
-              <ManualConfigSection config={config} onConfigChange={fetchData} />
-            </div>
-          )}
-
-          <WhatsAppChat
-            instance={instance}
-            onAddNumber={handleEmbeddedSignup}
-            addingNumber={saving || sdkLoading || (!sdkReady && !sdkFailed)}
-            onOpenConfig={() => setWizardOpen(true)}
-            onDisconnect={handleDisconnect}
-            hasConfig={!!config || !!account}
-            sdkReady={sdkReady}
-            sdkSlowLoading={sdkSlowLoading}
-            sdkFailed={sdkFailed}
-          />
-          <ConnectionWizard
-            open={wizardOpen}
-            onOpenChange={setWizardOpen}
-            initialConfig={config}
-            onSave={handleSaveConfig}
-            saving={saving}
-          />
-        </>
-      )}
     </div>
   )
 }

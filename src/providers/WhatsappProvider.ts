@@ -14,4 +14,4 @@ export interface WhatsappProvider {
   sendContact(to: string, name: string, phone: string): Promise<SendMessageResult>
 }
 
-export type ProviderType = 'z-api' | 'meta' | 'evolution' | 'twilio'
+export type ProviderType = 'z-api'

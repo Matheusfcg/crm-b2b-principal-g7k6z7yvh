@@ -16,18 +16,33 @@ import {
   LogOut,
   CheckCircle,
   Link2,
+  Phone,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+interface SafeInstance {
+  id: string
+  user_id: string
+  provider: string
+  instance_id: string
+  status: string
+  phone: string | null
+  created_at: string | null
+  updated_at: string | null
+  has_instance_token: boolean
+  has_client_token: boolean
+  has_webhook_token: boolean
+}
+
 export function ZapiSettings() {
   const { user } = useAuth()
+  const [instance, setInstance] = useState<SafeInstance | null>(null)
   const [config, setConfig] = useState({
     instance_id: '',
     instance_token: '',
     client_token: '',
     webhook_token: '',
   })
-  const [instance, setInstance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -37,20 +52,22 @@ export function ZapiSettings() {
   const fetchInstance = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const { data } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('provider', 'z-api')
-      .maybeSingle()
-    if (data) {
-      setInstance(data)
-      setConfig({
-        instance_id: data.instance_id || '',
-        instance_token: data.instance_token || '',
-        client_token: data.client_token || '',
-        webhook_token: data.webhook_token || '',
-      })
+    try {
+      const { data, error } = await supabase.functions.invoke('zapi-get-config')
+      if (error) throw error
+      if (data?.instance) {
+        setInstance(data.instance as SafeInstance)
+        setConfig({
+          instance_id: data.instance.instance_id || '',
+          instance_token: '',
+          client_token: '',
+          webhook_token: '',
+        })
+      } else {
+        setInstance(null)
+      }
+    } catch (err: any) {
+      console.error('Error fetching config:', err)
     }
     setLoading(false)
   }, [user])
@@ -59,35 +76,66 @@ export function ZapiSettings() {
     fetchInstance()
   }, [fetchInstance])
 
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel('whatsapp_instances_status')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_instances',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchInstance()
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, fetchInstance])
+
   const handleSave = async () => {
     if (!user) return
     setSaving(true)
     try {
       if (instance) {
-        await supabase
+        const updateData: Record<string, any> = {
+          instance_id: config.instance_id,
+          provider: 'z-api',
+          updated_at: new Date().toISOString(),
+        }
+        if (config.instance_token) updateData.instance_token = config.instance_token
+        if (config.client_token) updateData.client_token = config.client_token
+        if (config.webhook_token) updateData.webhook_token = config.webhook_token
+        const { error } = await supabase
           .from('whatsapp_instances')
-          .update({
-            instance_id: config.instance_id,
-            instance_token: config.instance_token,
-            client_token: config.client_token,
-            webhook_token: config.webhook_token,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', instance.id)
+        if (error) throw error
       } else {
-        const { data } = await supabase
-          .from('whatsapp_instances')
-          .insert({
-            user_id: user.id,
-            provider: 'z-api',
-            ...config,
-            status: 'disconnected',
-          })
-          .select()
-          .single()
-        setInstance(data)
+        const insertData: Record<string, any> = {
+          user_id: user.id,
+          provider: 'z-api',
+          instance_id: config.instance_id,
+          status: 'disconnected',
+        }
+        if (config.instance_token) insertData.instance_token = config.instance_token
+        if (config.client_token) insertData.client_token = config.client_token
+        if (config.webhook_token) insertData.webhook_token = config.webhook_token
+        const { error } = await supabase.from('whatsapp_instances').insert(insertData)
+        if (error) throw error
       }
       toast.success('Configurações salvas com sucesso!')
+      setConfig((p) => ({
+        ...p,
+        instance_token: '',
+        client_token: '',
+        webhook_token: '',
+      }))
       await fetchInstance()
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err.message}`)
@@ -154,7 +202,9 @@ export function ZapiSettings() {
     }
   }
 
-  const isConnected = instance?.connected === true || instance?.status === 'connected'
+  const isConfigured = !!instance
+  const isConnected = instance?.status === 'connected'
+  const isConnecting = instance?.status === 'connecting'
 
   if (loading) {
     return (
@@ -180,6 +230,10 @@ export function ZapiSettings() {
             <Badge className="bg-green-100 text-green-700 border-green-200">
               <Wifi className="h-3 w-3 mr-1" /> Conectado
             </Badge>
+          ) : isConnecting ? (
+            <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Conectando
+            </Badge>
           ) : (
             <Badge variant="outline" className="text-slate-500">
               <WifiOff className="h-3 w-3 mr-1" /> Desconectado
@@ -188,6 +242,20 @@ export function ZapiSettings() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isConnected && instance?.phone && (
+          <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+            <Phone className="h-4 w-4 text-green-600" />
+            <span className="text-sm text-green-700">
+              Número conectado: <strong>{instance.phone}</strong>
+            </span>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label>Provedor</Label>
+          <Input value="z-api" readOnly className="bg-slate-50 font-mono text-sm text-slate-500" />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Instance ID</Label>
@@ -199,63 +267,92 @@ export function ZapiSettings() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Instance Token</Label>
+            <Label>
+              Instance Token
+              {instance?.has_instance_token && (
+                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+              )}
+            </Label>
             <Input
-              placeholder="Seu Token"
+              type="password"
+              placeholder={
+                instance?.has_instance_token ? '•••••••• (digite para alterar)' : 'Seu Token'
+              }
               value={config.instance_token}
               onChange={(e) => setConfig((p) => ({ ...p, instance_token: e.target.value }))}
               className="font-mono text-sm"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Client Token</Label>
+            <Label>
+              Client Token
+              {instance?.has_client_token && (
+                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+              )}
+            </Label>
             <Input
-              placeholder="Seu Client Token"
+              type="password"
+              placeholder={
+                instance?.has_client_token ? '•••••••• (digite para alterar)' : 'Seu Client Token'
+              }
               value={config.client_token}
               onChange={(e) => setConfig((p) => ({ ...p, client_token: e.target.value }))}
               className="font-mono text-sm"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Webhook Token</Label>
+            <Label>
+              Webhook Token
+              {instance?.has_webhook_token && (
+                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+              )}
+            </Label>
             <Input
-              placeholder="Token do Webhook (opcional)"
+              type="password"
+              placeholder={
+                instance?.has_webhook_token
+                  ? '•••••••• (digite para alterar)'
+                  : 'Token do Webhook (opcional)'
+              }
               value={config.webhook_token}
               onChange={(e) => setConfig((p) => ({ ...p, webhook_token: e.target.value }))}
               className="font-mono text-sm"
             />
           </div>
         </div>
+
         <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
           <Label className="text-xs text-slate-500">Webhook URL</Label>
           <p className="font-mono text-xs text-slate-600 mt-1 break-all">
             https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/zapi-webhook
           </p>
         </div>
+
         <div className="flex flex-wrap gap-3">
           <Button
             onClick={handleSave}
             disabled={saving || !config.instance_id}
             className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{' '}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar
           </Button>
           <Button
             variant="outline"
             onClick={handleTest}
-            disabled={testing || !instance}
+            disabled={testing || !isConfigured}
             className="gap-2"
           >
             {testing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CheckCircle className="h-4 w-4" />
-            )}{' '}
+            )}
             Testar Conexão
           </Button>
         </div>
-        {instance && (
+
+        {isConfigured && (
           <div className="pt-4 border-t border-slate-100">
             {isConnected ? (
               <div className="flex items-center justify-between">
@@ -273,7 +370,7 @@ export function ZapiSettings() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <LogOut className="h-4 w-4" />
-                  )}{' '}
+                  )}
                   Desconectar
                 </Button>
               </div>
@@ -294,7 +391,7 @@ export function ZapiSettings() {
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <RefreshCw className="h-4 w-4" />
-                      )}{' '}
+                      )}
                       Atualizar QR Code
                     </Button>
                   </div>
@@ -308,7 +405,7 @@ export function ZapiSettings() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <QrCode className="h-4 w-4" />
-                    )}{' '}
+                    )}
                     Conectar e Obter QR Code
                   </Button>
                 )}

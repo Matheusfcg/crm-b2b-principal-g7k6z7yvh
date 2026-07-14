@@ -44,14 +44,13 @@ Deno.serve(async (req: Request) => {
   try {
     if (event.includes('connection') || (data.connected !== undefined && !data.messageId)) {
       const connected = data.connected ?? data.state === 'open'
-      await sb
-        .from('whatsapp_instances')
-        .update({
-          connected: !!connected,
-          status: connected ? 'connected' : 'disconnected',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', instance.id)
+      const updateData: Record<string, any> = {
+        status: connected ? 'connected' : 'disconnected',
+        updated_at: new Date().toISOString(),
+      }
+      const phoneVal = data.phone || data.number || data.wppNumber
+      if (phoneVal) updateData.phone = phoneVal
+      await sb.from('whatsapp_instances').update(updateData).eq('id', instance.id)
     } else if (data.messageId || data.phone || event.includes('message')) {
       await handleMessage(sb, instance, data)
     }

@@ -27,7 +27,6 @@ Deno.serve(async (req: Request) => {
   await sb
     .from('whatsapp_instances')
     .update({
-      connected: false,
       status: 'disconnected',
       updated_at: new Date().toISOString(),
     })

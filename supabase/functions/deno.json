@@ -1,15 +1,13 @@
 {
   "_versions": {
-    "whatsapp-uazapi": 156,
-    "whatsapp-meta": 27,
-    "meta-embedded-signup": 1,
-    "zapi-test-connection": 2,
-    "zapi-status": 2,
-    "zapi-qrcode": 2,
-    "zapi-connect": 2,
-    "zapi-send-message": 1,
-    "zapi-send-media": 1,
-    "zapi-webhook": 1,
-    "zapi-disconnect": 1
+    "zapi-test-connection": 4,
+    "zapi-status": 4,
+    "zapi-qrcode": 4,
+    "zapi-connect": 4,
+    "zapi-send-message": 3,
+    "zapi-send-media": 3,
+    "zapi-webhook": 3,
+    "zapi-disconnect": 3,
+    "zapi-get-config": 1
   }
 }

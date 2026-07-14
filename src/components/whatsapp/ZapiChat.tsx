@@ -5,9 +5,10 @@ import { ZApiProvider } from '@/providers/ZApiProvider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Send, Loader2, MessageCircle } from 'lucide-react'
+import { Send, Loader2, MessageCircle, Clock, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
 
 interface ZapiMessage {
   id: string
@@ -60,7 +61,14 @@ export function ZapiChat() {
         (payload) => {
           setMessages((prev) => {
             if (prev.find((m) => m.message_id === payload.new.message_id)) return prev
-            return [...prev, payload.new as ZapiMessage]
+            const newMsg = payload.new as ZapiMessage
+            if (newMsg.direction === 'outgoing') {
+              const withoutTemp = prev.filter(
+                (m) => !(m.id.startsWith('temp_') && m.phone === newMsg.phone),
+              )
+              return [...withoutTemp, newMsg]
+            }
+            return [...prev, newMsg]
           })
         },
       )
@@ -98,13 +106,33 @@ export function ZapiChat() {
     const text = input.trim()
     if (!text || !selectedPhone) return
     const provider = new ZApiProvider()
+    const tempId = `temp_${Date.now()}`
+    const optimisticMsg: ZapiMessage = {
+      id: tempId,
+      user_id: user?.id || '',
+      instance_id: null,
+      message_id: tempId,
+      chat_id: selectedPhone,
+      phone: selectedPhone,
+      direction: 'outgoing',
+      type: 'text',
+      text,
+      media_url: null,
+      status: 'sending',
+      created_at: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, optimisticMsg])
     setInput('')
     setSending(true)
     try {
       const result = await provider.sendText(selectedPhone, text)
-      if (!result.success) console.error('Send failed:', result.error)
-    } catch (err) {
-      console.error('Send error:', err)
+      if (!result.success) {
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)))
+        toast.error(`Erro ao enviar: ${result.error}`)
+      }
+    } catch (err: any) {
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)))
+      toast.error(`Erro ao enviar: ${err.message}`)
     } finally {
       setSending(false)
     }
@@ -197,8 +225,10 @@ export function ZapiChat() {
                       </a>
                     )}
                     {msg.text && msg.type !== 'document' && <span>{msg.text}</span>}
-                    <span className="text-[10px] text-slate-500 block mt-1">
+                    <span className="text-[10px] text-slate-500 block mt-1 flex items-center gap-1">
                       {msg.created_at ? format(new Date(msg.created_at), 'HH:mm') : ''}
+                      {msg.status === 'sending' && <Clock className="h-3 w-3 animate-spin" />}
+                      {msg.status === 'failed' && <AlertCircle className="h-3 w-3 text-red-500" />}
                     </span>
                   </div>
                 ))}
