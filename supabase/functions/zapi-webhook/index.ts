@@ -2,6 +2,16 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders, jsonResponse } from '../_shared/zapi.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
+function extractText(msg: any): string {
+  if (!msg) return ''
+  if (typeof msg.text === 'string') return msg.text
+  if (msg.text?.message) return msg.text.message
+  if (msg.message) return msg.message
+  if (msg.caption) return msg.caption
+  if (msg.content) return msg.content
+  return ''
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -44,6 +54,8 @@ Deno.serve(async (req: Request) => {
   const msg = payload.data || payload
   const messageId = msg.messageId || msg.id || msg.key?.id
   const phone = msg.phone || msg.from || msg.chatId || ''
+  const fromMe = msg.fromMe ?? false
+  const direction = fromMe ? 'outbound' : 'inbound'
 
   if (event.includes('message') || event.includes('received') || msg.message) {
     if (messageId) {
@@ -54,7 +66,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       if (!existing) {
-        const text = msg.text || msg.message || msg.caption || msg.content || ''
+        const text = extractText(msg)
         const type = msg.type || (msg.mediaUrl ? 'media' : 'text')
         const mediaUrl = msg.mediaUrl || msg.url || msg.fileUrl || null
 
@@ -64,7 +76,7 @@ Deno.serve(async (req: Request) => {
           message_id: messageId,
           chat_id: phone,
           phone,
-          direction: 'incoming',
+          direction,
           type,
           text,
           media_url: mediaUrl,

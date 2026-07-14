@@ -114,7 +114,7 @@ export function ZapiChat() {
       message_id: tempId,
       chat_id: selectedPhone,
       phone: selectedPhone,
-      direction: 'outgoing',
+      direction: 'outbound',
       type: 'text',
       text,
       media_url: null,

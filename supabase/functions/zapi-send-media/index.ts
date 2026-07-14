@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
       message_id: result.data.messageId,
       chat_id: to,
       phone: to,
-      direction: 'outgoing',
+      direction: 'outbound',
       type: mediaType,
       text: caption || filename || '',
       media_url: mediaUrl,

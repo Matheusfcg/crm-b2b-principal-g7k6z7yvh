@@ -7,13 +7,21 @@ import {
   zapiFetch,
 } from '../_shared/zapi-client.ts'
 
+function extractText(msg: any): string {
+  if (!msg) return ''
+  if (typeof msg.text === 'string') return msg.text
+  if (msg.text?.message) return msg.text.message
+  if (msg.message) return msg.message
+  if (msg.caption) return msg.caption
+  if (msg.content) return msg.content
+  return ''
+}
+
 async function generateAiReply(params: {
   userId: string | null
   phone: string
   incomingMessage: string
 }): Promise<string | null> {
-  // TODO: Plug in the project's generative AI engine here.
-  // Should return a reply string, or null to skip auto-reply.
   return null
 }
 
@@ -36,12 +44,12 @@ Deno.serve(async (req: Request) => {
   const msg = payload.data || payload
   const phone = msg.phone || msg.from || msg.chatId || ''
   const messageId = msg.messageId || msg.id || msg.key?.id
-  const text = msg.text?.message || msg.text || msg.message || msg.caption || msg.content || ''
+  const text = extractText(msg)
   const fromMe = msg.fromMe ?? false
+  const direction = fromMe ? 'outbound' : 'inbound'
 
   const sb = getSupabaseAdmin()
 
-  // Handle connection-status events
   const event = payload.event || payload.type || ''
   if (event.includes('connection') || event.includes('status')) {
     const connected = msg.connected ?? msg.status === 'connected'
@@ -56,9 +64,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ received: true })
   }
 
-  // Handle incoming text messages
-  if (!fromMe && phone && (text || msg.message)) {
-    // Deduplicate by messageId
+  if (phone && (text || msg.message || msg.mediaUrl)) {
     if (messageId) {
       const { data: existing } = await sb
         .from('whatsapp_messages')
@@ -74,7 +80,7 @@ Deno.serve(async (req: Request) => {
       message_id: messageId,
       chat_id: phone,
       phone,
-      direction: 'inbound',
+      direction,
       type: msg.type || 'text',
       text,
       media_url: msg.mediaUrl || msg.url || null,
@@ -82,31 +88,32 @@ Deno.serve(async (req: Request) => {
       raw_payload: payload,
     })
 
-    // AI auto-reply
-    const reply = await generateAiReply({
-      userId: instance.user_id,
-      phone,
-      incomingMessage: text,
-    })
-
-    if (reply) {
-      const replyResult = await zapiFetch(instance, '/send-text', {
-        method: 'POST',
-        body: JSON.stringify({ phone, message: reply }),
-      })
-
-      await sb.from('whatsapp_messages').insert({
-        user_id: instance.user_id,
-        instance_id: instanceId,
-        message_id: replyResult.data?.messageId || null,
-        chat_id: phone,
+    if (!fromMe && text) {
+      const reply = await generateAiReply({
+        userId: instance.user_id,
         phone,
-        direction: 'outbound',
-        type: 'text',
-        text: reply,
-        status: 'sent',
-        raw_payload: replyResult.data || null,
+        incomingMessage: text,
       })
+
+      if (reply) {
+        const replyResult = await zapiFetch(instance, '/send-text', {
+          method: 'POST',
+          body: JSON.stringify({ phone, message: reply }),
+        })
+
+        await sb.from('whatsapp_messages').insert({
+          user_id: instance.user_id,
+          instance_id: instanceId,
+          message_id: replyResult.data?.messageId || null,
+          chat_id: phone,
+          phone,
+          direction: 'outbound',
+          type: 'text',
+          text: reply,
+          status: 'sent',
+          raw_payload: replyResult.data || null,
+        })
+      }
     }
   }
 
