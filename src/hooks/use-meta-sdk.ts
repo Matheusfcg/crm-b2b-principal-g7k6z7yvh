@@ -5,6 +5,19 @@ import { installMetaErrorGuard } from '@/lib/meta-error-guard'
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string
 const META_CONFIG_ID = import.meta.env.VITE_META_CONFIG_ID as string
 
+function isMetaConfigValid(): boolean {
+  if (!META_APP_ID || !META_CONFIG_ID) {
+    console.warn(
+      '[Meta SDK] Missing environment variables: VITE_META_APP_ID and/or VITE_META_CONFIG_ID. ' +
+        'The WhatsApp Embedded Signup flow will not work until these are set.',
+    )
+    return false
+  }
+  return true
+}
+
+const META_CONFIG_VALID = isMetaConfigValid()
+
 declare global {
   interface Window {
     fbAsyncInit?: () => void
@@ -16,6 +29,7 @@ let globalInitCalled = false
 let globalInitSucceeded = false
 
 function attemptFbInit(): boolean {
+  if (!META_CONFIG_VALID) return false
   if (!window.FB) return false
   try {
     window.FB.init({
@@ -35,7 +49,7 @@ export function useMetaSdk() {
   const [sdkReady, setSdkReady] = useState(globalInitSucceeded)
   const [sdkSlowLoading, setSdkSlowLoading] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [sdkFailed, setSdkFailed] = useState(false)
+  const [sdkFailed, setSdkFailed] = useState(!META_CONFIG_VALID)
   const mountedRef = useRef(true)
   const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readyResolversRef = useRef<Array<() => void>>([])
@@ -46,6 +60,7 @@ export function useMetaSdk() {
   }, [])
 
   const performInit = useCallback(() => {
+    if (!META_CONFIG_VALID) return
     if (globalInitSucceeded) {
       if (mountedRef.current) {
         setSdkReady(true)
@@ -83,6 +98,11 @@ export function useMetaSdk() {
   }, [])
 
   useEffect(() => {
+    if (!META_CONFIG_VALID) {
+      setSdkFailed(true)
+      return
+    }
+
     if (globalInitSucceeded) {
       setSdkReady(true)
       return
@@ -155,6 +175,7 @@ export function useMetaSdk() {
 
   const waitForReady = useCallback((timeoutMs: number = 10000): Promise<boolean> => {
     if (globalInitSucceeded) return Promise.resolve(true)
+    if (!META_CONFIG_VALID) return Promise.resolve(false)
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), timeoutMs)
       const wrappedResolve = () => {
@@ -167,6 +188,13 @@ export function useMetaSdk() {
 
   const startEmbeddedSignup = useCallback(
     async (_userId?: string, onCode?: (code: string) => void) => {
+      if (!META_CONFIG_VALID) {
+        toast.error(
+          'Configuração do Meta ausente. Defina VITE_META_APP_ID e VITE_META_CONFIG_ID no ambiente.',
+        )
+        return
+      }
+
       if (globalInitSucceeded && window.FB) {
         // SDK already ready; proceed directly to login below.
       } else if (window.FB && !globalInitSucceeded) {
