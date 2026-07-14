@@ -1,7 +1,11 @@
 {
   "_versions": {
-    "whatsapp-uazapi": 154,
+    "whatsapp-uazapi": 155,
     "whatsapp-meta": 27,
-    "meta-embedded-signup": 1
+    "meta-embedded-signup": 1,
+    "zapi-test-connection": 1,
+    "zapi-status": 1,
+    "zapi-qrcode": 1,
+    "zapi-connect": 1
   }
 }
