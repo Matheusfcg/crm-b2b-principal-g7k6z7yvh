@@ -1,10 +1,16 @@
 -- Ensure unique constraint on whatsapp_messages.message_id (idempotent)
+-- Check both pg_constraint and pg_indexes, since an earlier migration may have
+-- created a unique INDEX with the same name instead of a constraint.
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'whatsapp_messages_message_id_key'
     AND conrelid = 'whatsapp_messages'::regclass
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE indexname = 'whatsapp_messages_message_id_key'
+    AND schemaname = 'public'
   ) THEN
     ALTER TABLE public.whatsapp_messages
       ADD CONSTRAINT whatsapp_messages_message_id_key UNIQUE (message_id);
