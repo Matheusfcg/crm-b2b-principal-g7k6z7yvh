@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
 import {
   Loader2,
   Save,
@@ -17,6 +19,7 @@ import {
   CheckCircle,
   Link2,
   Phone,
+  ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -48,6 +51,14 @@ export function ZapiSettings() {
   const [testing, setTesting] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [qrCode, setQrCode] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(() => {
+    const saved = localStorage.getItem('zapi-settings-open')
+    return saved !== null ? saved === 'true' : true
+  })
+
+  useEffect(() => {
+    localStorage.setItem('zapi-settings-open', String(isOpen))
+  }, [isOpen])
 
   const fetchInstance = useCallback(async () => {
     if (!user) return
@@ -200,208 +211,237 @@ export function ZapiSettings() {
 
   return (
     <Card className="border-border shadow-sm bg-background">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Link2 className="h-5 w-5 text-blue-600" /> Provedor: Z-API
-            </CardTitle>
-            <CardDescription>
-              Configure sua instância Z-API para conectar o WhatsApp.
-            </CardDescription>
-          </div>
-          {isConnected ? (
-            <Badge className="bg-green-100 text-green-700 border-green-200">
-              <Wifi className="h-3 w-3 mr-1" /> Conectado
-            </Badge>
-          ) : isConnecting ? (
-            <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Conectando
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-slate-500">
-              <WifiOff className="h-3 w-3 mr-1" /> Desconectado
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isConnected && instance?.phone && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
-            <Phone className="h-4 w-4 text-green-600" />
-            <span className="text-sm text-green-700">
-              Número conectado: <strong>{instance.phone}</strong>
-            </span>
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <Label>Provedor</Label>
-          <Input
-            value="z-api"
-            readOnly
-            className="bg-muted font-mono text-sm text-muted-foreground"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Instance ID</Label>
-            <Input
-              placeholder="Seu Instance ID"
-              value={config.instance_id}
-              onChange={(e) => setConfig((p) => ({ ...p, instance_id: e.target.value }))}
-              className="font-mono text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Instance Token
-              {instance?.has_instance_token && (
-                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
-              )}
-            </Label>
-            <Input
-              type="password"
-              placeholder={
-                instance?.has_instance_token ? '•••••••• (digite para alterar)' : 'Seu Token'
-              }
-              value={config.instance_token}
-              onChange={(e) => setConfig((p) => ({ ...p, instance_token: e.target.value }))}
-              className="font-mono text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Client Token
-              {instance?.has_client_token && (
-                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
-              )}
-            </Label>
-            <Input
-              type="password"
-              placeholder={
-                instance?.has_client_token ? '•••••••• (digite para alterar)' : 'Seu Client Token'
-              }
-              value={config.client_token}
-              onChange={(e) => setConfig((p) => ({ ...p, client_token: e.target.value }))}
-              className="font-mono text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Webhook Token
-              {instance?.has_webhook_token && (
-                <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
-              )}
-            </Label>
-            <Input
-              type="password"
-              placeholder={
-                instance?.has_webhook_token
-                  ? '•••••••• (digite para alterar)'
-                  : 'Token do Webhook (opcional)'
-              }
-              value={config.webhook_token}
-              onChange={(e) => setConfig((p) => ({ ...p, webhook_token: e.target.value }))}
-              className="font-mono text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="p-3 bg-muted rounded-lg border border-border">
-          <Label className="text-xs text-muted-foreground">Webhook URL</Label>
-          <p className="font-mono text-xs text-foreground mt-1 break-all">
-            https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/zapi-webhook
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving || !config.instance_id}
-            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleTest}
-            disabled={testing || !isConfigured}
-            className="gap-2"
-          >
-            {testing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle className="h-4 w-4" />
-            )}
-            Testar Conexão
-          </Button>
-        </div>
-
-        {isConfigured && (
-          <div className="pt-4 border-t border-slate-100">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CardHeader
+          className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-blue-600" /> Provedor: Z-API
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-8 h-8 p-0 ml-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 transition-transform duration-200',
+                        isOpen && 'rotate-180',
+                      )}
+                    />
+                    <span className="sr-only">Alternar painel</span>
+                  </Button>
+                </CollapsibleTrigger>
+              </CardTitle>
+              <CardDescription>
+                Configure sua instância Z-API para conectar o WhatsApp.
+              </CardDescription>
+            </div>
             {isConnected ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-green-600">
-                  <Wifi className="h-5 w-5" />
-                  <span className="font-medium">Status: Conectado</span>
-                </div>
-                <Button
-                  variant="destructive"
-                  onClick={handleDisconnect}
-                  disabled={actionLoading}
-                  className="gap-2"
-                >
-                  {actionLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <LogOut className="h-4 w-4" />
-                  )}
-                  Desconectar
-                </Button>
-              </div>
+              <Badge className="bg-green-100 text-green-700 border-green-200">
+                <Wifi className="h-3 w-3 mr-1" /> Conectado
+              </Badge>
+            ) : isConnecting ? (
+              <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Conectando
+              </Badge>
             ) : (
-              <div className="flex flex-col items-center gap-4 py-4">
-                {qrCode ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="p-3 bg-white border-2 border-border rounded-xl shadow-sm">
-                      <img src={qrCode} alt="QR Code" className="w-48 h-48 object-contain" />
-                    </div>{' '}
+              <Badge variant="outline" className="text-slate-500">
+                <WifiOff className="h-3 w-3 mr-1" /> Desconectado
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-4">
+            {isConnected && instance?.phone && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                <Phone className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-700">
+                  Número conectado: <strong>{instance.phone}</strong>
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Provedor</Label>
+              <Input
+                value="z-api"
+                readOnly
+                className="bg-muted font-mono text-sm text-muted-foreground"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Instance ID</Label>
+                <Input
+                  placeholder="Seu Instance ID"
+                  value={config.instance_id}
+                  onChange={(e) => setConfig((p) => ({ ...p, instance_id: e.target.value }))}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Instance Token
+                  {instance?.has_instance_token && (
+                    <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+                  )}
+                </Label>
+                <Input
+                  type="password"
+                  placeholder={
+                    instance?.has_instance_token ? '•••••••• (digite para alterar)' : 'Seu Token'
+                  }
+                  value={config.instance_token}
+                  onChange={(e) => setConfig((p) => ({ ...p, instance_token: e.target.value }))}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Client Token
+                  {instance?.has_client_token && (
+                    <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+                  )}
+                </Label>
+                <Input
+                  type="password"
+                  placeholder={
+                    instance?.has_client_token
+                      ? '•••••••• (digite para alterar)'
+                      : 'Seu Client Token'
+                  }
+                  value={config.client_token}
+                  onChange={(e) => setConfig((p) => ({ ...p, client_token: e.target.value }))}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Webhook Token
+                  {instance?.has_webhook_token && (
+                    <span className="ml-2 text-xs text-green-600">✓ Configurado</span>
+                  )}
+                </Label>
+                <Input
+                  type="password"
+                  placeholder={
+                    instance?.has_webhook_token
+                      ? '•••••••• (digite para alterar)'
+                      : 'Token do Webhook (opcional)'
+                  }
+                  value={config.webhook_token}
+                  onChange={(e) => setConfig((p) => ({ ...p, webhook_token: e.target.value }))}
+                  className="font-mono text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-muted rounded-lg border border-border">
+              <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+              <p className="font-mono text-xs text-foreground mt-1 break-all">
+                https://gmnaadyvmhzqahdtzbun.supabase.co/functions/v1/zapi-webhook
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={handleSave}
+                disabled={saving || !config.instance_id}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Salvar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleTest}
+                disabled={testing || !isConfigured}
+                className="gap-2"
+              >
+                {testing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+                Testar Conexão
+              </Button>
+            </div>
+
+            {isConfigured && (
+              <div className="pt-4 border-t border-slate-100">
+                {isConnected ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-green-600">
+                      <Wifi className="h-5 w-5" />
+                      <span className="font-medium">Status: Conectado</span>
+                    </div>
                     <Button
-                      variant="outline"
-                      onClick={handleGetQr}
+                      variant="destructive"
+                      onClick={handleDisconnect}
                       disabled={actionLoading}
                       className="gap-2"
                     >
                       {actionLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <RefreshCw className="h-4 w-4" />
+                        <LogOut className="h-4 w-4" />
                       )}
-                      Atualizar QR Code
+                      Desconectar
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    onClick={handleConnect}
-                    disabled={actionLoading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                  >
-                    {actionLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="flex flex-col items-center gap-4 py-4">
+                    {qrCode ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="p-3 bg-white border-2 border-border rounded-xl shadow-sm">
+                          <img src={qrCode} alt="QR Code" className="w-48 h-48 object-contain" />
+                        </div>{' '}
+                        <Button
+                          variant="outline"
+                          onClick={handleGetQr}
+                          disabled={actionLoading}
+                          className="gap-2"
+                        >
+                          {actionLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                          Atualizar QR Code
+                        </Button>
+                      </div>
                     ) : (
-                      <QrCode className="h-4 w-4" />
+                      <Button
+                        onClick={handleConnect}
+                        disabled={actionLoading}
+                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                      >
+                        {actionLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <QrCode className="h-4 w-4" />
+                        )}
+                        Conectar e Obter QR Code
+                      </Button>
                     )}
-                    Conectar e Obter QR Code
-                  </Button>
+                  </div>
                 )}
               </div>
             )}
-          </div>
-        )}
-      </CardContent>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   )
 }

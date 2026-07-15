@@ -58,6 +58,7 @@ export function ZapiChat() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const selectedPhoneRef = useRef<string | null>(null)
 
   const fetchMessages = useCallback(async () => {
     if (!user) return
@@ -84,9 +85,9 @@ export function ZapiChat() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
+          const newMsg = payload.new as ZapiMessage
           setMessages((prev) => {
-            if (prev.find((m) => m.message_id === payload.new.message_id)) return prev
-            const newMsg = payload.new as ZapiMessage
+            if (prev.find((m) => m.message_id === newMsg.message_id)) return prev
             if (newMsg.direction === 'outgoing' || newMsg.direction === 'outbound') {
               const withoutTemp = prev.filter(
                 (m) => !(m.id.startsWith('temp_') && m.phone === newMsg.phone),
@@ -95,6 +96,15 @@ export function ZapiChat() {
             }
             return [...prev, newMsg]
           })
+          if (
+            newMsg.direction === 'inbound' &&
+            newMsg.phone &&
+            selectedPhoneRef.current !== newMsg.phone
+          ) {
+            toast.info(`Nova mensagem recebida`, {
+              description: `${newMsg.phone}: ${newMsg.text || 'Mídia recebida'}`,
+            })
+          }
         },
       )
       .subscribe()
@@ -127,6 +137,10 @@ export function ZapiChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selectedMessages.length])
+
+  useEffect(() => {
+    selectedPhoneRef.current = selectedPhone
+  }, [selectedPhone])
 
   const handleSend = async () => {
     const text = input.trim()
