@@ -41,6 +41,7 @@ export interface WhatsappInstanceRow {
   instance_token: string | null
   token: string | null
   client_token: string | null
+  webhook_token: string | null
   status: string | null
   phone: string | null
 }
@@ -63,6 +64,7 @@ export async function getInstanceByInstanceId(
     .from('whatsapp_instances')
     .select('*')
     .eq('instance_id', instanceId)
+    .eq('provider', 'z-api')
     .maybeSingle()
   return data as WhatsappInstanceRow | null
 }

@@ -82,7 +82,9 @@ export async function autoCreateContact(
       return null
     }
 
-    console.log('[autoCreateContact] Checking for existing lead with phone:', cleanPhone)
+    console.log(
+      `[autoCreateContact] DB lookup: SELECT id, contato, telefone FROM leads WHERE telefone ILIKE '%${cleanPhone}%' LIMIT 1`,
+    )
     const { data: existing, error: lookupError } = await sb
       .from('leads')
       .select('id, contato, telefone')

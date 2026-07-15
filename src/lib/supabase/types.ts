@@ -58,6 +58,7 @@ export type Database = {
           created_by: string
           email: string
           empresa: string
+          foto: string | null
           id: string
           origem: string
           segmento: string
@@ -72,6 +73,7 @@ export type Database = {
           created_by: string
           email: string
           empresa: string
+          foto?: string | null
           id?: string
           origem: string
           segmento: string
@@ -86,6 +88,7 @@ export type Database = {
           created_by?: string
           email?: string
           empresa?: string
+          foto?: string | null
           id?: string
           origem?: string
           segmento?: string

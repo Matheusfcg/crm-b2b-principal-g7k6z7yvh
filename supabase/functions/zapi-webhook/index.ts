@@ -60,17 +60,25 @@ Deno.serve(async (req: Request) => {
     const event = payload.event || payload.type || ''
 
     const xInstanceIdHeader = req.headers.get('x-instance-id')
+    const dataInstance =
+      payload.data?.instance || payload.data?.instanceId || payload.data?.instance_id
     const instanceId =
-      payload.instance || payload.instanceId || payload.instance_id || xInstanceIdHeader
+      payload.instance ||
+      payload.instanceId ||
+      payload.instance_id ||
+      dataInstance ||
+      xInstanceIdHeader
     const instanceField = payload.instance
       ? 'body.instance'
       : payload.instanceId
         ? 'body.instanceId'
         : payload.instance_id
           ? 'body.instance_id'
-          : xInstanceIdHeader
-            ? 'x-instance-id header'
-            : null
+          : dataInstance
+            ? 'body.data.instance'
+            : xInstanceIdHeader
+              ? 'x-instance-id header'
+              : null
 
     console.log(
       '[zapi-webhook] Instance identification - field:',
@@ -92,9 +100,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(
-      '[zapi-webhook] DB lookup: whatsapp_instances WHERE instance_id =',
-      instanceId,
-      'AND provider = z-api',
+      `[zapi-webhook] DB lookup: SELECT id, user_id, webhook_token, instance_id, instance_token, client_token, phone, status FROM whatsapp_instances WHERE instance_id = '${instanceId}' AND provider = 'z-api'`,
     )
     const { data: instance, error: dbError } = await sb
       .from('whatsapp_instances')
@@ -119,16 +125,24 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!instance) {
-      console.log('[zapi-webhook] Instance not found for instance_id:', instanceId)
+      console.log(
+        `[zapi-webhook] Instance NOT FOUND — Value "${instanceId}" not found in column "instance_id" with provider filter "z-api"`,
+      )
       await logWebhook(sb, {
         userId: null,
         instanceId,
         endpoint: `webhook/${event}`,
         payload,
-        response: { error: 'Instância não encontrada', stage: 'instance_not_found' },
+        response: {
+          error: 'Instance não identificado',
+          stage: 'instance_not_found',
+          searchedColumn: 'instance_id',
+          searchedValue: instanceId,
+          providerFilter: 'z-api',
+        },
         status: 200,
       })
-      return jsonResponse({ received: true, error: 'Instância não encontrada' }, 200)
+      return jsonResponse({ received: true, error: 'Instance não identificado' }, 200)
     }
 
     console.log('[zapi-webhook] Instance found:', instance.id, '| user:', instance.user_id)

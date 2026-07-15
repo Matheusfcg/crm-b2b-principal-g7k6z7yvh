@@ -48,9 +48,13 @@ export async function callZapi(
   body?: any,
 ) {
   const url = `https://api.z-api.io/instances/${instanceId}/token/${instanceToken}${endpoint}`
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (clientToken && clientToken.trim() !== '') {
+    headers['Client-Token'] = clientToken
+  }
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json', 'Client-Token': clientToken },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   })
   const text = await res.text()

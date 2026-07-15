@@ -6,13 +6,12 @@
     "zapi-connect": 9,
     "zapi-send-message": 8,
     "zapi-send-media": 7,
-    "zapi-webhook": 12,
+    "zapi-webhook": 13,
     "zapi-disconnect": 5,
     "zapi-get-config": 3,
     "zapi-save-config": 3,
     "connect-whatsapp-instance": 2,
     "send-whatsapp-message": 4,
-    "receive-whatsapp-webhook": 5,
     "check-whatsapp-status": 3
   }
 }
