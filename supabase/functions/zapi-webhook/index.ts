@@ -1,6 +1,16 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { corsHeaders, jsonResponse } from '../_shared/zapi.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { corsHeaders, jsonResponse } from '../_shared/zapi.ts'
+import {
+  extractText,
+  normalizeType,
+  extractPhone,
+  extractMessageId,
+  logWebhook,
+  syncInteraction,
+  autoCreateContact,
+  syncConversations,
+} from '../_shared/webhook-helpers.ts'
 
 const MESSAGE_EVENTS = [
   'on-message-received',
@@ -17,139 +27,57 @@ const CONNECTION_EVENTS = [
   'on-instance-connected',
 ]
 
-function extractText(msg: any): string {
-  if (!msg) return ''
-  if (typeof msg.text === 'string') return msg.text
-  if (msg.text?.message) return msg.text.message
-  if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text
-  if (msg.extendedTextMessage?.caption) return msg.extendedTextMessage.caption
-  if (msg.conversation) return msg.conversation
-  if (msg.message) return msg.message
-  if (msg.caption) return msg.caption
-  if (msg.content) return msg.content
-  return ''
-}
-
-function normalizeType(msg: any): string {
-  const rawType = (msg.type || '').toLowerCase()
-  const typeMap: Record<string, string> = {
-    chat: 'chat',
-    text: 'chat',
-    conversation: 'chat',
-    image: 'image',
-    imagemessage: 'image',
-    video: 'video',
-    videomessage: 'video',
-    audio: 'audio',
-    audiomessage: 'audio',
-    ptt: 'audio',
-    document: 'document',
-    documentmessage: 'document',
-    sticker: 'sticker',
-    stickermessage: 'sticker',
-  }
-  return typeMap[rawType] || rawType || 'chat'
-}
-
-function extractPhone(msg: any): string {
-  return msg.phone || msg.from || msg.chatId || msg.sender || msg.recipient || ''
-}
-
-function extractMessageId(msg: any): string {
-  return msg.messageId || msg.id || msg.key?.id || ''
-}
-
-async function logWebhook(
-  sb: any,
-  params: {
-    userId: string | null
-    instanceId: string | null
-    endpoint: string
-    payload: any
-    response: any
-    status: number
-  },
-) {
-  try {
-    await sb.from('whatsapp_logs').insert({
-      user_id: params.userId,
-      instance_id: params.instanceId,
-      instance_name: params.instanceId,
-      endpoint: params.endpoint,
-      payload: params.payload || null,
-      response: params.response || null,
-      status: params.status,
-    })
-  } catch (err) {
-    console.error('Log error:', err)
-  }
-}
-
-async function syncInteraction(
-  sb: any,
-  params: {
-    userId: string
-    phone: string
-    text: string
-    direction: string
-    type: string
-  },
-) {
-  try {
-    const cleanPhone = params.phone.replace(/\D/g, '')
-    if (!cleanPhone) return
-
-    const { data: leads } = await sb
-      .from('leads')
-      .select('id, telefone')
-      .ilike('telefone', `%${cleanPhone}%`)
-      .limit(1)
-
-    if (!leads || leads.length === 0) return
-
-    const lead = leads[0]
-    const description = params.text
-      ? `[WhatsApp ${params.direction}] ${params.text}`.substring(0, 500)
-      : `[WhatsApp ${params.direction}] Mídia (${params.type})`
-
-    await sb.from('interactions').insert({
-      lead_id: lead.id,
-      user_id: params.userId,
-      tipo: 'WhatsApp',
-      descricao: description,
-      data: new Date().toISOString(),
-    })
-  } catch (err) {
-    console.error('Interaction sync error:', err)
-  }
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  const sb = createClient(supabaseUrl, serviceKey)
+  const sb = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+  )
+
+  const reqHeaders = Object.fromEntries(req.headers.entries())
+  console.log('[zapi-webhook] === Webhook received ===')
+  console.log('[zapi-webhook] Request headers:', JSON.stringify(reqHeaders, null, 2))
 
   let payload: any = null
-
   try {
     payload = await req.json()
+    console.log('[zapi-webhook] Webhook body:', JSON.stringify(payload, null, 2))
   } catch {
+    console.error('[zapi-webhook] Invalid JSON payload')
     await logWebhook(sb, {
       userId: null,
       instanceId: null,
       endpoint: 'webhook',
       payload: null,
-      response: { error: 'Invalid JSON payload' },
+      response: { error: 'Invalid JSON payload', stage: 'json_parse' },
       status: 200,
     })
-    return jsonResponse({ received: true, error: 'Invalid JSON' }, 200)
+    return jsonResponse({ received: true, error: 'Invalid JSON payload' }, 200)
   }
 
   try {
-    const instanceId = payload.instance || payload.instanceId || payload.instance_id
     const event = payload.event || payload.type || ''
+
+    const xInstanceIdHeader = req.headers.get('x-instance-id')
+    const instanceId =
+      payload.instance || payload.instanceId || payload.instance_id || xInstanceIdHeader
+    const instanceField = payload.instance
+      ? 'body.instance'
+      : payload.instanceId
+        ? 'body.instanceId'
+        : payload.instance_id
+          ? 'body.instance_id'
+          : xInstanceIdHeader
+            ? 'x-instance-id header'
+            : null
+
+    console.log(
+      '[zapi-webhook] Instance identification - field:',
+      instanceField,
+      '| value:',
+      instanceId,
+    )
 
     if (!instanceId) {
       await logWebhook(sb, {
@@ -157,44 +85,71 @@ Deno.serve(async (req: Request) => {
         instanceId: null,
         endpoint: `webhook/${event || 'unknown'}`,
         payload,
-        response: { error: 'Instance não identificado no payload' },
+        response: { error: 'Instance não identificado', stage: 'instance_identification' },
         status: 200,
       })
       return jsonResponse({ received: true, error: 'Instance não identificado' }, 200)
     }
 
-    const { data: instance } = await sb
+    console.log(
+      '[zapi-webhook] DB lookup: whatsapp_instances WHERE instance_id =',
+      instanceId,
+      'AND provider = z-api',
+    )
+    const { data: instance, error: dbError } = await sb
       .from('whatsapp_instances')
-      .select('id, user_id, webhook_token, instance_id')
+      .select(
+        'id, user_id, webhook_token, instance_id, instance_token, client_token, phone, status',
+      )
       .eq('instance_id', instanceId)
       .eq('provider', 'z-api')
       .maybeSingle()
 
-    if (!instance) {
+    if (dbError) {
+      console.error('[zapi-webhook] Database lookup error:', dbError.message)
       await logWebhook(sb, {
         userId: null,
         instanceId,
         endpoint: `webhook/${event}`,
         payload,
-        response: { error: 'Instância não encontrada' },
+        response: { error: dbError.message, stage: 'database_lookup' },
+        status: 200,
+      })
+      return jsonResponse({ received: true, error: 'Database lookup error' }, 200)
+    }
+
+    if (!instance) {
+      console.log('[zapi-webhook] Instance not found for instance_id:', instanceId)
+      await logWebhook(sb, {
+        userId: null,
+        instanceId,
+        endpoint: `webhook/${event}`,
+        payload,
+        response: { error: 'Instância não encontrada', stage: 'instance_not_found' },
         status: 200,
       })
       return jsonResponse({ received: true, error: 'Instância não encontrada' }, 200)
     }
 
+    console.log('[zapi-webhook] Instance found:', instance.id, '| user:', instance.user_id)
+
     if (instance.webhook_token) {
       const providedToken = req.headers.get('webhook-token') || payload.webhookToken
       if (providedToken !== instance.webhook_token) {
+        console.log('[zapi-webhook] Invalid webhook token')
         await logWebhook(sb, {
           userId: instance.user_id,
           instanceId: instance.instance_id,
           endpoint: `webhook/${event}`,
           payload,
-          response: { error: 'Token do webhook inválido' },
+          response: { error: 'Token do webhook inválido', stage: 'token_validation' },
           status: 403,
         })
         return jsonResponse({ error: 'Token do webhook inválido' }, 403)
       }
+      console.log('[zapi-webhook] Webhook token validated')
+    } else {
+      console.log('[zapi-webhook] No webhook token configured, proceeding without validation')
     }
 
     const msg = payload.data || payload
@@ -204,8 +159,10 @@ Deno.serve(async (req: Request) => {
       event.includes('connection') ||
       event.includes('status')
     ) {
+      console.log('[zapi-webhook] Processing connection event:', event)
       const connected = msg.connected ?? msg.status === 'connected' ?? msg.state === 'CONNECTED'
-      await sb
+
+      const { error: updErr } = await sb
         .from('whatsapp_instances')
         .update({
           status: connected ? 'connected' : 'disconnected',
@@ -213,6 +170,18 @@ Deno.serve(async (req: Request) => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', instance.id)
+
+      if (updErr) console.error('[zapi-webhook] Failed to update instance status:', updErr.message)
+
+      if (connected) {
+        console.log('[zapi-webhook] Instance connected, initiating conversation sync')
+        await syncConversations(sb, {
+          instance_id: instance.instance_id,
+          instance_token: instance.instance_token,
+          client_token: instance.client_token,
+          user_id: instance.user_id,
+        })
+      }
 
       await logWebhook(sb, {
         userId: instance.user_id,
@@ -222,7 +191,7 @@ Deno.serve(async (req: Request) => {
         response: { received: true, event: 'connection', connected },
         status: 200,
       })
-      return jsonResponse({ received: true })
+      return jsonResponse({ received: true, event: 'connection', connected })
     }
 
     const isMessageEvent =
@@ -230,58 +199,108 @@ Deno.serve(async (req: Request) => {
       (msg.messageId &&
         (msg.text || msg.message || msg.mediaUrl || msg.type || msg.extendedTextMessage))
 
-    if (isMessageEvent) {
-      const messageId = extractMessageId(msg)
-      const phone = extractPhone(msg)
-      const text = extractText(msg)
-      const type = normalizeType(msg)
-      const fromMe = msg.fromMe ?? false
-      const direction = fromMe ? 'outbound' : 'inbound'
-      const mediaUrl = msg.mediaUrl || msg.url || msg.fileUrl || null
-
-      if (messageId) {
-        const { data: existing } = await sb
-          .from('whatsapp_messages')
-          .select('id')
-          .eq('message_id', messageId)
-          .maybeSingle()
-
-        if (!existing) {
-          const { error: insertError } = await sb.from('whatsapp_messages').insert({
-            user_id: instance.user_id,
-            instance_id: instance.instance_id,
-            message_id: messageId,
-            chat_id: phone,
-            phone,
-            direction,
-            type,
-            text,
-            media_url: mediaUrl,
-            status: 'received',
-            raw_payload: payload,
-          })
-
-          if (!insertError) {
-            await syncInteraction(sb, {
-              userId: instance.user_id,
-              phone,
-              text,
-              direction,
-              type,
-            })
-          }
-        }
-      }
-
+    if (!isMessageEvent) {
+      console.log('[zapi-webhook] Unknown event type:', event)
       await logWebhook(sb, {
         userId: instance.user_id,
         instanceId: instance.instance_id,
         endpoint: `webhook/${event}`,
         payload,
-        response: { received: true, event: 'message', messageId, direction, type },
+        response: { received: true, event: 'unknown', eventType: event },
         status: 200,
       })
-      return jsonResponse({ received: true })
+      return jsonResponse({ received: true, event: 'unknown', eventType: event })
+    }
+
+    console.log('[zapi-webhook] Processing message event:', event)
+    const messageId = extractMessageId(msg)
+    const phone = extractPhone(msg)
+    const text = extractText(msg)
+    const type = normalizeType(msg)
+    const fromMe = msg.fromMe ?? false
+    const direction = fromMe ? 'outbound' : 'inbound'
+    const mediaUrl = msg.mediaUrl || msg.url || msg.fileUrl || null
+
+    console.log(
+      '[zapi-webhook] Message - id:',
+      messageId,
+      '| phone:',
+      phone,
+      '| dir:',
+      direction,
+      '| type:',
+      type,
+    )
+
+    if (messageId) {
+      const { data: existing } = await sb
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('message_id', messageId)
+        .maybeSingle()
+      if (existing) {
+        console.log('[zapi-webhook] Duplicate message, skipping:', messageId)
+        await logWebhook(sb, {
+          userId: instance.user_id,
+          instanceId: instance.instance_id,
+          endpoint: `webhook/${event}`,
+          payload,
+          response: { received: true, duplicate: true, messageId, stage: 'duplicate_check' },
+          status: 200,
+        })
+        return jsonResponse({ received: true, duplicate: true, messageId })
+      }
+    }
+
+    const { error: insertError } = await sb.from('whatsapp_messages').insert({
+      user_id: instance.user_id,
+      instance_id: instance.instance_id,
+      message_id: messageId || null,
+      chat_id: phone,
+      phone,
+      direction,
+      type,
+      text,
+      media_url: mediaUrl,
+      status: 'received',
+      raw_payload: payload,
+    })
+
+    if (insertError) {
+      console.error('[zapi-webhook] Message persistence failed:', insertError.message)
+      await logWebhook(sb, {
+        userId: instance.user_id,
+        instanceId: instance.instance_id,
+        endpoint: `webhook/${event}`,
+        payload,
+        response: { error: insertError.message, stage: 'message_persistence' },
+        status: 200,
+      })
+      return jsonResponse(
+        { received: true, error: 'Database insert failed', stage: 'message_persistence' },
+        200,
+      )
+    }
+
+    console.log('[zapi-webhook] Message persisted successfully')
+
+    if (!fromMe && phone) {
+      console.log('[zapi-webhook] Auto-creating contact for inbound message from:', phone)
+      const contactName = msg.pushName || msg.senderName || msg.name || ''
+      const contactPhoto = msg.profilePicUrl || msg.photoUrl || null
+      await autoCreateContact(sb, {
+        userId: instance.user_id,
+        phone,
+        name: contactName,
+        photoUrl: contactPhoto,
+      })
+      await syncInteraction(sb, {
+        userId: instance.user_id,
+        phone,
+        text,
+        direction,
+        type,
+      })
     }
 
     await logWebhook(sb, {
@@ -289,20 +308,21 @@ Deno.serve(async (req: Request) => {
       instanceId: instance.instance_id,
       endpoint: `webhook/${event}`,
       payload,
-      response: { received: true, event: 'unknown', eventType: event },
+      response: { received: true, event: 'message', messageId, direction, type },
       status: 200,
     })
-    return jsonResponse({ received: true })
+    return jsonResponse({ received: true, event: 'message', messageId, direction, type })
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
+    console.error('[zapi-webhook] Unhandled error:', errorMsg)
     await logWebhook(sb, {
       userId: null,
       instanceId: payload?.instance || payload?.instanceId || payload?.instance_id || null,
       endpoint: `webhook/${payload?.event || payload?.type || 'unknown'}`,
       payload,
-      response: { error: errorMsg },
+      response: { error: errorMsg, stage: 'unhandled_error' },
       status: 200,
     })
-    return jsonResponse({ received: true, error: 'Internal error' }, 200)
+    return jsonResponse({ received: true, error: 'Internal error', stage: 'unhandled_error' }, 200)
   }
 })
